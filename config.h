@@ -82,8 +82,8 @@
 // CPU variant: 0 = MC6809, 1 = HD6309
 #define CPU_VARIANT             0
 
-// RAM size in KB (CoCo3 = 512)
-#define RAM_SIZE_KB             512
+// RAM size in KB (CoCo3 = 2048)
+#define RAM_SIZE_KB             2048
 
 // Enable debug output on Serial
 #define DEBUG_ENABLED           1
@@ -218,7 +218,7 @@
 
 #define ROM_COCO3_FILE          "coco3.rom"
 #define COCO3_ROM_SIZE          (32 * 1024)
-#define COCO3_PHYSICAL_RAM      (512 * 1024)
+#define COCO3_PHYSICAL_RAM      (2048 * 1024)
 
 // ============================================================
 // Memory layout

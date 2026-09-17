@@ -28,8 +28,8 @@
  *   $FFC0-$FFDF  SAM control bits (write-only)
  *   $FFF0-$FFFF  Interrupt vectors (from ROM)
  *
- * CoCo 3 memory map (512K RAM + GIME):
- *   $0000-$FEFF  MMU-mapped via GIME (8 x 8KB pages from 512KB physical)
+ * CoCo 3 memory map (2048K RAM + GIME):
+ *   $0000-$FEFF  MMU-mapped via GIME (8 x 8KB pages from 2048KB physical)
  *   $FF00-$FF3F  PIA0/PIA1 (same as CoCo 2)
  *   $FF40-$FF5F  Disk controller / SCS
  *   $FF90-$FF9F  GIME registers
@@ -78,7 +78,7 @@ typedef struct Machine {
 
     // CoCo 3 (GIME) state — used when g_machine_type == 4
     TCC1014  gime;                  // GIME (TCC1014) — replaces SAM + VDG
-    uint8_t* ram_physical;          // 512KB in PSRAM
+    uint8_t* ram_physical;          // 2048KB in PSRAM
     uint8_t* rom_coco3;             // 32KB Super Extended Color BASIC
     uint8_t* rom_disk;              // 8KB Disk BASIC (external cartridge ROM)
     bool     rom_coco3_loaded;

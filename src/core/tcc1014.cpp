@@ -511,12 +511,12 @@ uint8_t tcc1014_read_register(TCC1014* gime, unsigned reg) {
 // ============================================================
 
 void tcc1014_write_mmu(TCC1014* gime, uint8_t offset, uint8_t val) {
-    gime->mmu_bank[offset & 0x0F] = val & 0x3F;
+    gime->mmu_bank[offset & 0x0F] = val;
     tcc1014_update_active_banks(gime);
 }
 
 uint8_t tcc1014_read_mmu(TCC1014* gime, uint8_t offset) {
-    return gime->mmu_bank[offset & 0x0F] & 0x3F;
+    return gime->mmu_bank[offset & 0x0F];
 }
 
 // ============================================================

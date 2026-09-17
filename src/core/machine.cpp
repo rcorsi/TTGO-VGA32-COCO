@@ -371,9 +371,9 @@ void machine_init_coco3(Machine* m) {
     memset(m, 0, sizeof(Machine));
     g_machine = m;
 
-    // Allocate 512KB physical RAM
+    // Allocate 2048KB physical RAM
     m->ram_size = COCO3_PHYSICAL_RAM;
-    m->ram_physical = machine_alloc(m->ram_size, "RAM-512K");
+    m->ram_physical = machine_alloc(m->ram_size, "RAM-2048K");
     if (!m->ram_physical) return;
     // Alias m->ram to the first 64KB so the CoCo 2 code path (not running
     // on this boot, but present in the binary) sees a valid buffer.
@@ -1057,11 +1057,11 @@ void machine_init_coco2(Machine* m) {
     memset(m, 0, sizeof(Machine));
     g_machine = m;
 
-    // --- Allocate memory (Step 5 of coco2and3.md: invariant 512KB superset) ---
-    // Always allocate 512KB in PSRAM and alias m->ram to the first 64KB so
-    // CoCo 2 addressing (0x0000-0xFFFF via SAM) is unchanged; the upper 448KB
+    // --- Allocate memory (Step 5 of coco2and3.md: invariant 2048KB superset) ---
+    // Always allocate 2048KB in PSRAM and alias m->ram to the first 64KB so
+    // CoCo 2 addressing (0x0000-0xFFFF via SAM) is unchanged; the upper 1984KB
     // is unused here but keeps allocation identical to the CoCo 3 boot path.
-    m->ram_physical = machine_alloc(COCO3_PHYSICAL_RAM, "RAM-512K");
+    m->ram_physical = machine_alloc(COCO3_PHYSICAL_RAM, "RAM-2048K");
     if (!m->ram_physical) return;
     m->ram = m->ram_physical;   // CoCo 2 uses only the first 64KB
     m->ram_size = COCO_RAM_SIZE;
