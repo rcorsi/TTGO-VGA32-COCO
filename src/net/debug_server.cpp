@@ -143,6 +143,7 @@ static void h_status() {
     j += ",\"int_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     j += ",\"int_min\":" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
     j += ",\"int_largest\":" + String(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    j += ",\"fps\":" + String(hal_video_get_fps(), 1);
     j += "}";
     send_json(200, j);
 }
