@@ -144,6 +144,8 @@ static void h_status() {
     j += ",\"int_min\":" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
     j += ",\"int_largest\":" + String(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     j += ",\"fps\":" + String(hal_video_get_fps(), 1);
+    // Unused stack of this server task, lowest since boot (bytes).
+    j += ",\"srv_stack_free\":" + String(uxTaskGetStackHighWaterMark(nullptr));
     j += "}";
     send_json(200, j);
 }
@@ -475,9 +477,17 @@ static void h_screenshot() {
     uint8_t* png = png_encode_rgb565(frame, w, h, HAL_CAPTURE_STRIDE, &png_len);
     if (!png) { send_err(500, "png encode failed"); return; }
 
+    // Stream in 4 KB chunks, yielding between them: one ~150 KB write let lwIP
+    // queue far more internal-RAM pbufs than the heap can spare, dropping WiFi.
     s_server.setContentLength(png_len);
     s_server.send(200, "image/png", "");
-    s_server.sendContent((const char*)png, png_len);
+    const size_t CHUNK = 4096;
+    for (size_t off = 0; off < png_len; off += CHUNK) {
+        size_t n = (png_len - off < CHUNK) ? png_len - off : CHUNK;
+        s_server.sendContent((const char*)png + off, n);
+        if (!s_server.client().connected()) break;
+        vTaskDelay(1);
+    }
     free(png);
 }
 
@@ -608,7 +618,8 @@ static void server_task(void* arg) {
 
 void debug_server_begin(void) {
     if (s_task) return;
-    xTaskCreatePinnedToCore(server_task, "dbg_srv", 8192, nullptr, 1, &s_task, 0);
+    // Measured peak 1952 B (screenshots, 4 KB mem reads, NVS dump); see srv_stack_free.
+    xTaskCreatePinnedToCore(server_task, "dbg_srv", 4096, nullptr, 1, &s_task, 0);
 }
 
 void debug_server_set_enabled(bool on) { s_enabled = on; }

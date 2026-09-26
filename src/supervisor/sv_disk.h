@@ -37,7 +37,6 @@
 
 struct SV_DiskImage {
     char     path[256];
-    File     file;           // Kept open for write-back on flush/eject
     bool     mounted;
     bool     dirty;
     bool     read_only;

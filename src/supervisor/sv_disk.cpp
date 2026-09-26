@@ -714,22 +714,23 @@ static bool mount_locked(SV_DiskController* fdc, uint8_t drive, const char* path
         sv_disk_eject(fdc, drive);
     }
 
-    // Open file to read image
-    img->file = SD.open(path, FILE_READ);
-    if (!img->file) {
+    // Open file to read image. Closed again before returning: an open FatFS
+    // handle costs ~5 KB of internal RAM, so flushes reopen it on demand.
+    File file = SD.open(path, FILE_READ);
+    if (!file) {
         DEBUG_PRINTF("FDC: Failed to open %s", path);
         return false;
     }
 
     strncpy(img->path, path, sizeof(img->path) - 1);
     img->path[sizeof(img->path) - 1] = '\0';
-    img->image_size = img->file.size();
+    img->image_size = file.size();
     img->read_only = false;
     img->dirty = false;
 
     if (!sv_disk_detect_geometry(img)) {
         DEBUG_PRINTF("FDC: Bad geometry for %s (size=%lu)", path, img->image_size);
-        img->file.close();
+        file.close();
         return false;
     }
 
@@ -745,7 +746,7 @@ static bool mount_locked(SV_DiskController* fdc, uint8_t drive, const char* path
     }
     if (!img->cache) {
         DEBUG_PRINTF("FDC: Failed to allocate %lu bytes for disk cache", img->cache_size);
-        img->file.close();
+        file.close();
         return false;
     }
 
@@ -754,7 +755,7 @@ static bool mount_locked(SV_DiskController* fdc, uint8_t drive, const char* path
     // so we read into a small internal-RAM bounce buffer first, then
     // memcpy to the PSRAM cache.
     if (img->header_size > 0) {
-        img->file.seek(img->header_size);
+        file.seek(img->header_size);
     }
 
     // Bounce buffer in internal RAM (DMA-safe)
@@ -765,7 +766,7 @@ static bool mount_locked(SV_DiskController* fdc, uint8_t drive, const char* path
     size_t remaining = img->cache_size;
     while (remaining > 0) {
         size_t chunk = (remaining > BOUNCE_SIZE) ? BOUNCE_SIZE : remaining;
-        int got = img->file.read(bounce, chunk);
+        int got = file.read(bounce, chunk);
         if (got <= 0) {
             DEBUG_PRINTF("FDC: Read stalled at %lu/%lu bytes", total_read, img->cache_size);
             memset(img->cache + total_read, 0, remaining);
@@ -780,14 +781,11 @@ static bool mount_locked(SV_DiskController* fdc, uint8_t drive, const char* path
     // Dirty-sector bitmap (small — 90 bytes for a 35-track disk).
     img->dirty_map = (uint8_t*)calloc((img->cache_size / DISK_SECTOR_SIZE + 7) / 8, 1);
 
-    // Close read-only handle, reopen as r+ for write-back
-    img->file.close();
-    img->file = SD.open(path, "r+");
-    if (!img->file) {
-        // Fall back to read-only (can't write back)
-        img->file = SD.open(path, FILE_READ);
-        img->read_only = true;
-    }
+    // Check once whether the image can be written back; flushes reopen it r+.
+    file.close();
+    File probe = SD.open(path, "r+");
+    if (probe) probe.close();
+    else img->read_only = true;   // can't write back
 
     img->mounted = true;
     DEBUG_PRINTF("FDC: Mounted drive %d: %s (%dT/%dH/%dS/%dB, %lu bytes cached in %s)",
@@ -807,11 +805,9 @@ void sv_disk_eject(SV_DiskController* fdc, uint8_t drive) {
     if (!img->mounted) { sv_disk_unlock(); return; }
 
     // Flush dirty cache back to SD before ejecting
-    if (img->dirty && img->cache && img->file) {
+    if (img->dirty && img->cache) {
         sv_disk_flush(fdc, drive);
     }
-
-    img->file.close();
 
     // Free PSRAM cache
     if (img->cache) {
@@ -841,7 +837,7 @@ const char* sv_disk_get_path(SV_DiskController* fdc, uint8_t drive) {
 }
 
 // Write sectors [first, first+count) of the cache back to the image file.
-static size_t flush_run(SV_DiskImage* img, uint32_t first, uint32_t count) {
+static size_t flush_run(SV_DiskImage* img, File& file, uint32_t first, uint32_t count) {
     // Bounce buffer in internal RAM (PSRAM→DMA safe). Static: this may run
     // on the small DriveWire server stack; callers hold the drive lock.
     static uint8_t bounce[512];
@@ -850,11 +846,11 @@ static size_t flush_run(SV_DiskImage* img, uint32_t first, uint32_t count) {
     size_t remaining = count * DISK_SECTOR_SIZE;
     if (pos + remaining > img->cache_size) remaining = img->cache_size - pos;
     size_t total_written = 0;
-    img->file.seek(img->header_size + pos);
+    file.seek(img->header_size + pos);
     while (remaining > 0) {
         size_t chunk = (remaining > sizeof(bounce)) ? sizeof(bounce) : remaining;
         memcpy(bounce, img->cache + pos, chunk);
-        size_t wrote = img->file.write(bounce, chunk);
+        size_t wrote = file.write(bounce, chunk);
         if (wrote == 0) {
             DEBUG_PRINTF("FDC: Write stalled at offset %lu", (unsigned long)pos);
             break;
@@ -870,7 +866,14 @@ void sv_disk_flush(SV_DiskController* fdc, uint8_t drive) {
     if (drive >= SV_DISK_MAX_DRIVES) return;
     SV_DiskImage* img = &fdc->drives[drive];
     sv_disk_lock();
-    if (!img->mounted || !img->dirty || !img->cache || img->read_only || !img->file) {
+    if (!img->mounted || !img->dirty || !img->cache || img->read_only) {
+        sv_disk_unlock();
+        return;
+    }
+    // Opened only for the flush (see mount_locked); stays dirty if it fails.
+    File file = SD.open(img->path, "r+");
+    if (!file) {
+        DEBUG_PRINTF("FDC: Flush of drive %d failed: can't open %s", drive, img->path);
         sv_disk_unlock();
         return;
     }
@@ -878,7 +881,7 @@ void sv_disk_flush(SV_DiskController* fdc, uint8_t drive) {
     size_t total_written = 0;
     uint32_t nsec = img->cache_size / DISK_SECTOR_SIZE;
     if (!img->dirty_map) {
-        total_written = flush_run(img, 0, nsec);
+        total_written = flush_run(img, file, 0, nsec);
     } else {
         // Coalesce consecutive dirty sectors into one seek + write.
         uint32_t s = 0;
@@ -886,11 +889,11 @@ void sv_disk_flush(SV_DiskController* fdc, uint8_t drive) {
             if (!(img->dirty_map[s >> 3] & (1u << (s & 7)))) { s++; continue; }
             uint32_t run = s;
             while (s < nsec && (img->dirty_map[s >> 3] & (1u << (s & 7)))) s++;
-            total_written += flush_run(img, run, s - run);
+            total_written += flush_run(img, file, run, s - run);
         }
         memset(img->dirty_map, 0, (nsec + 7) / 8);
     }
-    img->file.flush();
+    file.close();
     img->dirty = false;
     DEBUG_PRINTF("FDC: Flushed drive %d (%lu bytes written)", drive, (unsigned long)total_written);
     sv_disk_unlock();
