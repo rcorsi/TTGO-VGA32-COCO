@@ -143,6 +143,11 @@ static void h_status() {
     j += ",\"int_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     j += ",\"int_min\":" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL));
     j += ",\"int_largest\":" + String(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    // Byte-addressable part only (int_* also counts the 32-bit-only IRAM heap,
+    // which malloc/calloc/new cannot use).
+    j += ",\"int8_free\":" + String(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    j += ",\"int8_min\":" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    j += ",\"int8_largest\":" + String(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     j += ",\"fps\":" + String(hal_video_get_fps(), 1);
     // Unused stack of this server task, lowest since boot (bytes).
     j += ",\"srv_stack_free\":" + String(uxTaskGetStackHighWaterMark(nullptr));
