@@ -69,7 +69,7 @@ Responses are JSON. Transfers are capped at 4 KB per request.
 
 | Method / Path | Description |
 |---|---|
-| `GET /api/status` | machine type, paused flag, firmware/API version, bus summary, internal RAM (`int_free`, `int_min`, `int_largest`) |
+| `GET /api/status` | machine type, paused flag, firmware/API version, bus summary, internal RAM (`int_free`, `int_min`, `int_largest`), emulated `fps` (last second), `srv_stack_free` (debug-server task stack never used, bytes) |
 | `POST /api/pause`, `POST /api/resume` | freeze / un-freeze at frame boundary |
 | `GET /api/registers` | A,B,D,X,Y,U,S,PC,DP,CC + decoded flags + cycles |
 | `POST /api/registers` | set any subset: `pc=`, `a=`, `b=`, `d=`, `x=`, `y=`, `u=`, `s=`, `dp=`, `cc=` |
