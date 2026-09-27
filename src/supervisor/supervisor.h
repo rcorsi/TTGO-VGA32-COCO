@@ -90,6 +90,7 @@ typedef struct Supervisor_t {
 void supervisor_init(Machine* m);
 void supervisor_toggle(void);
 bool supervisor_is_active(void);
+uint8_t supervisor_state(void);   // SV_State of the current OSD screen (0 = closed)
 
 void supervisor_on_key(uint8_t hid_usage, bool pressed);
 

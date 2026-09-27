@@ -151,6 +151,10 @@ static void h_status() {
     j += ",\"fps\":" + String(hal_video_get_fps(), 1);
     // Unused stack of this server task, lowest since boot (bytes).
     j += ",\"srv_stack_free\":" + String(uxTaskGetStackHighWaterMark(nullptr));
+    // Emulator/OSD task (Arduino loopTask), lowest unused stack since boot.
+    j += ",\"osd_state\":" + String(supervisor_state());
+    extern TaskHandle_t loopTaskHandle;
+    if (loopTaskHandle) j += ",\"loop_stack_free\":" + String(uxTaskGetStackHighWaterMark(loopTaskHandle));
     j += "}";
     send_json(200, j);
 }
@@ -496,6 +500,14 @@ static void h_screenshot() {
     free(png);
 }
 
+// OSD key injection: POST /api/key  hid=<USB HID usage>  or  toggle=1 (F3).
+static void h_key() {
+    uint8_t hid = s_server.hasArg("toggle") ? DBG_KEY_TOGGLE : (uint8_t)s_server.arg("hid").toInt();
+    if (hid == 0) { send_err(400, "hid=<usage> or toggle=1"); return; }
+    if (!debug_rpc_key_push(hid)) { send_err(503, "key queue full"); return; }
+    send_json(200, String("{\"ok\":true,\"hid\":") + hid + "}");
+}
+
 // =============================================================
 //  Config portal handlers (AP mode)
 // =============================================================
@@ -585,6 +597,7 @@ static void register_routes() {
     s_server.on("/api/mem",           HTTP_GET,  h_get_mem);
     s_server.on("/api/mem",           HTTP_POST, h_post_mem);
     s_server.on("/api/inject",        HTTP_POST, h_inject);
+    s_server.on("/api/key",           HTTP_POST, h_key);
     s_server.on("/api/reset",         HTTP_POST, h_reset);
     s_server.on("/api/machine",       HTTP_GET,  h_get_machine);
     s_server.on("/api/machine",       HTTP_POST, h_post_machine);
