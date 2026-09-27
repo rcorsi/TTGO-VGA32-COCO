@@ -56,7 +56,21 @@ static void wifi_execute(Supervisor_t* sv, int action) {
         case WACT_PORTAL:  debug_server_ensure_task(); wifi_mgr_start_ap();      break;
         case WACT_CONNECT: wifi_mgr_connect_saved();                             break;
         case WACT_STOP:    wifi_mgr_stop();                                      break;
-        case WACT_FORGET:  wifi_mgr_forget();                                    break;
+        case WACT_FORGET:
+            // Irreversible (erases the saved SSID/password) and one row above
+            // Debug Server: confirm first, defaulting to No.
+            sv->prev_state = sv->state;
+            sv->state = SV_CONFIRM_DIALOG;
+            sv->confirm_message = "Forget saved WiFi\ncredentials?";
+            sv->confirm_yes_selected = false;
+            sv->confirm_callback = [](bool accepted, void* ctx) {
+                Supervisor_t* s = (Supervisor_t*)ctx;
+                if (accepted) wifi_mgr_forget();
+                s->state = SV_WIFI;
+                s->needs_redraw = true;
+            };
+            sv->confirm_context = sv;
+            break;
         case WACT_SERVER:  debug_server_set_enabled(!debug_server_enabled());    break;
     }
     sv->needs_redraw = true;
