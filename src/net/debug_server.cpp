@@ -621,7 +621,6 @@ static void server_task(void* arg) {
     (void)arg;
     register_routes();
     for (;;) {
-        wifi_mgr_tick();
         WifiMgrState st = wifi_mgr_state();
         bool net_up = (st == WIFI_MGR_AP_CONFIG || st == WIFI_MGR_STA_RUNNING);
         if (net_up && !s_begun) {
@@ -629,16 +628,54 @@ static void server_task(void* arg) {
             s_begun = true;
             DEBUG_PRINT("debug_server: WebServer started on port 80");
         }
-        if (s_begun && s_enabled) s_server.handleClient();
+        // The setup portal is always served while the setup AP is up, even with
+        // the debug API switched off.
+        if (s_begun && (s_enabled || st == WIFI_MGR_AP_CONFIG)) s_server.handleClient();
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 
-void debug_server_begin(void) {
+// Persisted On/Off setting ("sv" namespace, key "dbg_srv", default On).
+static bool load_enabled(void) {
+    nvs_handle_t h;
+    uint8_t v = 1;
+    if (nvs_open("sv", NVS_READONLY, &h) == ESP_OK) {
+        nvs_get_u8(h, "dbg_srv", &v);
+        nvs_close(h);
+    }
+    return v != 0;
+}
+
+static void save_enabled(bool on) {
+    nvs_handle_t h;
+    if (nvs_open("sv", NVS_READWRITE, &h) == ESP_OK) {
+        nvs_set_u8(h, "dbg_srv", on ? 1 : 0);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+}
+
+void debug_server_ensure_task(void) {
     if (s_task) return;
     // Measured peak 1952 B (screenshots, 4 KB mem reads, NVS dump); see srv_stack_free.
     xTaskCreatePinnedToCore(server_task, "dbg_srv", 4096, nullptr, 1, &s_task, 0);
 }
 
-void debug_server_set_enabled(bool on) { s_enabled = on; }
-bool debug_server_enabled(void)        { return s_enabled; }
+void debug_server_begin(void) {
+    s_enabled = load_enabled();
+    if (!s_enabled) {
+        // Off: no task, routes or socket at all (~4.4 KB+ of internal RAM kept
+        // free). Turning it on, or starting the setup portal, creates it.
+        DEBUG_PRINT("debug_server: off (setting) - not started");
+        return;
+    }
+    debug_server_ensure_task();
+}
+
+void debug_server_set_enabled(bool on) {
+    s_enabled = on;
+    save_enabled(on);
+    if (on) debug_server_ensure_task();   // off: stops serving now, memory freed at next boot
+}
+
+bool debug_server_enabled(void) { return s_enabled; }

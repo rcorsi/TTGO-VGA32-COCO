@@ -23,11 +23,16 @@
 // Firmware + API version reported by /api/status.
 #define DEBUG_API_VERSION 1
 
-// Create the core-0 server task. Routes are registered immediately; the
-// underlying WebServer is started lazily once WiFi has an IP. Call once.
+// Create the core-0 server task unless the persisted setting is Off. Routes are
+// registered immediately; the WebServer starts once WiFi has an IP. Call once.
 void debug_server_begin(void);
 
-// Enable / disable client servicing (the "Debug Server On/Off" toggle).
+// Create the task regardless of the setting (the setup portal needs it).
+void debug_server_ensure_task(void);
+
+// The "Debug Server On/Off" toggle. Persisted in NVS. On starts the task if
+// needed; Off stops serving the debug API at once and skips the task (and its
+// internal RAM) from the next boot. The setup portal is served either way.
 void debug_server_set_enabled(bool on);
 bool debug_server_enabled(void);
 

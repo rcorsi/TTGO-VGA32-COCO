@@ -53,7 +53,7 @@ void sv_wifi_open(Supervisor_t* sv) {
 
 static void wifi_execute(Supervisor_t* sv, int action) {
     switch (action) {
-        case WACT_PORTAL:  wifi_mgr_start_ap();                                  break;
+        case WACT_PORTAL:  debug_server_ensure_task(); wifi_mgr_start_ap();      break;
         case WACT_CONNECT: wifi_mgr_connect_saved();                             break;
         case WACT_STOP:    wifi_mgr_stop();                                      break;
         case WACT_FORGET:  wifi_mgr_forget();                                    break;

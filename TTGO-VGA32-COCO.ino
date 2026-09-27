@@ -255,6 +255,7 @@ void loop() {
     // Process host input (keyboard, joystick — includes F1 intercept)
     hal_process_input();
     debug_rpc_keys_poll();   // OSD keys injected over the debug API
+    wifi_mgr_tick();         // advance CONNECTING (no longer tied to the server task)
 
     // Check if supervisor is handling this frame
     if (supervisor_update_and_render()) {

@@ -61,6 +61,14 @@ On boot, if `wifi_auto` is set, `setup()` kicks off a non-blocking STA connect
 with the saved credentials, so the API is reachable automatically (also required
 for the machine-switch reboot to re-expose the API).
 
+**Debug Server On/Off** (last row of the WiFi / Debug screen) is saved in NVS
+(`"sv"` / `dbg_srv`, default On). Off stops serving the debug API immediately; from
+the next boot the server task is never created, which keeps ~7.8 KB of
+byte-addressable internal RAM free (measured 2026-09-27, Internal DW with a disk
+mounted). Switching it back On starts the task at once, no reboot. The setup portal
+is served regardless: **Start Config Portal** creates the task if needed.
+`wifi_mgr_tick()` runs from `loop()`, so WiFi connects with the server off.
+
 ## Device HTTP/JSON API (STA mode)
 
 Inputs are **form/query parameters** (the device has no JSON-body parser).
