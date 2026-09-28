@@ -42,8 +42,7 @@
 typedef enum {
     BUS_MODE_OFF         = 0,  // no Becker port; $FF41/$FF42 are DSKREG mirrors
     BUS_MODE_EXTERNAL    = 1,  // TCP client to pyDriveWire / DW4 / FujiNet-PC
-    BUS_MODE_INTERNAL_DW = 2,  // native disk-only DriveWire server (Phase 3)
-    BUS_MODE_FUJINET     = 3,  // embedded FujiNet (Phase 4+)
+    // 2 was the Internal DriveWire server (removed); a saved 2 boots as Off.
     BUS_MODE_COUNT
 } BusMode;
 

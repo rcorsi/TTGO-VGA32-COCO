@@ -15,8 +15,8 @@ g.
 
 ![Disk BASIC path: DSKCON drives the WD1793 registers; sv_disk.cpp answers each $FF4B read on core 1](images/disk-path-wd1793.svg)
 
-The same drives 0–3 and PSRAM caches also serve the built-in DriveWire server
-when the DriveWire mode is Internal DW; see [drivewire.md](drivewire.md).
+With the DriveWire bus in External mode, HDB-DOS talks to a remote server
+instead and these drives are not used; see [drivewire.md](drivewire.md).
 
 ---
 
@@ -361,13 +361,12 @@ When a mounted disk is dirty (sectors written):
 ```
 Only changed sectors are written (a `SAVE` is typically 2–3 sectors). If the
 bitmap could not be allocated at mount, the whole image is written. Mount,
-eject and flush hold `sv_disk_lock()`, shared with the DriveWire server.
+eject and flush hold `sv_disk_lock()`, which `GET /api/disk` (core 0) also takes to read a consistent drive table.
 
 Flush happens on:
 - `sv_disk_eject()` — when user unmounts a disk (U key in Disk Manager); flushes implicitly if dirty
 - `sv_disk_flush()` — explicit single-drive flush (F key in Disk Manager)
 - `sv_disk_flush_all()` — all dirty drives at once; called automatically before **machine reset** (Reset Machine confirm dialog) and before **machine type change** (`supervisor_set_machine_type()` → `esp_restart()`)
-- Internal DriveWire mode only: the DriveWire server flushes ~2 s after its last write
 
 ### Why Bounce Buffer?
 

@@ -398,33 +398,32 @@ checkout before `./build.sh -p COCO` if you see this. Using the `t`-suffixed
 HDB-DOS ROMs (2 s DriveWire timeout, retries instead of hanging) is a
 complementary mitigation on the CoCo side.
 
-**Internal DriveWire mode (no PC, no WiFi needed):** F3 → Settings →
-DriveWire → Mode: Internal DW, Save & Restart. A disk-only DriveWire server
-built into the firmware serves the Disk Manager's drives 0–3 (the same `.DSK`
-images the floppy controller uses) as DriveWire drives 0–3. HDB-DOS's
-`DRIVE 1`–`3` (which it addresses as 630-sector slices of DriveWire drive 0)
-are mapped to Disk Manager drives 1–3, while NitrOS-9 and HDB-DOS hard-drive
-images in drive 0 are served as-is. Writes go to the PSRAM cache and are
-flushed to the SD card ~2 s after the last write (and on eject, reset and
-restart). `TIME` uses SNTP when WiFi is up (`DW_SERVER_TZ` in `config.h`).
 See [docs/drivewire.md](docs/drivewire.md) for how a sector travels in each
 mode, with diagrams.
 
-**Not yet implemented:**
-- **Internal FujiNet mode** — the FUJI (`0xE2`) and NET (`0xE3`) devices
-  embedded in the firmware, so CONFIG/TNFS/`N:` work standalone.
-
-It is on the [roadmap](#planned) below.
-
 ## Planned
 
-- **Internal FujiNet** — *ongoing*, next phase of the work above: an embedded
-  FujiNet FUJI/NET device dispatcher on top of the built-in DriveWire server.
 - **HD6309 CPU support** — *ongoing*. `CPU_VARIANT` already exists in `config.h`, but the core currently emulates the MC6809 only; the 6309's native mode, extra registers and inline instructions are not implemented yet.
 - Testing and adjustment of RS-232 Pak support
 - Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
 
 ## Changelog
+
+### Unreleased
+
+- **DriveWire is External-only.** The Internal DriveWire server (v0.11.0) and the
+  planned embedded FujiNet were dropped: External mode against pyDriveWire, DW4
+  or FujiNet-PC covers the same use. A board saved in Internal DW mode boots with
+  the bus Off, so its mounted disks are served by the floppy controller again.
+- **More free internal RAM:** mounted disk images no longer hold an open file
+  (~5 KB → ~0.6 KB each), smaller debug-server and emulator task stacks, and a
+  Debug Server On/Off setting (WiFi / Debug screen) that, when Off, never starts
+  the server (+~7.8 KB).
+- **Screenshots no longer drop WiFi** when memory is low (sent in 4 KB chunks).
+- **Forget Credentials asks for confirmation.**
+- **Debug API:** `/api/status` adds `fps`, `int8_*` (usable internal RAM),
+  `srv_stack_free`, `loop_stack_free`, `osd_state`; new `POST /api/key` injects
+  OSD keys.
 
 ### v0.11.0 — September 24, 2026
 
