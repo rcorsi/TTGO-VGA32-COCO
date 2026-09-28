@@ -301,6 +301,8 @@ bool supervisor_is_active(void) {
     return sv.state != SV_INACTIVE;
 }
 
+uint8_t supervisor_state(void) { return (uint8_t)sv.state; }
+
 void supervisor_on_key(uint8_t hid_usage, bool pressed) {
     // F1 within supervisor = close
     if (hid_usage == 0x3A && pressed) {

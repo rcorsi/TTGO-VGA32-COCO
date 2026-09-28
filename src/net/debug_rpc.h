@@ -109,6 +109,14 @@ void debug_rpc_poll(void);
 // The bound machine (for read-only status that needs no RPC).
 Machine* debug_rpc_machine(void);
 
+// OSD key injection, for testing the supervisor without a keyboard. The OSD
+// stops loop() before debug_rpc_poll(), so keys use their own small queue that
+// loop() drains first. hid = USB HID usage ID (what supervisor_on_key takes);
+// DBG_KEY_TOGGLE opens/closes the supervisor like F3.
+#define DBG_KEY_TOGGLE 0xFF
+bool debug_rpc_key_push(uint8_t hid);   // core 0: press + release; false if full
+void debug_rpc_keys_poll(void);         // core 1: call at the top of loop()
+
 // Pause flag (set/read from either core).
 void debug_rpc_set_paused(bool paused);
 bool debug_rpc_is_paused(void);

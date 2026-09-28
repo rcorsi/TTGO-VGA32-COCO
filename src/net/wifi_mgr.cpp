@@ -14,6 +14,7 @@
 #include "wifi_mgr.h"
 
 #include <WiFi.h>
+#include <esp_heap_caps.h>
 #include <Preferences.h>
 
 #include "../utils/debug.h"
@@ -71,9 +72,22 @@ const char* wifi_mgr_state_str(void) {
 }
 
 void wifi_mgr_tick(void) {
+    // One-shot RAM report 10 s after connecting: readable over serial even when
+    // the debug server (and so /api/status) is switched off.
+    static uint32_t s_connected_at = 0;
+    static bool     s_reported = false;
+    if (s_state == WIFI_MGR_STA_RUNNING && !s_reported && s_connected_at &&
+        millis() - s_connected_at > 10000) {
+        s_reported = true;
+        DEBUG_PRINTF("wifi_mgr: RAM 10 s after connect: int8_free %u, int8_min %u, int8_largest %u",
+                     (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                     (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    }
     if (s_state != WIFI_MGR_CONNECTING) return;
     if (WiFi.status() == WL_CONNECTED) {
         s_state = WIFI_MGR_STA_RUNNING;
+        s_connected_at = millis() | 1;
         DEBUG_PRINTF("wifi_mgr: STA connected, IP %s", WiFi.localIP().toString().c_str());
     } else if (millis() - s_connect_start > WIFI_CONNECT_TIMEOUT_MS) {
         s_state = WIFI_MGR_FAILED;

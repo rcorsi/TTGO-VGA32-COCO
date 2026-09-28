@@ -52,8 +52,8 @@ static float    fps_value = 0.0f;
 
 // Tick + render the FPS overlay according to FPS_OVERLAY_MODE in config.h.
 // Called from hal_video_present() / hal_video_present_gime() once per frame.
+// Frames are counted even with the overlay off so /api/status can report FPS.
 static void fps_tick_and_draw(void) {
-    if (!fps_overlay_enabled) return;
     fps_frame_count++;
     uint32_t now = millis();
     uint32_t elapsed = now - fps_last_time;
@@ -62,9 +62,10 @@ static void fps_tick_and_draw(void) {
         fps_frame_count = 0;
         fps_last_time = now;
 #if (FPS_OVERLAY_MODE & FPS_OVERLAY_SERIAL)
-        DEBUG_PRINTF("FPS: %.1f", fps_value);
+        if (fps_overlay_enabled) DEBUG_PRINTF("FPS: %.1f", fps_value);
 #endif
     }
+    if (!fps_overlay_enabled) return;
 #if (FPS_OVERLAY_MODE & FPS_OVERLAY_SCREEN)
     // Draw the current fps_value into the top-left of the framebuffer.
     // Drawn every frame because the scanline render path overwrites the
@@ -355,6 +356,8 @@ void hal_video_present_gime(bool* dirty) {
 }
 
 void hal_video_force_repaint(void) { /* no-op on continuously-scanned VGA */ }
+
+float hal_video_get_fps(void) { return fps_value; }
 
 void hal_video_toggle_fps_overlay(void) {
     fps_overlay_enabled = !fps_overlay_enabled;

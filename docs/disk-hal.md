@@ -343,18 +343,20 @@ Entire `.DSK` images are loaded into PSRAM at mount time. All sector reads/write
 4. Load via bounce buffer (512-byte internal RAM buffer):
      file.read(bounce, 512) → memcpy(psram_cache, bounce, got)
    Bounce buffer avoids ESP32 SPI DMA issues with PSRAM destinations.
-5. Close read handle, reopen as "r+" for write-back support
-6. Cache is now the sole data source during emulation
+5. Close the file; probe once with an "r+" open to set read_only
+6. Cache is now the sole data source during emulation — no file stays open
+   (a FatFS handle costs ~5 KB of internal RAM, so flushes reopen it)
 ```
 
 ### Write-Back (Flush/Eject)
 
 When a mounted disk is dirty (sectors written):
 ```
+0. Open the image "r+" (on failure: log, stay dirty, return)
 1. For each run of consecutive dirty sectors (per-image dirty bitmap):
      seek to header_size + first_sector * 256
      write via bounce buffer: memcpy(bounce, psram, 512) → file.write(bounce, 512)
-2. file.flush()
+2. file.close()
 3. Clear the dirty bitmap and dirty flag
 ```
 Only changed sectors are written (a `SAVE` is typically 2–3 sectors). If the

@@ -236,6 +236,7 @@ void hal_video_force_repaint(void);
 
 // Toggle FPS overlay
 void hal_video_toggle_fps_overlay(void);
+float hal_video_get_fps(void);   // emulated frames/s over the last second
 
 // ============================================================
 // Keyboard injection (for integration tests)

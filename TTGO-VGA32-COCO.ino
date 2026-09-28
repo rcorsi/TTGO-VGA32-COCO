@@ -79,6 +79,11 @@ static void boot_halt_screen(const char* const* lines, int n) {
     while (true) { delay(1000); }
 }
 
+// Emulator + OSD task stack. Measured peak 3,348 B (2026-09-27: full OSD tour,
+// disk mounts from OSD and API, RAM dump to SD, screenshots, emulation); the
+// default 8 KB wasted ~2.5 KB of internal RAM. See loop_stack_free in /api/status.
+SET_LOOP_TASK_STACK_SIZE(5632);
+
 void setup() {
 #if BUILD_TARGET == BUILD_TARGET_BOOTLOADER
     bootloader_release_otadata();   // before Serial/video/SD — see note above
@@ -249,6 +254,8 @@ void loop() {
 
     // Process host input (keyboard, joystick — includes F1 intercept)
     hal_process_input();
+    debug_rpc_keys_poll();   // OSD keys injected over the debug API
+    wifi_mgr_tick();         // advance CONNECTING (no longer tied to the server task)
 
     // Check if supervisor is handling this frame
     if (supervisor_update_and_render()) {

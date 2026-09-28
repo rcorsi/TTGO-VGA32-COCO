@@ -138,6 +138,25 @@ static void exec_one(DebugCmd* c) {
     }
 }
 
+static QueueHandle_t s_keyq = nullptr;
+
+bool debug_rpc_key_push(uint8_t hid) {
+    if (!s_keyq) s_keyq = xQueueCreate(16, sizeof(uint8_t));
+    return s_keyq && xQueueSend(s_keyq, &hid, 0) == pdTRUE;
+}
+
+void debug_rpc_keys_poll(void) {
+    uint8_t hid;
+    while (s_keyq && xQueueReceive(s_keyq, &hid, 0) == pdTRUE) {
+        if (hid == DBG_KEY_TOGGLE) {
+            supervisor_toggle();
+        } else if (supervisor_is_active()) {
+            supervisor_on_key(hid, true);
+            supervisor_on_key(hid, false);
+        }
+    }
+}
+
 void debug_rpc_poll(void) {
     if (!s_cmd_queue) return;
     DebugCmd* c = nullptr;
