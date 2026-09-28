@@ -64,8 +64,7 @@ for the machine-switch reboot to re-expose the API).
 **Debug Server On/Off** (last row of the WiFi / Debug screen) is saved in NVS
 (`"sv"` / `dbg_srv`, default On). Off stops serving the debug API immediately; from
 the next boot the server task is never created, which keeps ~7.8 KB of
-byte-addressable internal RAM free (measured 2026-09-27, Internal DW with a disk
-mounted). Switching it back On starts the task at once, no reboot. The setup portal
+byte-addressable internal RAM free (measured 2026-09-27 with a disk mounted). Switching it back On starts the task at once, no reboot. The setup portal
 is served regardless: **Start Config Portal** creates the task if needed.
 `wifi_mgr_tick()` runs from `loop()`, so WiFi connects with the server off.
 
@@ -89,8 +88,8 @@ Responses are JSON. Transfers are capped at 4 KB per request.
 | `GET /api/machine` | current machine type (3 = CoCo 2, 4 = CoCo 3) |
 | `POST /api/machine` | `type=3\|4` — **reboots the device** (see below) |
 | `GET /api/nvram` | dump all `"sv"` NVS settings as JSON |
-| `GET /api/bus` | DriveWire bus mode, link, byte counters; `server{reads,writes,errors,flushes,last_op,stack_free}` in Internal DW mode |
-| `POST /api/bus` | `mode=0\|1\|2` (Off / External / Internal DW), `host=`, `port=`, `rom_to=` — **reboots** |
+| `GET /api/bus` | DriveWire bus mode, host/port, link state, byte counters, `connects`, `max_reply_ms`, `slow_replies` |
+| `POST /api/bus` | `mode=0\|1` (Off / External), `host=`, `port=`, `rom_to=` — **reboots** |
 | `GET /api/disk` | Disk Manager drives 0–3: path, size, read-only, dirty |
 | `POST /api/disk` | `op=mount&drive=N&path=/X.DSK`, `op=eject&drive=N`, `op=flush&drive=N` (runs on core 1; mounts are remembered like the OSD's) |
 

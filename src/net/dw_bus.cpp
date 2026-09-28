@@ -16,7 +16,6 @@
 #include <Preferences.h>
 
 #include "dw_client.h"
-#include "dw_server.h"
 #include "wifi_mgr.h"
 #include "../core/machine.h"   // g_cart_rom_request
 #include "../../config.h"
@@ -68,15 +67,12 @@ const char* dw_bus_mode_str(BusMode mode) {
     switch (mode) {
         case BUS_MODE_OFF:         return "Off";
         case BUS_MODE_EXTERNAL:    return "External";
-        case BUS_MODE_INTERNAL_DW: return "Internal DW";
-        case BUS_MODE_FUJINET:     return "FujiNet";
         default:                   return "?";
     }
 }
 
 bool dw_bus_mode_supported(BusMode mode) {
-    return mode == BUS_MODE_OFF || mode == BUS_MODE_EXTERNAL
-        || mode == BUS_MODE_INTERNAL_DW;
+    return mode == BUS_MODE_OFF || mode == BUS_MODE_EXTERNAL;
 }
 
 void dw_bus_save_config(BusMode mode, const String& host, uint16_t port,
@@ -91,6 +87,7 @@ void dw_bus_save_config(BusMode mode, const String& host, uint16_t port,
 }
 
 void dw_bus_begin(Machine* m) {
+    (void)m;
     if (s_mode == BUS_MODE_OFF) return;
 
     if (s_mode == BUS_MODE_EXTERNAL) {
@@ -101,23 +98,17 @@ void dw_bus_begin(Machine* m) {
         }
         dw_client_begin(s_host, s_port);
         DEBUG_PRINTF("dw_bus: External DriveWire -> %s:%u", s_host.c_str(), s_port);
-    } else if (s_mode == BUS_MODE_INTERNAL_DW) {
-        // Serves the Disk Manager drives; needs no WiFi (SNTP only if up).
-        dw_server_begin(&m->fdc);
-        DEBUG_PRINT("dw_bus: Internal DriveWire server on Disk Manager drives 0-3");
     }
 }
 
 void dw_bus_shutdown(void) {
-    if (s_mode == BUS_MODE_EXTERNAL)    dw_client_shutdown(300);
-    if (s_mode == BUS_MODE_INTERNAL_DW) dw_server_shutdown(2000);
+    if (s_mode == BUS_MODE_EXTERNAL) dw_client_shutdown(300);
 }
 
 const char* dw_bus_link_str(void) {
     switch (s_mode) {
         case BUS_MODE_OFF:      return "Off";
         case BUS_MODE_EXTERNAL: return dw_client_state_str();
-        case BUS_MODE_INTERNAL_DW: return dw_server_state_str();
         default:                return becker_link_up() ? "Up" : "Down";
     }
 }

@@ -29,7 +29,6 @@
 #include "wifi_mgr.h"
 #include "dw_bus.h"
 #include "dw_client.h"
-#include "dw_server.h"
 #include "png_writer.h"
 #include "../hal/hal.h"             // hal_video_capture_*
 #include "../core/machine.h"        // g_machine_type, machine types
@@ -178,20 +177,12 @@ static void h_get_bus() {
     j += ",\"connects\":" + String(dw_client_connects());
     j += ",\"max_reply_ms\":" + String(dw_client_max_reply_ms());
     j += ",\"slow_replies\":" + String(dw_client_slow_replies());
-    if (dw_bus_mode() == BUS_MODE_INTERNAL_DW) {
-        j += ",\"server\":{\"reads\":" + String(dw_server_reads());
-        j += ",\"writes\":" + String(dw_server_writes());
-        j += ",\"errors\":" + String(dw_server_errors());
-        j += ",\"flushes\":" + String(dw_server_flushes());
-        j += ",\"last_op\":" + String(dw_server_last_op());
-        j += ",\"stack_free\":" + String(dw_server_stack_free()) + "}";
-    }
     j += "}";
     send_json(200, j);
 }
 
 static void h_post_bus() {
-    if (!s_server.hasArg("mode")) { send_err(400, "missing mode (0=Off,1=External,2=Internal DW)"); return; }
+    if (!s_server.hasArg("mode")) { send_err(400, "missing mode (0=Off,1=External)"); return; }
     uint32_t m = arg_u32("mode", 0);
     if (m >= BUS_MODE_COUNT || !dw_bus_mode_supported((BusMode)m)) {
         send_err(400, "mode not supported in this build");
@@ -213,8 +204,8 @@ static void h_post_bus() {
     supervisor_save_and_restart();
 }
 
-// Disk Manager drives 0-3 (the WD1793 drives, and the Internal DriveWire
-// server's drives). Mount/eject run on core 1 and are remembered in NVS.
+// Disk Manager drives 0-3 (the WD1793 drives). Mount/eject run on core 1 and
+// are remembered in NVS.
 static void h_get_disk() {
     Machine* m = debug_rpc_machine();
     if (!m) { send_err(400, "no machine"); return; }

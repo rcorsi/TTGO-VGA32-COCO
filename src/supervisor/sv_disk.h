@@ -125,11 +125,10 @@ void sv_disk_flush_all(SV_DiskController* fdc);
 
 bool sv_disk_detect_geometry(SV_DiskImage* img);
 
-// Drive-table lock. The images are shared with the built-in DriveWire server
-// (src/net/dw_server.cpp, core 0), which reads and writes the PSRAM caches
-// directly. Mount, eject and flush take it (it is recursive); core 0 holds it
-// only for a 256-byte copy or a background flush. The WD1793 path on core 1
-// does not take it — it never frees or reallocates a cache.
+// Drive-table lock. Mount, eject and flush take it (it is recursive); the debug
+// server's GET /api/disk (core 0) takes it to read a consistent drive table.
+// The WD1793 path on core 1 does not take it — it never frees or reallocates
+// a cache.
 void sv_disk_lock(void);
 void sv_disk_unlock(void);
 
