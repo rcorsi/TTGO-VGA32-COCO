@@ -166,7 +166,19 @@ typedef struct TCC1014 {
     // --- Scanline output buffer ---
     // XRoar uses pixel_data[912] for full scanline with borders.
     // ESP32: only active pixels, palette indices for HAL.
-    uint16_t line_buffer[640]; // OPT-C4: pre-converted RGB565 (byte-swapped for direct sprite writes)
+    // OPT-G6: set by the caller before tcc1014_render_scanline() to request
+    // raw VGA bytes in line_raw[]; cleared by the renderer when no raw LUT is
+    // registered, so after the call it says which buffer holds the line.
+    bool     raw_output;
+    // OPT-G5: set by tcc1014_render_scanline() when this display line is
+    // identical to what it produced for the same line last frame — nothing
+    // was rendered and the display still holds the line.
+    bool     line_clean;
+    union {
+        uint16_t line_buffer[640]; // OPT-C4: pre-converted RGB565 (byte-swapped for direct sprite writes)
+        uint32_t line_raw32[320];  // (alignment for word-wise HAL copies)
+        uint8_t  line_raw[1280];   // OPT-G6: raw VGA bytes, logical pixel order
+    };
     uint16_t line_width;       // Actual pixel width of current line
 
     // --- External memory pointers (set by machine) ---
@@ -222,6 +234,15 @@ void tcc1014_set_interrupt(TCC1014* gime, uint8_t flag);
 
 // Rendering — stub for Phase 1, implemented in Phase 3
 void tcc1014_render_scanline(TCC1014* gime, unsigned scanline);
+
+// OPT-G6: register the display's 64-entry GIME colour → raw pixel byte table.
+// Once set, lines rendered with raw_output emit raw bytes via this table.
+void tcc1014_set_raw_lut(const uint8_t* lut64);
+
+// OPT-G5: forget all per-line signatures so every line is rendered again.
+// Call whenever something other than the GIME renderer has drawn on the
+// display (OSD, overlays, another machine's video).
+void tcc1014_invalidate_lines(void);
 
 // PIA1B snooping — port of tcc1014.c:726-730
 void tcc1014_snoop_pia1b(TCC1014* gime, uint16_t addr, uint8_t val);

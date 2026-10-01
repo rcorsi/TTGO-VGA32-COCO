@@ -87,6 +87,12 @@ void hal_video_render_scanline_gime(int line, int total_lines,
                                      const uint16_t* pixels,
                                      int width, const uint16_t* palette);
 
+// OPT-G6: same as above, but the line is already raw VGA bytes (one per
+// pixel, logical order) — produced by the core when gime.raw_output is set.
+void hal_video_render_scanline_gime_raw(int line, int total_lines,
+                                        uint8_t border_colour,
+                                        const uint8_t* raw, int width);
+
 // Present the completed CoCo3 frame to the display
 // Phase 5: dirty flag — if non-null, skip SPI push when *dirty==false, clear after push
 void hal_video_present_gime(bool* dirty = nullptr);
@@ -95,6 +101,12 @@ void hal_video_present_gime(bool* dirty = nullptr);
 // Arm a one-frame capture of the GIME scanline output into a PSRAM buffer.
 // Capture begins at the next line-0 and completes after a full frame.
 void hal_video_capture_arm(void);
+// True while a capture is armed or in progress (the renderer then produces
+// RGB565 lines so the capture sees core output).
+bool hal_video_capture_armed(void);
+// Decode the live display framebuffer (post-HAL) into the capture buffer and
+// mark it ready. Emulator should be paused. False if unavailable.
+bool hal_video_capture_framebuffer(void);
 // True once a full frame has been captured since the last arm().
 bool hal_video_capture_ready(void);
 // Captured frame (byte-swapped RGB565, row stride = HAL_CAPTURE_STRIDE px).

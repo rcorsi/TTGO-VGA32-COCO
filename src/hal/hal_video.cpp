@@ -15,6 +15,7 @@
 #include "hal.h"
 #include "../utils/debug.h"
 #include "../core/mc6847.h"
+#include "../core/tcc1014.h"
 
 
 #include "fabgl.h"
@@ -128,6 +129,11 @@ void hal_video_init(void) {
     s_canvas.setBrushColor(fabgl::Color::Black);
     s_canvas.clear();
     init_gime_lut();
+#if !GIME_VGA_DOWNSCALE
+    // OPT-G6: the GIME renderer emits raw VGA bytes through this table
+    // (hal_video_render_scanline_gime_raw), bypassing the 64 KB LUT.
+    tcc1014_set_raw_lut(s_gime_raw_lut);
+#endif
     OSDCanvas::bind_canvas(&s_canvas);
     display_available = true;
     DEBUG_PRINTF("  Video: VGA 640x200 ready, viewport=%dx%d",
@@ -210,11 +216,50 @@ void hal_video_capture_arm(void) {
 
 bool hal_video_capture_ready(void) { return s_cap_ready; }
 
+bool hal_video_capture_armed(void) { return s_cap_armed; }
+
 const uint16_t* hal_video_capture_frame(int* width, int* height) {
     if (!s_cap_ready) return nullptr;
     if (width)  *width  = s_cap_w;
     if (height) *height = s_cap_h;
     return s_cap_buf;
+}
+
+// Framebuffer readback: decode what FabGL is actually scanning out (after the
+// HAL's geometry, border and swizzle) into the capture buffer. Unlike the
+// armed capture, this sees the display itself — used to verify the raw GIME
+// path and line-skip logic. Call with the emulator paused.
+bool hal_video_capture_framebuffer(void) {
+    if (!display_available) return false;
+    if (!s_cap_buf) {
+        s_cap_buf = (uint16_t*)ps_malloc((size_t)HAL_CAP_W * HAL_CAP_H * sizeof(uint16_t));
+        if (!s_cap_buf) return false;
+    }
+    // raw byte → RGB565 (byte-swapped, the capture format). Every RGB222
+    // colour is some GIME 6-bit value, so s_gime_raw_lut covers the display.
+    static uint16_t* rev = nullptr;   // PSRAM: debug-only, keep internal RAM free
+    if (!rev) rev = (uint16_t*)ps_malloc(256 * sizeof(uint16_t));
+    if (!rev) return false;
+    for (int i = 0; i < 256; i++) rev[i] = 0;
+    for (int i = 0; i < 64; i++) {
+        fabgl::RGB222 c = gime_idx_to_rgb222(i);
+        uint16_t v = (uint16_t)(((c.R * 31 / 3) << 11) | ((c.G * 63 / 3) << 5) | (c.B * 31 / 3));
+        rev[s_gime_raw_lut[i]] = (uint16_t)((v << 8) | (v >> 8));
+    }
+    const int vp_w = s_vga.getViewPortWidth();
+    const int vp_h = s_vga.getViewPortHeight();
+    const int w = (vp_w > HAL_CAP_W) ? HAL_CAP_W : vp_w;
+    const int h = (vp_h > HAL_CAP_H) ? HAL_CAP_H : vp_h;
+    for (int y = 0; y < h; y++) {
+        const volatile uint8_t* row = s_vga.getScanline(y);
+        uint16_t* dst = s_cap_buf + (size_t)y * HAL_CAP_W;
+        for (int x = 0; x < w; x++) dst[x] = rev[row[x ^ 2]];
+    }
+    s_cap_w = w;
+    s_cap_h = h;
+    s_cap_armed = false;
+    s_cap_ready = true;
+    return true;
 }
 
 // Capture one scanline of GIME output if a capture is armed. Independent of the
@@ -349,13 +394,81 @@ void hal_video_render_scanline_gime(int line, int total_lines,
     (void)x_out_start; (void)x_out_end;
 }
 
+// OPT-G6: GIME scanline already converted to raw VGA bytes by the core (one
+// byte per pixel, logical order). FabGL's DMA wants each 32-bit word's two
+// halves swapped (the x^2 addressing above), which is a 16-bit rotate — so
+// the copy runs a word at a time instead of a LUT load + byte store per pixel.
+void hal_video_render_scanline_gime_raw(int line, int total_lines,
+                                        uint8_t border_colour,
+                                        const uint8_t* raw, int width) {
+    if (!display_available || !raw || width <= 0) return;
+    const int vp_w = s_vga.getViewPortWidth();
+    const int vp_h = s_vga.getViewPortHeight();
+    if (total_lines <= 0 || total_lines > vp_h) total_lines = vp_h;
+    int y_off = (vp_h - total_lines) / 2;
+    if (y_off < 0) y_off = 0;
+    int y = line + y_off;
+    if (y < 0 || y >= vp_h) return;
+
+    uint8_t* row = (uint8_t*)s_vga.getScanline(y);
+    const uint8_t border_byte = s_gime_raw_lut[border_colour & 0x3F];
+    const uint32_t* src = (const uint32_t*)raw;   // line_raw is word-aligned
+    const int x_off = (width < vp_w) ? (vp_w - width) / 2 : 0;
+    const bool words = !((uintptr_t)row & 3) && !(vp_w & 3) && !(x_off & 3) && !(width & 3);
+
+    if (words && width == vp_w) {
+        uint32_t* dst = (uint32_t*)row;
+        for (int i = 0; i < vp_w / 4; i++) {
+            const uint32_t w = src[i];
+            dst[i] = (w >> 16) | (w << 16);
+        }
+    } else if (words && width * 2 == vp_w) {
+        // Pixel-double: source bytes a,b → logical a a b b → stored b b a a
+        uint32_t* dst = (uint32_t*)row;
+        const uint16_t* src16 = (const uint16_t*)raw;
+        for (int i = 0; i < width / 2; i++) {
+            const uint32_t s = src16[i];
+            dst[i] = ((s >> 8) & 0xFF) * 0x0101u | (s & 0xFF) * 0x01010000u;
+        }
+    } else if (words && width < vp_w) {
+        uint32_t* dst = (uint32_t*)row;
+        const uint32_t bw = border_byte * 0x01010101u;
+        const int wl = x_off / 4, wa = width / 4;
+        for (int i = 0; i < wl; i++) dst[i] = bw;
+        for (int i = 0; i < wa; i++) {
+            const uint32_t w = src[i];
+            dst[wl + i] = (w >> 16) | (w << 16);
+        }
+        for (int i = wl + wa; i < vp_w / 4; i++) dst[i] = bw;
+    } else {
+        // Unaligned / downscale fallback — byte at a time, same geometry as
+        // hal_video_render_scanline_gime().
+        if (width == vp_w) {
+            for (int x = 0; x < vp_w; x++) row[x ^ 2] = raw[x];
+        } else if (width * 2 == vp_w) {
+            for (int x = 0; x < width; x++) {
+                row[(2 * x) ^ 2] = raw[x];
+                row[(2 * x + 1) ^ 2] = raw[x];
+            }
+        } else if (width < vp_w) {
+            for (int x = 0; x < x_off; x++) row[x ^ 2] = border_byte;
+            for (int x = 0; x < width; x++) row[(x_off + x) ^ 2] = raw[x];
+            for (int x = x_off + width; x < vp_w; x++) row[x ^ 2] = border_byte;
+        } else {
+            for (int x = 0; x < vp_w; x++) row[x ^ 2] = raw[x * width / vp_w];
+        }
+    }
+}
+
 void hal_video_present_gime(bool* dirty) {
     // FabGL scans out continuously. No DMA push needed. FPS only.
     fps_tick_and_draw();
     if (dirty) *dirty = false;
 }
 
-void hal_video_force_repaint(void) { /* no-op on continuously-scanned VGA */ }
+// Something other than the GIME renderer drew on the framebuffer (OSD, FPS
+// overlay): make the dirty-line skip (OPT-G5) redraw every line.
+void hal_video_force_repaint(void) { tcc1014_invalidate_lines(); }
 
 float hal_video_get_fps(void) { return fps_value; }
 
@@ -374,6 +487,8 @@ void hal_video_toggle_fps_overlay(void) {
         s_canvas.fillRectangle(0, 0, 80, 18);
     }
 #endif
+
+    hal_video_force_repaint();
 
     fps_frame_count = 0;
     fps_last_time = millis();

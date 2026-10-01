@@ -103,6 +103,12 @@
 // Target frames per second (NTSC=60, PAL=50)
 #define TARGET_FPS              60
 
+// Real-time frame pacing: never run emulated frames faster than TARGET_FPS.
+// Without it, modes that render faster than 60 FPS run the CoCo faster than
+// real hardware (cursor blink, SOUND/PLAY tempo, game speed). No effect when
+// a frame takes longer than 1/TARGET_FPS.
+#define FRAME_LIMIT_ENABLED     1
+
 // FPS overlay output (toggled at runtime by F5). Bitmask — combine with |.
 //   FPS_OVERLAY_SERIAL — print "FPS: NN.N" to Serial once per second
 //   FPS_OVERLAY_SCREEN — draw the FPS string in the top-left of the display

@@ -25,6 +25,11 @@
 // pgm_read_byte() overhead in the scanline text renderer.
 static uint8_t font_gime_dram[1536];
 
+// OPT-G4: 1 = use the original monolithic scanline renderer (A/B probing).
+#ifndef GIME_RENDER_LEGACY
+#define GIME_RENDER_LEGACY 0
+#endif
+
 // Lines of top border by [H50][LPF] — from tcc1014.c:406-409
 static const unsigned VRES_LPF_lTB[2][4] = {
     { 36, 34, 0xFFFF, 19 },  // 60Hz
@@ -116,6 +121,7 @@ void tcc1014_update_active_banks(TCC1014* gime) {
 
 void tcc1014_init(TCC1014* gime) {
     memset(gime, 0, sizeof(TCC1014));
+    tcc1014_invalidate_lines();
     // Initial VRAM address — from tcc1014.c:557
     gime->B = 0x60400;
     // Initialize palette LUT
@@ -130,6 +136,7 @@ void tcc1014_init(TCC1014* gime) {
 }
 
 void tcc1014_reset(TCC1014* gime) {
+    tcc1014_invalidate_lines();
     // Reset all registers to 0 — from tcc1014.c:664-667
     for (int i = 0; i < 16; i++) {
         tcc1014_write_register(gime, i, 0);
@@ -727,9 +734,14 @@ static inline uint8_t fetch_byte_vram(TCC1014* g) {
 // We render the full line in one pass, writing only active pixels.
 // ============================================================
 
-void tcc1014_render_scanline(TCC1014* gime, unsigned scanline) {
-    (void)scanline;  // scanline number not used — we use gime->row
-
+// OPT-G4: this monolith is the reference implementation. It re-evaluates the
+// COCO/BP/CRES/resolution branch tree for every nibble, and because it stores
+// through a uint16_t* into gime->line_buffer the compiler must reload every
+// gime-> field after each pixel store. The per-mode renderers below replace it;
+// it is kept for A/B probing (GIME_RENDER_LEGACY) and as the oracle for the
+// host-side equivalence test (tools/gime_render_test).
+#if GIME_RENDER_LEGACY || defined(TCC1014_RENDER_TEST)
+void tcc1014_render_scanline_legacy(TCC1014* gime) {
     if (!gime->vertical.active_area || !gime->ram)
         return;
 
@@ -948,4 +960,361 @@ void tcc1014_render_scanline(TCC1014* gime, unsigned scanline) {
 
 done:
     gime->line_width = (npixels <= 640) ? npixels : 640;
+}
+#endif  // GIME_RENDER_LEGACY || TCC1014_RENDER_TEST
+
+// ============================================================
+// OPT-G3/G4: line-batched fetch + per-mode scanline renderers
+//
+// Mode dispatch happens once per scanline; each leaf is a tight loop with
+// no mode branches (MAME-style). All leaves take __restrict pointers so the
+// compiler can keep the palette and state in registers across pixel stores.
+//
+// The legacy fetch_byte_vram() pair-cache consumes a strictly sequential
+// byte stream: byte k of the line is ram[(B + k) & (ram_size - 1)] (Xoff
+// starts at 0 and never reaches the & 0xFF wrap — max 160 bytes/line). So
+// the renderers read a plain byte array: a direct pointer into RAM when the
+// line doesn't wrap, otherwise a staged copy.
+// ============================================================
+
+// Max bytes consumed per line: 80-col attribute text = 2 x 80.
+static uint8_t s_line_bytes[160];
+
+static inline const uint8_t* fetch_line_bytes(const TCC1014* g, unsigned n) {
+    const uint32_t mask = g->ram_size - 1;
+    const uint32_t a = g->B & mask;
+    if (a + n <= g->ram_size) return g->ram + a;
+    for (unsigned k = 0; k < n; k++) s_line_bytes[k] = g->ram[(a + k) & mask];
+    return s_line_bytes;
+}
+
+// Resolution expansion — tcc1014.c:1452-1502. Emits one nibble's four
+// colours at 16/8/4/2 output pixels.
+template<unsigned RES, typename P>
+static inline P* emit4(P* __restrict d, P c0, P c1, P c2, P c3) {
+    if (RES == 0) {
+        d[0]  = d[1]  = d[2]  = d[3]  = c0;
+        d[4]  = d[5]  = d[6]  = d[7]  = c1;
+        d[8]  = d[9]  = d[10] = d[11] = c2;
+        d[12] = d[13] = d[14] = d[15] = c3;
+        return d + 16;
+    } else if (RES == 1) {
+        d[0] = d[1] = c0;
+        d[2] = d[3] = c1;
+        d[4] = d[5] = c2;
+        d[6] = d[7] = c3;
+        return d + 8;
+    } else if (RES == 2) {
+        d[0] = c0; d[1] = c1; d[2] = c2; d[3] = c3;
+        return d + 4;
+    } else {
+        d[0] = c0; d[1] = c2;
+        return d + 2;
+    }
+}
+
+// Two-colour 8-pixel byte (RG, CoCo 3 text): bit 7 first.
+template<unsigned RES, typename P>
+static inline P* emit_bits8(P* __restrict d, uint8_t g, P fg, P bg) {
+    d = emit4<RES, P>(d, (g & 0x80) ? fg : bg, (g & 0x40) ? fg : bg,
+                      (g & 0x20) ? fg : bg, (g & 0x10) ? fg : bg);
+    return emit4<RES, P>(d, (g & 0x08) ? fg : bg, (g & 0x04) ? fg : bg,
+                         (g & 0x02) ? fg : bg, (g & 0x01) ? fg : bg);
+}
+
+// CoCo 3 native graphics — tcc1014.c:1357-1363, 1414-1440. CRES 3 == 2.
+template<unsigned CRES, unsigned RES, typename P>
+static void render_native_gfx(const uint8_t* __restrict src, unsigned n,
+                              const P* __restrict pal, P* __restrict d) {
+    for (unsigned k = 0; k < n; k++) {
+        const uint8_t v = src[k];
+        if (CRES == 0) {
+            d = emit4<RES, P>(d, pal[(v >> 7) & 1], pal[(v >> 6) & 1],
+                              pal[(v >> 5) & 1], pal[(v >> 4) & 1]);
+            d = emit4<RES, P>(d, pal[(v >> 3) & 1], pal[(v >> 2) & 1],
+                              pal[(v >> 1) & 1], pal[v & 1]);
+        } else if (CRES == 1) {
+            const P a = pal[(v >> 6) & 3], b = pal[(v >> 4) & 3];
+            const P c = pal[(v >> 2) & 3], e = pal[v & 3];
+            d = emit4<RES, P>(d, a, a, b, b);
+            d = emit4<RES, P>(d, c, c, e, e);
+        } else {
+            const P a = pal[v >> 4], b = pal[v & 15];
+            d = emit4<RES, P>(d, a, a, a, a);
+            d = emit4<RES, P>(d, b, b, b, b);
+        }
+    }
+}
+
+// CoCo 3 native text — tcc1014.c:1364-1380, 1442-1447. With ATTR each
+// character is followed by an attribute byte (fg/bg/blink/underline).
+template<bool ATTR, unsigned RES, typename P>
+static void render_native_text(const TCC1014* g, const uint8_t* __restrict src, unsigned n,
+                               const P* __restrict pal, P* __restrict d) {
+    unsigned font_row = (g->row + 1) & 0x0F;
+    if (font_row > 11) font_row = 0;
+    const uint8_t* __restrict font = font_gime_dram + font_row;
+    const bool blink = g->blink;
+    const bool underline = (font_row & g->rowmask) == g->rowmask;
+    for (unsigned k = 0; k < n; k++) {
+        uint8_t gdata = font[(src[0] & 0x7F) * 12];
+        if (ATTR) {
+            const uint8_t attr = src[1];
+            src += 2;
+            unsigned fg = 8 | ((attr >> 3) & 7);
+            const unsigned bg = attr & 7;
+            if ((attr & 0x80) && blink) fg = bg;
+            if ((attr & 0x40) && underline) gdata = 0xFF;
+            d = emit_bits8<RES, P>(d, gdata, pal[fg], pal[bg]);
+        } else {
+            src += 1;
+            d = emit_bits8<RES, P>(d, gdata, pal[1], pal[0]);
+        }
+    }
+}
+
+// VDG-compatible graphics (GnA=1) — tcc1014.c:1300-1315, 1388-1412.
+// The CG/RG/RG2 choice depends only on line-stable state.
+template<unsigned RES, typename P>
+static void render_coco_cg(const TCC1014* g, const uint8_t* __restrict src, unsigned n,
+                           const P* __restrict pal, P* __restrict d) {
+    const P* __restrict cg = pal + (g->VDG.CSS ? TCC1014_WHITE : TCC1014_GREEN);
+    for (unsigned k = 0; k < n; k++) {
+        const uint8_t v = src[k];
+        const P a = cg[(v >> 6) & 3], b = cg[(v >> 4) & 3];
+        const P c = cg[(v >> 2) & 3], e = cg[v & 3];
+        d = emit4<RES, P>(d, a, a, b, b);
+        d = emit4<RES, P>(d, c, c, e, e);
+    }
+}
+
+template<unsigned RES, typename P>
+static void render_coco_rg(const TCC1014* g, const uint8_t* __restrict src, unsigned n,
+                           const P* __restrict pal, P* __restrict d) {
+    const P fg = pal[g->VDG.CSS ? TCC1014_RGCSS1_1 : TCC1014_RGCSS0_1];
+    const P bg = pal[g->VDG.CSS ? TCC1014_RGCSS1_0 : TCC1014_RGCSS0_0];
+    for (unsigned k = 0; k < n; k++) d = emit_bits8<RES, P>(d, src[k], fg, bg);
+}
+
+template<unsigned RES, typename P>
+static void render_coco_rg2(const TCC1014* g, const uint8_t* __restrict src, unsigned n,
+                            const P* __restrict pal, P* __restrict d) {
+    const P fg = pal[g->VDG.CSS ? TCC1014_RGCSS1_1 : TCC1014_RGCSS0_1];
+    const P bg = pal[g->VDG.CSS ? TCC1014_RGCSS1_0 : TCC1014_RGCSS0_0];
+    for (unsigned k = 0; k < n; k++) {
+        const uint8_t v = src[k];
+        const P a = (v & 0x40) ? fg : bg, b = (v & 0x10) ? fg : bg;
+        const P c = (v & 0x04) ? fg : bg, e = (v & 0x01) ? fg : bg;
+        d = emit4<RES, P>(d, a, a, b, b);
+        d = emit4<RES, P>(d, c, c, e, e);
+    }
+}
+
+// VDG-compatible alphanumerics + semigraphics (GnA=0) — tcc1014.c:1317-1345.
+// SnA is per byte (data-dependent), so it stays in the loop.
+template<unsigned RES, typename P>
+static void render_coco_text(const TCC1014* g, const uint8_t* __restrict src, unsigned n,
+                             const P* __restrict pal, P* __restrict d) {
+    const unsigned font_row = g->row & 0x0F;
+    const uint8_t* __restrict font = font_gime_dram + font_row;
+    const bool GM0 = g->VDG.GM0;
+    const bool inv_base = g->VDG.GM1 ^ g->inverted_text;
+    const P fg = pal[g->VDG.CSS ? TCC1014_BRIGHT_ORANGE : TCC1014_BRIGHT_GREEN];
+    const P bg = pal[g->VDG.CSS ? TCC1014_DARK_ORANGE : TCC1014_DARK_GREEN];
+    const P sg_bg = pal[TCC1014_RGCSS0_0];
+    for (unsigned k = 0; k < n; k++) {
+        const uint8_t v = src[k];
+        if (v & 0x80) {
+            // Semigraphics: one colour per nibble
+            const uint8_t gd = (font_row < 6) ? (v >> 2) : v;
+            const P sfg = pal[(v >> 4) & 7];
+            const P a = (gd & 0x02) ? sfg : sg_bg;
+            const P b = (gd & 0x01) ? sfg : sg_bg;
+            d = emit4<RES, P>(d, a, a, a, a);
+            d = emit4<RES, P>(d, b, b, b, b);
+        } else {
+            bool inv = (v & 0x40) != 0;
+            unsigned c = v & 0x7F;
+            if (c < 0x20) {
+                c |= GM0 ? 0x60 : 0x40;
+                inv ^= GM0;
+            } else if (c >= 0x60) {
+                c ^= 0x40;
+            }
+            uint8_t gd = font[c * 12];
+            if (inv ^ inv_base) gd = ~gd;
+            d = emit_bits8<RES, P>(d, gd, fg, bg);
+        }
+    }
+}
+
+// Instantiate the renderer call for the line's resolution: the call names the
+// resolution as R, e.g. GIME_DISPATCH_RES(res, render_coco_rg<R>(...)).
+#define GIME_DISPATCH_RES(res, ...) \
+    switch (res) { \
+    case 0:  { constexpr unsigned R = 0; __VA_ARGS__; } break; \
+    case 1:  { constexpr unsigned R = 1; __VA_ARGS__; } break; \
+    case 2:  { constexpr unsigned R = 2; __VA_ARGS__; } break; \
+    default: { constexpr unsigned R = 3; __VA_ARGS__; } break; }
+
+template<typename P>
+static void render_line(TCC1014* gime, const uint8_t* src, const P* __restrict pal,
+                        P* __restrict d, unsigned n) {
+    const unsigned res = gime->resolution & 3;
+    if (gime->COCO) {
+        if (gime->VDG.GnA) {
+            if (!gime->VDG.GM0) {
+                GIME_DISPATCH_RES(res, render_coco_cg<R, P>(gime, src, n, pal, d));
+            } else if (gime->resolution || (gime->PIA1B_shadow.pdr & 0x70) == 0x70) {
+                GIME_DISPATCH_RES(res, render_coco_rg<R, P>(gime, src, n, pal, d));
+            } else {
+                GIME_DISPATCH_RES(res, render_coco_rg2<R, P>(gime, src, n, pal, d));
+            }
+        } else {
+            GIME_DISPATCH_RES(res, render_coco_text<R, P>(gime, src, n, pal, d));
+        }
+    } else if (gime->BP) {
+        if (gime->HRES == 0 && gime->CRES >= 2) {
+            // 16-colour, 16-byte-per-row mode zeroes every second byte
+            // (legacy: vdata_cache = 0, tcc1014.c:1360-1362).
+            for (unsigned k = 0; k < n; k++) s_line_bytes[k] = (k & 1) ? 0 : src[k];
+            src = s_line_bytes;
+        }
+        switch (gime->CRES) {
+        case 0:  GIME_DISPATCH_RES(res, render_native_gfx<0, R, P>(src, n, pal, d)); break;
+        case 1:  GIME_DISPATCH_RES(res, render_native_gfx<1, R, P>(src, n, pal, d)); break;
+        default: GIME_DISPATCH_RES(res, render_native_gfx<2, R, P>(src, n, pal, d)); break;
+        }
+    } else {
+        if (gime->CRES & 1) {
+            GIME_DISPATCH_RES(res, render_native_text<true, R, P>(gime, src, n, pal, d));
+        } else {
+            GIME_DISPATCH_RES(res, render_native_text<false, R, P>(gime, src, n, pal, d));
+        }
+    }
+}
+
+// ============================================================
+// OPT-G5: dirty-line skip
+//
+// A display line is skipped when everything that determines its pixels is
+// unchanged since the previous frame. Rather than tracking writes, each
+// line keeps a 64-bit signature of (a) the VRAM bytes it consumes and
+// (b) every piece of state the renderers and the HAL read for it. That is
+// self-invalidating for register, palette, blink, scroll and VRAM changes;
+// only drawing done *outside* this renderer needs tcc1014_invalidate_lines().
+// ============================================================
+
+#ifndef GIME_LINE_SKIP
+#define GIME_LINE_SKIP 1
+#endif
+
+#define GIME_MAX_LINES 225
+static uint64_t s_line_sig[GIME_MAX_LINES];   // 0 = no valid signature
+
+void tcc1014_invalidate_lines(void) {
+    memset(s_line_sig, 0, sizeof(s_line_sig));
+}
+
+static inline uint32_t rotl32(uint32_t v, unsigned r) { return (v << r) | (v >> (32 - r)); }
+
+// Two independent 32-bit multiply-rotate lanes (the ESP32 has no cheap
+// 64-bit multiply).
+#define SIG_MIX(w) do { const uint32_t w_ = (w); \
+    h1 = rotl32(h1 ^ w_, 5) * 0x9E3779B1u; \
+    h2 = rotl32(h2 + w_, 11) * 0xC2B2AE35u; } while (0)
+
+static uint64_t line_signature(const TCC1014* g, const uint8_t* src, unsigned nbytes,
+                               unsigned n, bool attr) {
+    uint32_t h1 = 0x811C9DC5u, h2 = 0x01000193u;
+
+    // Mode + per-line state. blink only matters where it is rendered
+    // (attribute text), so a free-running GIME timer doesn't defeat the skip.
+    SIG_MIX((uint32_t)g->COCO | (uint32_t)g->BP << 1 | (g->CRES & 3) << 2 |
+            (g->HRES & 7) << 4 | (g->resolution & 3) << 7 |
+            (uint32_t)g->VDG.GnA << 9 | (uint32_t)g->VDG.GM1 << 10 |
+            (uint32_t)g->VDG.GM0 << 11 | (uint32_t)g->VDG.CSS << 12 |
+            (uint32_t)g->inverted_text << 13 | (uint32_t)(attr && g->blink) << 14 |
+            (uint32_t)((g->PIA1B_shadow.pdr & 0x70) == 0x70) << 15 |
+            (g->row & 15) << 16 | (g->rowmask & 31) << 20 |
+            (uint32_t)(g->border_colour & 0x3F) << 25);
+    SIG_MIX(n | g->vertical.lAA << 8);
+    uint32_t pal[4];
+    memcpy(pal, g->palette_reg, sizeof(pal));
+    SIG_MIX(pal[0]); SIG_MIX(pal[1]); SIG_MIX(pal[2]); SIG_MIX(pal[3]);
+
+    // VRAM bytes (nbytes is always a multiple of 4)
+    if (((uintptr_t)src & 3) == 0) {
+        const uint8_t* p = (const uint8_t*)__builtin_assume_aligned(src, 4);
+        for (unsigned k = 0; k < nbytes; k += 4) {
+            uint32_t w;
+            memcpy(&w, p + k, 4);
+            SIG_MIX(w);
+        }
+    } else {
+        for (unsigned k = 0; k < nbytes; k += 4)
+            SIG_MIX(src[k] | src[k + 1] << 8 | src[k + 2] << 16 | (uint32_t)src[k + 3] << 24);
+    }
+    h1 ^= h1 >> 15; h2 ^= h2 >> 13;
+    const uint64_t sig = (uint64_t)h1 << 32 | h2;
+    return sig ? sig : 1;
+}
+
+// OPT-G6: display-provided GIME colour (6-bit) → raw pixel byte table.
+static const uint8_t* s_raw_lut = nullptr;
+
+void tcc1014_set_raw_lut(const uint8_t* lut64) {
+    s_raw_lut = lut64;
+}
+
+void tcc1014_render_scanline(TCC1014* gime, unsigned scanline) {
+    // scanline = display line within the active area; it only indexes the
+    // dirty-line signatures (the renderers use gime->row / gime->B).
+
+    if (!gime->vertical.active_area || !gime->ram)
+        return;
+
+    gime->line_clean = false;
+
+#if GIME_RENDER_LEGACY
+    gime->raw_output = false;
+    tcc1014_render_scanline_legacy(gime);
+    return;
+#endif
+
+    // Output pixels per source byte is 32 >> resolution; the legacy loop
+    // stops at 640 pixels, which always falls on a byte boundary.
+    const unsigned res = gime->resolution & 3;
+    unsigned n = gime->BPR;
+    const unsigned max_n = 640u / (32u >> res);
+    if (n > max_n) n = max_n;
+
+    const bool attr = !gime->COCO && !gime->BP && (gime->CRES & 1);
+    const unsigned nbytes = attr ? 2 * n : n;
+    const uint8_t* src = fetch_line_bytes(gime, nbytes);
+    gime->line_width = n * (32u >> res);
+
+#if GIME_LINE_SKIP
+    if (scanline < GIME_MAX_LINES) {
+        const uint64_t sig = line_signature(gime, src, nbytes, n, attr);
+        // Only skip when the caller wants display output (raw); a screenshot
+        // frame (RGB565) must produce every line.
+        if (gime->raw_output && s_raw_lut && sig == s_line_sig[scanline]) {
+            gime->line_clean = true;
+            return;
+        }
+        s_line_sig[scanline] = sig;
+    }
+#endif
+
+    if (gime->raw_output && s_raw_lut) {
+        // Resolve the 16 palette slots to raw bytes once per line; mid-frame
+        // palette writes still take effect on the next scanline.
+        uint8_t pal8[16];
+        for (int i = 0; i < 16; i++) pal8[i] = s_raw_lut[gime->palette_reg[i] & 0x3F];
+        render_line<uint8_t>(gime, src, pal8, gime->line_raw, n);
+    } else {
+        gime->raw_output = false;
+        render_line<uint16_t>(gime, src, gime->palette_rgb565, gime->line_buffer, n);
+    }
 }
