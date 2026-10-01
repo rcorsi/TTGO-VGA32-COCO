@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.12.1 — October 1, 2026** (LilyGo TTGO VGA32 port)
+**v0.12.2 — October 1, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -121,7 +121,7 @@ If you just want to flash the emulator without building from source, use the pre
 2. Open [ESP Web Tool](https://esptool.spacehuhn.com/) in a Chrome or Edge browser
 3. Click **Connect** and select the board's serial port
 4. Set the flash offset to **0x0000**
-5. Choose the file `TTGO-VGA32-CoCo-0.12.1-firmware.bin` from this repository
+5. Choose the file `TTGO-VGA32-CoCo-0.12.2-firmware.bin` from this repository
 6. Click **Program** and wait for the flash to complete
 
 > Hold the **BOOT** button on the board while clicking Connect if the browser cannot reach the device.
@@ -409,6 +409,30 @@ mode, with diagrams.
 - Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
 
 ## Changelog
+
+### v0.12.2 — October 1, 2026
+
+**CoCo 3 frame time roughly halved, so 60 FPS now has real headroom.** v0.12.1
+ran 2–3 FPS under 60 in `WIDTH 40`, `WIDTH 80` and `HSCREEN 2`: frames were
+taking almost the whole 1/60 s. They now take about half of it.
+
+| CoCo 3 mode | v0.12.1 | v0.12.2 |
+|---|---|---|
+| BASIC prompt, `PMODE 4`, `HSCREEN 3` | 59–60 FPS | **60** |
+| `WIDTH 40` | ~57.5 | **60** |
+| `WIDTH 80` | ~56 | **60** |
+| `HSCREEN 2` | ~56 | **60** |
+| Full-screen `HCLS` loop in `HSCREEN 2` | — | **60** |
+
+- **Chip-bug workaround applied only where needed.** ESP32 chips before
+  revision 3 need a compiler workaround for a PSRAM bug, which slows every
+  memory store. It now stays off in the CPU, GIME, PIA and audio code, which
+  only store to internal RAM, and on everywhere else. This alone removed about
+  40% of each frame. Build with `-DPSRAM_MEMW_KEEP` to apply it everywhere again.
+- **Faster 6809 memory access.** The CPU core reads and writes ordinary RAM
+  directly through a page table that follows the GIME MMU, instead of calling
+  out for every byte.
+- Tested with a disk game and OS-9 at a steady 60 FPS.
 
 ### v0.12.1 — October 1, 2026
 
