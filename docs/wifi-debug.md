@@ -83,7 +83,7 @@ Responses are JSON. Transfers are capped at 4 KB per request.
 | `GET /api/mem?addr=&len=&space=cpu\|phys` | read bytes → `{..,"data":"hex"}` |
 | `POST /api/mem` | `addr=`, `data=`hex, `space=` — write bytes |
 | `POST /api/inject` | `addr=`, `data=`hex, optional `pc=`, `resume=1` |
-| `GET /api/screenshot.png` | arm capture, advance one frame, return PNG |
+| `GET /api/screenshot.png` | arm capture, advance one frame, return PNG (core line output, before the video HAL). `?fb=1`: return the live display framebuffer instead (640x200, after HAL scaling/border), read with the emulator held paused |
 | `POST /api/reset` | clean in-place `machine_reset()` (device stays up) |
 | `GET /api/machine` | current machine type (3 = CoCo 2, 4 = CoCo 3) |
 | `POST /api/machine` | `type=3\|4` — **reboots the device** (see below) |

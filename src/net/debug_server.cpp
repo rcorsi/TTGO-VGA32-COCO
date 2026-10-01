@@ -457,14 +457,23 @@ static void h_nvram() {
 
 // Screenshot: arm capture, advance exactly one frame on core 1, encode PNG.
 // Note: this advances the emulation by one frame (documented caveat).
+// With fb=1 it instead returns the live display framebuffer (post-HAL), read
+// while the emulator is held paused after the stepped frame.
 static void h_screenshot() {
     bool was_paused = debug_rpc_is_paused();
+    const bool fb = s_server.hasArg("fb");
 
-    hal_video_capture_arm();
+    if (fb) debug_rpc_set_paused(true);
+    else    hal_video_capture_arm();
 
     DebugCmd c = {};
     c.type = DBG_CMD_STEP_FRAME;
-    if (!debug_rpc_submit(&c, 2000)) { send_err(504, "frame step timeout"); return; }
+    if (!debug_rpc_submit(&c, 2000)) {
+        debug_rpc_set_paused(was_paused);
+        send_err(504, "frame step timeout");
+        return;
+    }
+    if (fb) hal_video_capture_framebuffer();
 
     // Restore the prior pause state (STEP_FRAME does not change it).
     debug_rpc_set_paused(was_paused);

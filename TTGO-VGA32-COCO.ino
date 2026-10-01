@@ -12,6 +12,7 @@
 */
 
 #include "config.h"
+#include "esp_timer.h"
 #include "src/core/machine.h"
 #include "src/hal/hal.h"
 #include "src/hal/osd_canvas.h"
@@ -240,6 +241,27 @@ void setup() {
   #endif
 #endif
 
+// Hold emulation to real time: wait until the next frame slot. When more
+// than a frame behind (slow modes, SD access, debugger pause), resync
+// instead of running a catch-up burst.
+static void pace_frame(void) {
+#if FRAME_LIMIT_ENABLED
+    static int64_t next_us = 0;
+    const int64_t period = 1000000 / TARGET_FPS;
+    int64_t now = esp_timer_get_time();
+    if (next_us == 0 || now - next_us > period) {
+        next_us = now + period;
+        return;
+    }
+    while (next_us - now > 1500) {      // coarse: sleep in 1 ms ticks
+        vTaskDelay(1);
+        now = esp_timer_get_time();
+    }
+    while (esp_timer_get_time() < next_us) { }   // fine: spin the last ms
+    next_us += period;
+#endif
+}
+
 void loop() {
 #ifdef RUN_INTEGRATION_TESTS
     // Check for serial test commands
@@ -258,10 +280,18 @@ void loop() {
     wifi_mgr_tick();         // advance CONNECTING (no longer tied to the server task)
 
     // Check if supervisor is handling this frame
+    static bool osd_was_active = false;
     if (supervisor_update_and_render()) {
         // Supervisor is active — emulation paused
+        osd_was_active = true;
         yield();
         return;
+    }
+    if (osd_was_active) {
+        // The OSD painted over the emulator picture: redraw every line,
+        // whichever way the menu was left.
+        osd_was_active = false;
+        hal_video_force_repaint();
     }
 
     // Service one pending debug-server command (core 0 -> core 1) between frames.
@@ -276,6 +306,7 @@ void loop() {
 
     // Run one video frame worth of emulation
     machine_run_frame(&coco);
+    pace_frame();
 
     // Push framebuffer to display
     hal_render_frame();

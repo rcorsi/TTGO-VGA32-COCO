@@ -651,13 +651,23 @@ void machine_run_scanline_coco3(Machine* m) {
             // Render this scanline
             {
                 PERF_PROBE_SCOPE(PROBE_RENDER_SCANLINE);
+                // OPT-G6: raw VGA bytes unless a screenshot needs RGB565
+                g->raw_output = !hal_video_capture_armed();
                 tcc1014_render_scanline(g, display_line);
             }
             {
                 PERF_PROBE_SCOPE(PROBE_HAL_SCANLINE);
-                hal_video_render_scanline_gime(display_line, g->vertical.lAA,
-                                               g->border_colour, g->line_buffer,
-                                               g->line_width, g->palette_rgb565);
+                if (g->line_clean) {
+                    // OPT-G5: unchanged since last frame — display already has it
+                } else if (g->raw_output) {
+                    hal_video_render_scanline_gime_raw(display_line, g->vertical.lAA,
+                                                       g->border_colour, g->line_raw,
+                                                       g->line_width);
+                } else {
+                    hal_video_render_scanline_gime(display_line, g->vertical.lAA,
+                                                   g->border_colour, g->line_buffer,
+                                                   g->line_width, g->palette_rgb565);
+                }
             }
 
             // Row/address advance — port of do_hb_irq/do_vb_irq tcc1014.c:1068-1112
