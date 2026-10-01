@@ -12,6 +12,8 @@
  * ============================================================
 */
 
+// Stores in this file go to internal RAM only (see the header for the rule).
+#include "../utils/no_psram_memw.h"
 #include "tcc1014.h"
 #include "font_gime.h"
 #include <string.h>
@@ -108,11 +110,24 @@ void tcc1014_init_palette_lut(void) {
 // Called on: MMU bank write, task register (TR) change, MMUEN change
 // ============================================================
 
+// OPT-M2: mirror of the RAM fast path in machine_read_coco3/machine_write_coco3
+// (Z = bank << 13 | offset, valid while Z is inside physical RAM).
+static void update_fast_pages(TCC1014* gime) {
+    for (int i = 0; i < 8; i++) {
+        const unsigned bank = gime->active_banks[i];
+        const uint32_t base = (uint32_t)bank << 13;
+        uint8_t* p = (gime->ram && base + 0x2000 <= gime->ram_size) ? gime->ram + base : nullptr;
+        gime->wr_page[i] = p;
+        gime->rd_page[i] = (gime->TY || bank < 0x3C) ? p : nullptr;
+    }
+}
+
 void tcc1014_update_active_banks(TCC1014* gime) {
     for (int i = 0; i < 8; i++) {
         gime->active_banks[i] = gime->MMUEN ? gime->mmu_bank[gime->TR | i]
                                              : (0x38 | i);
     }
+    update_fast_pages(gime);
 }
 
 // ============================================================
@@ -677,6 +692,7 @@ static void update_from_sam_register(TCC1014* gime) {
     gime->R1    = gime->SAM_register & 0x1000;
     gime->SAM_F = (gime->SAM_register >> 3) & 0x7F;
     gime->SAM_V = gime->SAM_register & 0x07;
+    update_fast_pages(gime);   // TY decides whether pages under ROM read as RAM
     update_from_gime_registers(gime);
 }
 

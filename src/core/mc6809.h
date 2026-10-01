@@ -63,6 +63,16 @@ typedef struct MC6809 {
     // Memory access callbacks (set by machine)
     uint8_t  (*read)(uint16_t addr);
     void     (*write)(uint16_t addr, uint8_t val);
+
+    // OPT-M2: optional direct-memory page tables (8 x 8 KB). A call through
+    // read/write costs ~80 host cycles on the ESP32, so plain RAM is accessed
+    // inline instead: for addr < fast_limit, a non-null rd_page/wr_page entry
+    // points at the 8 KB block backing that page and the callback is skipped.
+    // The machine owns the tables and must keep them equal to what its
+    // callbacks would do. fast_limit = 0 (the default) disables the path.
+    uint8_t** rd_page;
+    uint8_t** wr_page;
+    uint16_t  fast_limit;
 } MC6809;
 
 // Initialize CPU state (zero all registers, mask interrupts)

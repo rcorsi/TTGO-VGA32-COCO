@@ -27,6 +27,8 @@
  *   Bit 0: CA1/CB1 IRQ enable (1=enable interrupt output)
  */
 
+// Stores in this file go to internal RAM only (see the header for the rule).
+#include "../utils/no_psram_memw.h"
 #include "mc6821.h"
 #include "../utils/debug.h"
 
