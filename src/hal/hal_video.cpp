@@ -468,7 +468,16 @@ void hal_video_present_gime(bool* dirty) {
 
 // Something other than the GIME renderer drew on the framebuffer (OSD, FPS
 // overlay): make the dirty-line skip (OPT-G5) redraw every line.
-void hal_video_force_repaint(void) { tcc1014_invalidate_lines(); }
+//
+// FabGL canvas primitives are queued and executed in the background, so the
+// drawing that prompted this call (e.g. the supervisor's black fill on close)
+// may not have reached the framebuffer yet. Drain the queue first; otherwise
+// it lands on top of the lines redrawn below and, being unchanged, they are
+// never repainted.
+void hal_video_force_repaint(void) {
+    if (display_available) s_canvas.waitCompletion(false);
+    tcc1014_invalidate_lines();
+}
 
 float hal_video_get_fps(void) { return fps_value; }
 
