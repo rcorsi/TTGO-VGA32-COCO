@@ -4,13 +4,14 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.11.0 — September 24, 2026** (LilyGo TTGO VGA32 port)
+**v0.12.0 — October 1, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
 - **One firmware, two CoCos** — CoCo 2 and CoCo 3 live in the same binary. Pick your machine at boot from NVS or flip it live in the supervisor menu.
 - **Cycle-accurate to the chip** — full MC6809 CPU emulation with accurate cycle counts, faithful enough to run the software that matters.
 - **Authentic video, both eras** — MC6847 VDG for CoCo 2 (text plus every semigraphics and graphics mode) and the TCC1014 GIME for CoCo 3 (512 KB RAM with MMU, 16-color palette, native graphics up to 640 px), output over crisp VGA at 640×200 @ 60 Hz via FabGL in 64-color direct mode.
+- **Real-time speed** — CoCo 3 text and graphics modes run at a paced 60 FPS, the speed of the real machine (v0.12.0 rewrote the GIME video path; it used to manage ~39 FPS at the BASIC prompt and ~20 FPS in graphics).
 - **Real disk drives** — WD1793 floppy controller with `.DSK` and `.VDK` support, and entire disk images cached in PSRAM for zero-latency access.
 - **Complete hardware soul** — dual 6821 PIAs (keyboard, joystick, audio I/O), SAM6883 multiplexer on CoCo 2, GIME-integrated MMU on CoCo 3.
 - **FUJINET SUPPORT** - External fujinet support - still experimental
@@ -120,7 +121,7 @@ If you just want to flash the emulator without building from source, use the pre
 2. Open [ESP Web Tool](https://esptool.spacehuhn.com/) in a Chrome or Edge browser
 3. Click **Connect** and select the board's serial port
 4. Set the flash offset to **0x0000**
-5. Choose the file `TTGO-VGA32-CoCo-0.11.0-firmware.bin` from this repository
+5. Choose the file `TTGO-VGA32-CoCo-0.12.0-firmware.bin` from this repository
 6. Click **Program** and wait for the flash to complete
 
 > Hold the **BOOT** button on the board while clicking Connect if the browser cannot reach the device.
@@ -409,7 +410,41 @@ mode, with diagrams.
 
 ## Changelog
 
-### Unreleased
+### v0.12.0 — October 1, 2026
+
+**CoCo 3 runs at full speed: 60 FPS in text and graphics modes.**
+
+| CoCo 3 mode | v0.11.0 | v0.12.0 |
+|---|---|---|
+| BASIC prompt (32-column) | ~39 FPS | **60** |
+| `WIDTH 40` | ~34 | **60** |
+| `WIDTH 80` | ~24 | **~58** |
+| `HSCREEN 2` (320×192, 16 colours) | ~20 | **60** |
+| `HSCREEN 3` (640×192, 2 colours) | ~25 | **60** |
+| `PMODE 4` | ~33 | **60** |
+
+Measured on a TTGO VGA32 v1.4 with the built-in FPS counter. A program that
+redraws the whole screen every frame can still dip below 60.
+
+- **Faster GIME video.** Each video mode now has its own tight scanline
+  renderer, instead of one routine that re-checked the mode for every four
+  pixels. Decoding a 320×192 16-colour frame went from 32 ms to 5 ms.
+- **Direct VGA output.** The renderer produces the final VGA bytes and the
+  display code copies them 32 bits at a time, replacing a per-pixel lookup in a
+  64 KB table (9.5 ms → 1.5 ms per frame).
+- **Unchanged lines are skipped.** A scanline whose video memory and video
+  settings are the same as in the previous frame is not redrawn.
+- **Real-time frame pacing.** The emulator never runs faster than 60 frames per
+  second, so cursor blink, `SOUND`/`PLAY` tempo and game speed match a real CoCo.
+  The F5 FPS overlay therefore tops out at 60. Build with
+  `FRAME_LIMIT_ENABLED 0` in `config.h` to remove the cap.
+- **Debug API:** `GET /api/screenshot.png?fb=1` returns the picture actually on
+  the VGA output (after scaling and borders).
+- **Developer tools:** `tools/gime_render_test/` checks the new renderers
+  against the original one on the host; `tools/perf/` holds the benchmark
+  programs and measurement scripts.
+
+Also in this release:
 
 - **DriveWire is External-only.** The Internal DriveWire server (v0.11.0) and the
   planned embedded FujiNet were dropped: External mode against pyDriveWire, DW4
