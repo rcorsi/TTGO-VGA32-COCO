@@ -101,6 +101,12 @@ typedef struct TCC1014 {
     // Phase 5: Pre-computed active bank mapping for current task register
     // active_banks[slot] = mmu_bank[TR | slot] when MMUEN, else 0x38|slot
     uint8_t  active_banks[8];
+    // OPT-M2: per-page direct RAM pointers for the CPU core (see mc6809.h).
+    // rd_page[i] is set when a read of page i below $FE00 is plain RAM
+    // (TY, or bank < $3C); wr_page[i] always, since writes go to the RAM
+    // under a ROM. Rebuilt by tcc1014_update_active_banks() and on TY change.
+    uint8_t* rd_page[8];
+    uint8_t* wr_page[8];
 
     // --- Palette (from tcc1014.c:228-229) ---
     uint8_t  palette_reg[16]; // $FFB0-$FFBF: 6-bit RGBRGB

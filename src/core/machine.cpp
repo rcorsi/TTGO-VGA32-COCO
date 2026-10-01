@@ -408,6 +408,11 @@ void machine_init_coco3(Machine* m) {
     mc6809_init(&m->cpu);
     m->cpu.read = machine_read_coco3;
     m->cpu.write = machine_write_coco3;
+    // OPT-M2: plain-RAM accesses below $FE00 bypass the callbacks via the
+    // GIME's page tables (same decode as the fast paths in those callbacks).
+    m->cpu.rd_page = m->gime.rd_page;
+    m->cpu.wr_page = m->gime.wr_page;
+    m->cpu.fast_limit = 0xFE00;
 
     // Initialize PIAs
     mc6821_init(&m->pia0);
@@ -480,6 +485,7 @@ void machine_reset_coco3(Machine* m) {
     // Wire GIME to physical RAM
     m->gime.ram = m->ram_physical;
     m->gime.ram_size = COCO3_PHYSICAL_RAM;
+    tcc1014_update_active_banks(&m->gime);   // rebuild the CPU's RAM page tables
 
     // Reset PIAs
     mc6821_reset(&m->pia0);

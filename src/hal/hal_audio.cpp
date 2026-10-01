@@ -11,6 +11,8 @@
  * ============================================================
 */
 
+// Stores in this file go to internal RAM only (see the header for the rule).
+#include "../utils/no_psram_memw.h"
 #include "hal.h"
 #include "../utils/debug.h"
 

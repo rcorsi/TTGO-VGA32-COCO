@@ -1,4 +1,4 @@
-#pragma GCC optimize("O2")
+#pragma GCC optimize("O2", "jump-tables")
 /*
  * ============================================================
  *        CoCo 2&3 Emulator for ESP32-TTGO-VGA32-COCO
@@ -12,6 +12,8 @@
  * ============================================================
 */
 
+// Stores in this file go to internal RAM only (see the header for the rule).
+#include "../utils/no_psram_memw.h"
 #include "mc6809.h"
 
 // ============================================================
@@ -32,10 +34,22 @@
 // Memory access helpers
 // ============================================================
 static inline uint8_t mem_read(MC6809* cpu, uint16_t addr) {
+    if (__builtin_expect(addr < cpu->fast_limit, 1)) {
+        const uint8_t* p = cpu->rd_page[addr >> 13];
+        if (__builtin_expect(p != nullptr, 1)) return p[addr & 0x1FFF];
+    }
     return cpu->read(addr);
 }
 
 static inline void mem_write(MC6809* cpu, uint16_t addr, uint8_t val) {
+    if (__builtin_expect(addr < cpu->fast_limit, 1)) {
+        uint8_t* p = cpu->wr_page[addr >> 13];
+        if (__builtin_expect(p != nullptr, 1)) {
+            p[addr & 0x1FFF] = val;
+            PSRAM_STORE_BARRIER();   // emulated RAM is PSRAM: the one store here that needs it
+            return;
+        }
+    }
     cpu->write(addr, val);
 }
 
@@ -432,7 +446,7 @@ static int do_pulu(MC6809* cpu, uint8_t postbyte) {
 // ============================================================
 // Branch condition evaluation
 // ============================================================
-static bool eval_branch(MC6809* cpu, uint8_t cond) {
+static inline __attribute__((always_inline)) bool eval_branch(MC6809* cpu, uint8_t cond) {
     // cond is the low nibble of the branch opcode (0x0 - 0xF)
     switch (cond) {
         case 0x0: return true;                                          // BRA
