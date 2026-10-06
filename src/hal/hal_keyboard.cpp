@@ -16,6 +16,7 @@
 #include "../supervisor/supervisor.h"
 #include "../supervisor/sv_disk.h"
 #include "../supervisor/sv_keymap.h"
+#include "../supervisor/sv_wifi.h"
 
 #define COCO_SHIFT_ROW  6
 #define COCO_SHIFT_COL  7
@@ -122,6 +123,7 @@ static uint8_t vk_to_hid_usage(fabgl::VirtualKey vk) {
         case fabgl::VK_LEFT:         return 0x50;
         case fabgl::VK_RIGHT:        return 0x4F;
         case fabgl::VK_BACKSPACE:    return 0x2A;
+        case fabgl::VK_TAB:          return 0x2B;
         case fabgl::VK_SPACE:        return 0x2C;
         case fabgl::VK_F1:           return 0x3A;
         case fabgl::VK_F2:           return 0x3B;
@@ -386,6 +388,11 @@ static void process_vk(const fabgl::VirtualKeyItem& it) {
         // translation below is lossy (most symbol keys map to usage 0).
         if (sv_keymap_wants_raw_vk()) {
             sv_keymap_on_raw_vk((int16_t)vk, pressed);
+            return;
+        }
+        // WiFi name / password entry needs case and symbols for the same reason.
+        if (sv_wifi_wants_text()) {
+            sv_wifi_on_text_key((int16_t)vk, (uint8_t)it.ASCII, pressed);
             return;
         }
         // Supervisor takes all input. Translate to HID usage IDs so the

@@ -52,8 +52,13 @@ the whole sector. The disks are the server's, not the Disk Manager's.
    the SD card. Optional timeout builds: `hdbdw3bc3t.rom` / `hdbdw3bckt.rom`.
 2. Run a DriveWire server on another machine: pyDriveWire, DW4, or FujiNet-PC
    (`./build.sh -p COCO`), listening on port 65504.
-3. **F3 → Settings → DriveWire:** Mode External, Host (IP or `.local` name),
-   Port, **Save & Restart.** The boot banner then reads
+3. **F3 → Setup → DriveWire:** turn **External Server** on. A popup asks for
+   the Host (IP or `.local` name), Port and HDB-DOS ROM variant; it refuses to
+   turn on while the Host is empty or the ROM file is missing from `/roms`,
+   and says which file to copy. Host, Port and HDB-DOS ROM then appear as
+   rows and stay editable. An orange bar warns when no WiFi network is
+   saved. Then
+   **Save & Restart.** The boot banner then reads
    `HDB-DOS 1.4 BECKER COCO 3`.
 4. On the CoCo: `DIR 0`, `LOAD`, `SAVE`, `LOADM`/`EXEC` as usual, or FujiNet's
    CONFIG when the server is FujiNet-PC.

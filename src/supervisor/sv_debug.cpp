@@ -43,12 +43,43 @@ extern OSDCanvas* hal_video_get_canvas(void);
 
 static SV_DebugState dbg;
 
+// All debug screens draw in the wide green frame: headings in the accent
+// colour, data in black, 8x8 font.
+#define DBG_X     (SVW_BOX_X + 40)
+#define DBG_Y     (SVW_BOX_Y + 36)
+#define DBG_LH    10
+#define DBG_COLS  60
+
+// Screen whose frame is currently drawn (page, or 16 + dump phase); -1 = none.
+// The frame is painted once per screen; later redraws only rewrite the text,
+// so scrolling the hex dump or typing a name does not flicker.
+static int8_t s_frame_key = -1;
+
+void sv_debug_invalidate(void) {
+    s_frame_key = -1;
+}
+
+static void dbg_frame(int key, const char* title, const char* hint) {
+    if (s_frame_key == key) return;
+    sv_render_wide_frame(title, hint);
+    s_frame_key = (int8_t)key;
+}
+
+// One text line padded with spaces, so a shorter value erases a longer one.
+static void dbg_text(OSDCanvas* tft, int x, int y, const char* text, int cols = DBG_COLS) {
+    char line[DBG_COLS + 1];
+    if (cols > DBG_COLS) cols = DBG_COLS;
+    snprintf(line, sizeof(line), "%-*s", cols, text);
+    tft->drawString(line, x, y);
+}
+
 // ============================================================
 // Status page — renders CPU + GIME state to TFT
 // ============================================================
 
 static void status_render(Supervisor_t* sv) {
-    sv_render_frame("Debug: Status", "L/R=Page ENT=Serial ESC=Back");
+    dbg_frame(SV_DBG_PAGE_STATUS, "CPU / GIME Status",
+              "Left/Right Page   ENTER To serial   ESC Back   F3 Exit");
 
     Machine* m = sv->machine;
     if (!m) return;
@@ -56,28 +87,28 @@ static void status_render(Supervisor_t* sv) {
     OSDCanvas* tft = hal_video_get_canvas();
     if (!tft) return;
 
-    tft->setTextFont(0);  // compact 6x8
+    tft->setTextFont(1);
     tft->setTextDatum(TL_DATUM);
 
-    int x = SV_CONTENT_X;
-    int y = SV_CONTENT_Y + 2;
-    int lh = 9;
+    int x = DBG_X;
+    int y = DBG_Y;
+    int lh = DBG_LH;
     char buf[64];
 
     // --- CPU Registers ---
     MC6809* cpu = &m->cpu;
-    tft->setTextColor(SV_COLOR_TEXT, SV_COLOR_BG);
+    tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
     tft->drawString("CPU Registers", x, y);
     y += lh + 2;
 
-    tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
     snprintf(buf, sizeof(buf), "PC=%04X  S=%04X  U=%04X",
              cpu->pc, cpu->s, cpu->u);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), " X=%04X  Y=%04X  D=%04X",
              cpu->x, cpu->y, cpu->d);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "DP=%02X  CC=%02X [%c%c%c%c%c%c%c%c]",
              cpu->dp, cpu->cc,
@@ -89,7 +120,7 @@ static void status_render(Supervisor_t* sv) {
              (cpu->cc & 0x04) ? 'Z' : '-',
              (cpu->cc & 0x02) ? 'V' : '-',
              (cpu->cc & 0x01) ? 'C' : '-');
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "HALT=%d CWAI=%d NMI=%d IRQ=%d FIRQ=%d",
              cpu->halted ? 1 : 0,
@@ -97,46 +128,46 @@ static void status_render(Supervisor_t* sv) {
              cpu->nmi_pending ? 1 : 0,
              cpu->irq_pending ? 1 : 0,
              cpu->firq_pending ? 1 : 0);
-    tft->drawString(buf, x, y); y += lh + 4;
+    dbg_text(tft, x, y, buf); y += lh + 4;
 
 #if MACHINE_TYPE == 4
     // --- GIME State (CoCo 3 only — skip if runtime-switched to CoCo 2) ---
     if (g_machine_type != 4) {
-        tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
+        tft->setTextColor(SVW_BLACK, SVW_GREEN);
         tft->drawString("GIME: n/a (CoCo 2 mode)", x, y);
         y += lh;
     } else {
     TCC1014* g = &m->gime;
-    tft->setTextColor(SV_COLOR_TEXT, SV_COLOR_BG);
+    tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
     tft->drawString("GIME State", x, y);
     y += lh + 2;
 
-    tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
     snprintf(buf, sizeof(buf), "INIT0=%02X COCO=%d MMUEN=%d TR=%d",
              g->registers[0], g->COCO ? 1 : 0, g->MMUEN ? 1 : 0,
              g->TR ? 1 : 0);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "VMODE=%02X BP=%d LPR=%d H50=%d",
              g->registers[8], g->BP ? 1 : 0, g->LPR, g->H50 ? 1 : 0);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "VRES=%02X LPF=%d HRES=%d CRES=%d",
              g->registers[9], g->LPF, g->HRES, g->CRES);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "Y=%05X B=%05X BPR=%d res=%d",
              g->Y, g->B, g->BPR, g->resolution);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "IRQen=%02X FIRQen=%02X irqs=%02X firqs=%02X",
              g->registers[2], g->registers[3],
              g->irq_state, g->firq_state);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "TMR=%d lAA=%u row=%d scan=%d",
              g->timer_counter, g->vertical.lAA, g->row, m->scanline);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
     }
 #endif
 
@@ -219,7 +250,8 @@ static void dump_to_serial(uint16_t addr) {
 }
 
 static void dump_render(Supervisor_t* sv) {
-    sv_render_frame("Debug: Hex Dump", "L/R=Page U/D=Scroll 0-F=Addr ENT=Serial");
+    dbg_frame(SV_DBG_PAGE_DUMP, "Memory Hex Dump",
+              "Left/Right Page  Up/Dn Scroll  0-F Address  ENTER To serial  ESC Back");
 
     Machine* m = sv->machine;
     if (!m) return;
@@ -227,51 +259,47 @@ static void dump_render(Supervisor_t* sv) {
     OSDCanvas* tft = hal_video_get_canvas();
     if (!tft) return;
 
-    tft->setTextFont(0);  // compact 6x8 — hex dump needs the density
+    tft->setTextFont(1);
     tft->setTextDatum(TL_DATUM);
 
-    int x = SV_CONTENT_X;
-    int y = SV_CONTENT_Y + 2;
-    int lh = 9;
+    // 55 columns: "AAAA: " + 8 bytes + gap + 8 bytes, centred in the box
+    int x = SVW_BOX_X + (SVW_BOX_W - 55 * 8) / 2;
+    int y = DBG_Y;
+    int lh = DBG_LH;
     char buf[80];
 
-    // Address field
-    tft->setTextColor(dbg.active_field == SV_DBG_FIELD_ADDR ?
-                      SV_COLOR_HL_TEXT : SV_COLOR_TEXT, SV_COLOR_BG);
-    snprintf(buf, sizeof(buf), "Addr: $%04X  (type 4 hex digits)", dbg.dump_addr);
-    tft->drawString(buf, x, y); y += lh + 4;
+    // Address field — an accent bar while it takes hex digits
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
+    tft->drawString("Addr:", x, y);
+    if (dbg.active_field == SV_DBG_FIELD_ADDR) tft->setTextColor(SVW_WHITE, SVW_DKBLUE);
+    snprintf(buf, sizeof(buf), " $%04X ", dbg.dump_addr);
+    tft->drawString(buf, x + 6 * 8, y);
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
+    tft->drawString("(type 4 hex digits)", x + 14 * 8, y);
+    y += lh + 4;
 
     // Hex dump header
-    tft->setTextColor(SV_COLOR_TEXT, SV_COLOR_BG);
-    tft->drawString("ADDR +0+1+2+3+4+5+6+7 +8+9+A+B+C+D+E+F", x, y);
+    tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
+    tft->drawString("ADDR  +0 +1 +2 +3 +4 +5 +6 +7  +8 +9 +A +B +C +D +E +F", x, y);
     y += lh;
 
-    // Dump 8 rows × 16 bytes = 128 bytes
-    tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
+    // Dump 8 rows × 16 bytes = 128 bytes, one string per row
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
     for (int row = 0; row < DUMP_LINES; row++) {
         uint16_t a = dbg.dump_addr + row * DUMP_BYTES_PER_LINE;
-        int bx = x;
-
-        // Address
-        snprintf(buf, sizeof(buf), "%04X:", a);
-        tft->drawString(buf, bx, y);
-        bx += 6 * 5;  // 5 chars × 6px
-
-        // Hex bytes (compact: 2 chars + space per byte)
+        int n = snprintf(buf, sizeof(buf), "%04X: ", a);
         for (int col = 0; col < DUMP_BYTES_PER_LINE; col++) {
-            uint8_t b = machine_read(a + col);
-            snprintf(buf, sizeof(buf), "%02X", b);
-            tft->drawString(buf, bx, y);
-            bx += 6 * 2;  // 2 chars
-            if (col == 7) bx += 3;  // gap between groups
+            n += snprintf(buf + n, sizeof(buf) - n, "%02X ", machine_read(a + col));
+            if (col == 7) buf[n++] = ' ';   // gap between groups
         }
-
+        buf[n] = '\0';
+        dbg_text(tft, x, y, buf);
         y += lh;
     }
 
-    y += 2;
+    y += 4;
     // Dump action — ENTER always dumps the current window (see key handler).
-    tft->setTextColor(SV_COLOR_HL_TEXT, SV_COLOR_BG);
+    tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
     tft->drawString("[ENTER] Dump to Serial", x, y);
 }
 
@@ -396,52 +424,52 @@ void sv_debug_set_page(SV_DebugPage page) {
 // ============================================================
 
 static void rs232_render(Supervisor_t* sv) {
-    sv_render_frame("Debug: RS-232 Pak", "L/R=Page  ESC=Back");
+    dbg_frame(SV_DBG_PAGE_RS232, "RS-232 Pak", "Left/Right Page   ESC Back   F3 Exit");
     (void)sv;
 
     OSDCanvas* tft = hal_video_get_canvas();
     if (!tft) return;
 
-    tft->setTextFont(0);  // compact 6x8
+    tft->setTextFont(1);
     tft->setTextDatum(TL_DATUM);
 
-    int x = SV_CONTENT_X;
-    int y = SV_CONTENT_Y + 2;
-    int lh = 9;
+    int x = DBG_X;
+    int y = DBG_Y;
+    int lh = DBG_LH;
     char buf[64];
 
     MC6551Debug d;
     mc6551_get_debug(&d);
 
-    tft->setTextColor(SV_COLOR_TEXT, SV_COLOR_BG);
+    tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
     snprintf(buf, sizeof(buf), "RS-232 PAK   [%s]",
              rs232_pak_enabled() ? "enabled" : "disabled");
-    tft->drawString(buf, x, y); y += lh + 2;
+    dbg_text(tft, x, y, buf); y += lh + 2;
 
-    tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
     snprintf(buf, sizeof(buf), "CTRL $%02X  STAT $%02X  CMD $%02X",
              d.control, d.status, d.command);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "Baud %u   Echo %s",
              (unsigned)d.baud, d.echo ? "on" : "off");
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "TX cnt %lu  TDRE %d  TX-IRQ %s",
              (unsigned long)d.tx_count, d.tdre ? 1 : 0, d.tx_irq_en ? "on" : "off");
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "RX cnt %lu  RDRF %d  RX-IRQ %s",
              (unsigned long)d.rx_count, d.rdrf ? 1 : 0, d.rx_irq_en ? "on" : "off");
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "Overrun %lu  Ring %u/%u",
              (unsigned long)d.overrun_count,
              (unsigned)hal_rs232_ring_fill(), (unsigned)hal_rs232_ring_capacity());
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "FIRQ asserts: %lu", (unsigned long)d.firq_count);
-    tft->drawString(buf, x, y); y += lh;
+    dbg_text(tft, x, y, buf); y += lh;
 }
 
 void sv_debug_render(Supervisor_t* sv) {
@@ -701,20 +729,20 @@ void sv_debug_dump_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
 
 void sv_debug_dump_render(Supervisor_t* sv) {
     OSDCanvas* tft = hal_video_get_canvas();
+    int x = DBG_X, y = DBG_Y + 4;
 
     if (dbg.dump_phase == SV_DUMP_SAVING) {
         // Draw the wait banner FIRST (FabGL scans the framebuffer out
         // continuously, so it is on screen immediately), then block on the
         // write, then flip to the result screen on the next redraw.
-        sv_render_frame("Dump RAM to SD", "Saving...");
+        dbg_frame(16 + SV_DUMP_SAVING, "Dump RAM to SD", "Saving...");
         if (tft) {
-            tft->setTextFont(0);
+            tft->setTextFont(1);
             tft->setTextDatum(TL_DATUM);
-            tft->setTextColor(SV_COLOR_TEXT, SV_COLOR_BG);
-            int x = SV_CONTENT_X, y = SV_CONTENT_Y + 8;
-            tft->drawString("Saving to SD card, please wait...", x, y); y += 14;
-            tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
-            tft->drawString("Writing full RAM as hex (~512KB).", x, y); y += 10;
+            tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
+            tft->drawString("Saving to SD card, please wait...", x, y); y += 16;
+            tft->setTextColor(SVW_BLACK, SVW_GREEN);
+            tft->drawString("Writing full RAM as hex (~512KB).", x, y); y += 12;
             tft->drawString("This can take ~30s. Do not remove card.", x, y);
         }
         perform_dump(sv);
@@ -724,49 +752,50 @@ void sv_debug_dump_render(Supervisor_t* sv) {
     }
 
     if (dbg.dump_phase == SV_DUMP_RESULT) {
-        sv_render_frame("Dump RAM to SD", "Press any key to return");
+        dbg_frame(16 + SV_DUMP_RESULT, "Dump RAM to SD", "Press any key to return");
         if (!tft) return;
-        tft->setTextFont(0);
+        tft->setTextFont(1);
         tft->setTextDatum(TL_DATUM);
-        int x = SV_CONTENT_X, y = SV_CONTENT_Y + 8;
         bool err = (dbg.dump_result_lines > 0 &&
                     strncmp(dbg.dump_result[0], "ERROR", 5) == 0);
         for (int i = 0; i < dbg.dump_result_lines; i++) {
-            tft->setTextColor((i == 0 && err) ? SV_COLOR_WARN : SV_COLOR_TEXT,
-                              SV_COLOR_BG);
-            tft->drawString(dbg.dump_result[i], x, y);
+            tft->setTextColor((i == 0 && err) ? SV_COLOR_WARN : SVW_BLACK, SVW_GREEN);
+            dbg_text(tft, x, y, dbg.dump_result[i]);
             y += 12;
         }
         return;
     }
 
     // SV_DUMP_INPUT
-    sv_render_frame("Dump RAM to SD", "A-Z 0-9  BkSp  ENTER Save  ESC Cancel");
+    dbg_frame(16 + SV_DUMP_INPUT, "Dump RAM to SD",
+              "A-Z 0-9   Backspace   ENTER Save   ESC Cancel");
     if (!tft) return;
-    tft->setTextFont(0);
+    tft->setTextFont(1);
     tft->setTextDatum(TL_DATUM);
-    int x = SV_CONTENT_X, y = SV_CONTENT_Y + 4;
 
-    tft->setTextColor(SV_COLOR_TEXT, SV_COLOR_BG);
+    tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
     tft->drawString("Enter filename (max 8 chars):", x, y);
     y += 16;
 
+    // Name field: white on an accent bar, underscore cursor while there is room
     char field[24];
-    snprintf(field, sizeof(field), "Name: %s%s",
-             dbg.dump_name, dbg.dump_name_len < SV_DUMP_NAME_MAX ? "_" : "");
-    tft->setTextColor(SV_COLOR_HL_TEXT, SV_COLOR_BG);
-    tft->drawString(field, x, y);
-    y += 18;
+    snprintf(field, sizeof(field), " %s%s", dbg.dump_name,
+             dbg.dump_name_len < SV_DUMP_NAME_MAX ? "_" : "");
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
+    tft->drawString("Name:", x, y);
+    tft->setTextColor(SVW_WHITE, SVW_DKBLUE);
+    dbg_text(tft, x + 6 * 8, y, field, SV_DUMP_NAME_MAX + 2);
+    y += 20;
 
-    tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
-    tft->drawString("Writes two hex-text files to /DUMPS/:", x, y); y += 11;
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
+    tft->drawString("Writes two hex-text files to /DUMPS/:", x, y); y += 12;
     char l[44];
     snprintf(l, sizeof(l), "  %s-CPU.txt  64KB CPU address space",
              dbg.dump_name_len ? dbg.dump_name : "NAME");
-    tft->drawString(l, x, y); y += 10;
+    dbg_text(tft, x, y, l); y += 10;
     snprintf(l, sizeof(l), "  %s-RAM.txt  %uKB physical RAM",
              dbg.dump_name_len ? dbg.dump_name : "NAME",
              (unsigned)(((g_machine_type == 4) ? COCO3_PHYSICAL_RAM : 0x10000) / 1024));
-    tft->drawString(l, x, y); y += 13;
+    dbg_text(tft, x, y, l); y += 14;
     tft->drawString("Machine is paused during the dump.", x, y);
 }

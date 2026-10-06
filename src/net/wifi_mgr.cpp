@@ -7,7 +7,7 @@
  *   GPL-3.0-or-later License
  * ============================================================
  *  File   : wifi_mgr.cpp
- *  Module : WiFi state machine (SoftAP config portal + STA station)
+ *  Module : WiFi state machine (STA station, network scan, credentials)
  * ============================================================
  */
 
@@ -63,7 +63,6 @@ WifiMgrState wifi_mgr_state(void) { return s_state; }
 const char* wifi_mgr_state_str(void) {
     switch (s_state) {
         case WIFI_MGR_OFF:         return "Off";
-        case WIFI_MGR_AP_CONFIG:   return "Config Portal";
         case WIFI_MGR_CONNECTING:  return "Connecting";
         case WIFI_MGR_STA_RUNNING: return "Connected";
         case WIFI_MGR_FAILED:      return "Failed";
@@ -95,33 +94,29 @@ void wifi_mgr_tick(void) {
     }
 }
 
-// --- config portal (AP) ---
-
-void wifi_mgr_start_ap(void) {
-    DEBUG_PRINTF("wifi_mgr: free internal heap before softAP = %u bytes",
-                 (unsigned)ESP.getFreeHeap());
-    WiFi.mode(WIFI_AP);
-    bool ok = WiFi.softAP(WIFI_MGR_AP_SSID);
-    IPAddress ip = WiFi.softAPIP();
-    if (!ok || ip == IPAddress(0, 0, 0, 0)) {
-        // softAP failed (typically out of internal DRAM for WiFi RX buffers).
-        s_state = WIFI_MGR_FAILED;
-        DEBUG_PRINTF("wifi_mgr: SoftAP FAILED (ok=%d, ip=%s, free heap=%u)",
-                     ok, ip.toString().c_str(), (unsigned)ESP.getFreeHeap());
-        return;
-    }
-    s_state = WIFI_MGR_AP_CONFIG;
-    DEBUG_PRINTF("wifi_mgr: SoftAP '%s' up, IP %s",
-                 WIFI_MGR_AP_SSID, ip.toString().c_str());
-}
-
-IPAddress wifi_mgr_ap_ip(void) { return WiFi.softAPIP(); }
-
 // --- scanning ---
 
+// A scan needs the radio in station mode. Remember whether the scan had to
+// power it up, so wifi_mgr_scan_free() can power it back down.
+static bool s_scan_powered_radio = false;
+
 int wifi_mgr_scan(void) {
+    // A pending or failed connection keeps retrying and makes the scan fail;
+    // the user is about to pick a network anyway, so drop it.
+    if (s_state == WIFI_MGR_CONNECTING || s_state == WIFI_MGR_FAILED) {
+        WiFi.disconnect(false);
+        s_state = WIFI_MGR_OFF;
+        s_scan_powered_radio = true;
+    }
+    if (WiFi.getMode() == WIFI_OFF) {
+        WiFi.persistent(false);
+        WiFi.mode(WIFI_STA);
+        delay(50);
+        s_scan_powered_radio = true;
+    }
     s_scan_count = WiFi.scanNetworks();
     if (s_scan_count < 0) s_scan_count = 0;
+    DEBUG_PRINTF("wifi_mgr: scan found %d networks", s_scan_count);
     return s_scan_count;
 }
 
@@ -130,21 +125,30 @@ String wifi_mgr_scan_ssid(int i)      { return WiFi.SSID(i); }
 int    wifi_mgr_scan_rssi(int i)      { return WiFi.RSSI(i); }
 bool   wifi_mgr_scan_secure(int i)    { return WiFi.encryptionType(i) != WIFI_AUTH_OPEN; }
 
+void wifi_mgr_scan_free(void) {
+    WiFi.scanDelete();
+    s_scan_count = 0;
+    if (s_scan_powered_radio && (s_state == WIFI_MGR_OFF || s_state == WIFI_MGR_FAILED)) {
+        WiFi.mode(WIFI_OFF);
+    }
+    s_scan_powered_radio = false;
+}
+
 // --- station ---
 
 static void begin_sta(const String& ssid, const String& pass) {
-    // Reconnect cleanly from ANY prior state: OFF (after Stop/Disconnect, where
-    // the radio was powered down) or AP_CONFIG (after Start Config Portal). Bring
-    // the AP down, force STA mode, and let the mode change settle before begin()
-    // — coming straight out of WIFI_OFF, an immediate begin() can be dropped.
+    // Reconnect cleanly from ANY prior state, including OFF (after
+    // Stop/Disconnect, where the radio was powered down). Force STA mode and
+    // let the mode change settle before begin() — coming straight out of
+    // WIFI_OFF, an immediate begin() can be dropped.
     WiFi.persistent(false);
-    WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
     delay(50);
     WiFi.begin(ssid.c_str(), pass.c_str());
     s_ssid = ssid;
     s_connect_start = millis();
     s_state = WIFI_MGR_CONNECTING;
+    s_scan_powered_radio = false;   // the radio now belongs to the connection
     DEBUG_PRINTF("wifi_mgr: connecting to '%s'", ssid.c_str());
 }
 
@@ -153,6 +157,15 @@ void wifi_mgr_connect(const char* ssid, const char* pass) {
     nvs_put_str("wifi_pass", pass);
     wifi_mgr_set_autoconnect(true);
     begin_sta(String(ssid), String(pass));
+}
+
+void wifi_mgr_save_creds(const char* ssid, const char* pass, bool autoconnect) {
+    nvs_put_str("wifi_ssid", ssid);
+    nvs_put_str("wifi_pass", pass);
+    wifi_mgr_set_autoconnect(autoconnect);
+    s_ssid = ssid;
+    DEBUG_PRINTF("wifi_mgr: credentials saved for '%s' (auto-connect %s)",
+                 ssid, autoconnect ? "on" : "off");
 }
 
 void wifi_mgr_connect_saved(void) {
@@ -168,7 +181,6 @@ void wifi_mgr_connect_saved(void) {
 
 void wifi_mgr_stop(void) {
     WiFi.disconnect(true);
-    WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
     s_state = WIFI_MGR_OFF;
     DEBUG_PRINT("wifi_mgr: stopped");
@@ -178,7 +190,6 @@ void wifi_mgr_stop(void) {
 
 String wifi_mgr_ip(void) {
     if (s_state == WIFI_MGR_STA_RUNNING) return WiFi.localIP().toString();
-    if (s_state == WIFI_MGR_AP_CONFIG)   return WiFi.softAPIP().toString();
     return String("0.0.0.0");
 }
 

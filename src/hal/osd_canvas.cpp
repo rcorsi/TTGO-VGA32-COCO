@@ -66,6 +66,18 @@ void OSDCanvas::drawFastVLine(int32_t x, int32_t y, int32_t h, uint16_t color) {
     s_canvas->drawLine(x, y, x, y + h - 1);
 }
 
+void OSDCanvas::drawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint16_t color) {
+    if (!s_canvas) return;
+    s_canvas->setPenColor(rgb565_to_888(color));
+    s_canvas->drawLine(x1, y1, x2, y2);
+}
+
+void OSDCanvas::fillEllipse(int32_t cx, int32_t cy, int32_t w, int32_t h, uint16_t color) {
+    if (!s_canvas || w <= 0 || h <= 0) return;
+    s_canvas->setBrushColor(rgb565_to_888(color));
+    s_canvas->fillEllipse(cx, cy, w, h);
+}
+
 void OSDCanvas::setTextFont(uint8_t font) {
     m_textFont = font;
 }

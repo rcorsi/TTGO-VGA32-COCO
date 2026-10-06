@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.12.2 — October 1, 2026** (LilyGo TTGO VGA32 port)
+**v0.14.0 — October 6, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -18,12 +18,12 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 
 ### Built for Real Use
 
-- **Multi-language keyboards** — PS/2 input with US English and Spanish Latam layouts, switchable live from Settings with no reboot.
-- **Remap anything** — the supervisor Key Mapper lets you bind any physical key to any CoCo key, including the CoCo 3-only ALT, CTRL, CLEAR, F1 and F2.
+- **Multi-language keyboards** — PS/2 input with US English and Spanish Latam layouts, switchable live from Setup → Keyboard with no reboot.
+- **Remap on a picture of the keyboard** — the supervisor Key Mapper draws the running machine's keyboard (CoCo 2 or CoCo 3); move over it with the arrow keys and bind a physical key to the CoCo symbol keys, the arrows and the CoCo 3-only ALT, CTRL, CLEAR, F1 and F2.
 - **Joystick via PS/2 mouse** — with live, on-screen sensitivity tuning persisted in NVS.
 - **Real audio out** — ESP32 internal 8-bit DAC on GPIO25, straight to a 3.5 mm jack.
-- **Supervisor OSD** — mount disks, reset the machine, change settings, and check status without ever leaving your seat.
-- **Online debugging via WiFi + MCP (experimental)** — a WiFi debug server exposes a small HTTP/JSON API to inspect and control the running 6809 (registers, memory, pause/resume, code injection, reset, machine switch, screenshot). A host-side **MCP bridge** lets Claude / LLM agents drive it live. Set up from the supervisor's **WiFi / Debug** screen; see [docs/wifi-debug.md](docs/wifi-debug.md) and [`mcp-bridge/`](mcp-bridge/).
+- **Supervisor OSD** — an icon menu in the CoCo's own green, black and dark blue: mount disks, reset the machine, change settings, and check status without ever leaving your seat.
+- **Online debugging via WiFi + MCP (experimental)** — a WiFi debug server exposes a small HTTP/JSON API to inspect and control the running 6809 (registers, memory, pause/resume, code injection, reset, machine switch, screenshot). A host-side **MCP bridge** lets Claude / LLM agents drive it live. Join your network from the supervisor's **WiFi / Debug** screen (pick it from a list and type the password, or load it from `cocowifi.cfg` on the SD card); see [docs/wifi-debug.md](docs/wifi-debug.md) and [`mcp-bridge/`](mcp-bridge/).
 - **Experimental RS-232 Pak support** — for the serial tinkerers.
 
 ## Hardware Requirements
@@ -190,7 +190,7 @@ arduino-cli lib install FabGL
 Edit `config.h` if you want to change:
 
 - `MACHINE_TYPE` — default compile-time machine (4 = CoCo 3, 3 = CoCo 2). The active machine is also runtime-switchable from the supervisor menu, persisted to NVS.
-- `KBD_LAYOUT_FIRST_BOOT_DEFAULT` — initial PS/2 keyboard layout (0 = US English, 1 = Spanish Latam) used the first time the device boots. After that the layout is runtime-switchable (live, no reboot) from the supervisor Settings menu and persisted to NVS.
+- `KBD_LAYOUT_FIRST_BOOT_DEFAULT` — initial PS/2 keyboard layout (0 = US English, 1 = Spanish Latam) used the first time the device boots. After that the layout is runtime-switchable (live, no reboot) from the supervisor Setup → Keyboard menu and persisted to NVS.
 
 ### 5. Compile & Upload
 
@@ -243,24 +243,38 @@ Version strings come from `FIRMWARE_VERSION` in `config.h`, which is also what t
 | Backspace | LEFT ARROW (BASIC line edit) |
 | Insert / Delete | CLEAR |
 
-PS/2 keyboard layout defaults to **US English** and can be switched live (no reboot) to **Spanish Latam** from the supervisor **Settings** menu; the choice is persisted in NVS.
+PS/2 keyboard layout defaults to **US English** and can be switched live (no reboot) to **Spanish Latam** from the supervisor **Setup → Keyboard → Keyboard Language** row; the choice is persisted in NVS.
 
 The shifted-symbol row is handled by FabGL's layout (it pre-resolves SHIFT+digit into `VK_HASH`, `VK_DOLLAR`, etc.); the HAL maps each symbol back to the corresponding CoCo SHIFT+N combination so `#`, `$`, `%`, `&`, `(`, `)`, `!`, `"`, `'`, `?`, `<`, `>`, `+` all produce the right CoCo character.
 
 ### Custom Key Mapping
 
-The supervisor **Settings → Key Mapper** screen lets you remap any physical PS/2 key to a CoCo key (including the CoCo 3-only ALT, CTRL, CLEAR, F1, and F2 keys, which are hidden when a CoCo 2 is active). A **Test Mappings** mode shows what each pressed key would type without sending it to the emulated CoCo, and **Clear All Mappings** restores the defaults. Mappings persist in NVS.
+The supervisor **Setup → Keyboard → Key Mapper** screen draws the keyboard of the running machine — the CoCo 2 or the CoCo 3 layout — and you move over it with the arrow keys:
+
+- **White** keys can be remapped, **cream** keys are fixed, **orange** keys already have a custom mapping. Two lines under the keyboard show what the selected key carries and its current binding.
+- **ENTER** remaps the selected key: press the physical key you want, then confirm. Keys with two remappable characters (`:` / `*`, `;` / `+`, ...) first ask which one. **DEL** clears a mapping.
+- **T** opens a test screen that shows what each pressed key would type without sending it to the emulated CoCo; **C** clears every mapping after a confirmation.
+
+The remappable keys are the symbol keys, the arrows and, on a CoCo 3, ALT, CTRL, CLEAR, F1 and F2. Mappings persist in NVS.
 
 ## On-Screen Display (OSD)
 
-Press **F3** to open the supervisor overlay. From here you can:
+![CoCo Supervisor main menu](pictures/cocosupervisor.jpg)
 
-- **Mount/Eject Disks** — browse the SD card and mount `.DSK`/`.VDK` images to drives 0–3
-- **Disk Manager** — view mounted drives and eject disks
-- **Machine** — switch between CoCo 2 / CoCo 3 (`esp_restart()` after confirm; persisted to NVS)
-- **Settings** — Debug Log, RS-232 Pak, **Keyboard** layout (US English / Spanish Latam, live switch), **Key Mapper** (custom key remapping), **Mouse Sensitivity** (joystick 1 / PS/2 mouse sensitivity adjustment, live preview), WiFi / Debug, and **DriveWire** (experimental FujiNet support — see below)
-- **Reset Machine** — warm or cold reset with confirmation
+Press **F3** to open the supervisor: a box in the CoCo's green, black and dark blue over the paused emulator picture. The main menu is a grid of six icon tiles — all four arrows move, **ENTER** opens a tile, **ESC** goes back one level and **F3** closes the menu from anywhere. Questions and confirmations appear as small white popups and always start on **No**.
+
+- **Disks** — Disk Manager. A button per drive (0–3) shows what is mounted; the SD card browser sits below. **TAB** switches between drives and files. ENTER on a `.DSK`/`.VDK` image asks which drive takes it (the first empty one is preselected) and confirms before replacing a disk or mounting the same image twice; ENTER on a mounted drive asks to unmount it. **F** flushes cached writes to the SD card.
+- **Setup**
+  - **Machine** — switch between CoCo 2 and CoCo 3 (restarts after a confirmation; persisted to NVS)
+  - **RS-232 Pak** — on/off
+  - **Keyboard** — *Keyboard Language* (US English / Spanish Latam, live switch) and the *Key Mapper*, which draws the running machine's keyboard (see [Custom Key Mapping](#custom-key-mapping))
+  - **Joy - Mouse Sensitivity** — joystick 1 / PS/2 mouse, with a live cursor pad
+  - **WiFi / Debug** — *Config WiFi* scans for networks and takes the password from the keyboard; *Read WiFi from SD Card* loads it from `cocowifi.cfg`; plus connect, disconnect, forget, and the debug server switch (see [docs/wifi-debug.md](docs/wifi-debug.md))
+  - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (experimental FujiNet support — see below)
+- **Reset** — reset the machine, with confirmation
+- **Debug** — CPU / GIME status, memory hex dump, RS-232 Pak status, Dump RAM to SD, and the **Echo Log** toggle (debug output on the serial port; it shares the port with the RS-232 Pak, so turning one on turns the other off)
 - **About** — version info and free memory
+- **Resume** — back to the emulator
 
 ## Architecture
 
@@ -324,13 +338,13 @@ src/
 │   └── osd_canvas.h/cpp      OSD drawing API backed by FabGL Canvas (supervisor OSD)
 ├── supervisor/             On-Screen Display system (HAL-agnostic via osd_canvas)
 │   ├── supervisor.h/cpp      OSD lifecycle and state machine
-│   ├── sv_menu.h/cpp         Menu definitions and actions
+│   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard and Debug lists; machine popup
 │   ├── sv_disk.h/cpp         WD1793 FDC emulation and PSRAM cache
-│   ├── sv_filebrowser.h/cpp  SD card file browser
-│   ├── sv_render.h/cpp       OSD rendering (green phosphor theme)
+│   ├── sv_filebrowser.h/cpp  Disk Manager — drive buttons, SD card browser, mount popups
+│   ├── sv_render.h/cpp       OSD rendering — green frame, list rows, popups
 │   ├── sv_debug.h/cpp        Debug overlay — CPU status, GIME state, memory dump
-│   ├── sv_joystick.h/cpp     Mouse sensitivity screen — live cursor + adjust
-│   └── sv_keymap.h/cpp       Key mapper UI — remap physical keys to CoCo characters
+│   ├── sv_joystick.h/cpp     Joy - Mouse Sensitivity popup — live cursor + adjust
+│   └── sv_keymap.h/cpp       Key mapper UI — CoCo 2 / CoCo 3 keyboard picture, remap physical keys
 ├── roms/
 │   └── rom_loader.h/cpp      ROM loading with CRC-32 validation
 ├── tests/
@@ -366,7 +380,6 @@ All technical documentation is in the `docs/` directory:
 - Joystick 2 (left port) is a stub — returns centered, button released; only Joystick 1 is active via PS/2 mouse
 - NTSC composite simulation covers RG6 (PMODE 4) artifact colour only — there is no
   chroma/luma bleed modelling for the other modes
-- Supervisor OSD was sized for 320×240; on the 640×200 VGA surface its layout sits in the upper-left region
 
 ## DriveWire / FujiNet Support (Experimental)
 
@@ -386,8 +399,10 @@ DriveWire server also boots FujiNet's CONFIG app.
   mounts, the `N:` network device and the clock.
 - Reconnects on its own after a CoCo reset or a link drop.
 
-**Turning it on:** F3 → Settings → DriveWire → Mode: External, set Host/Port
-(default 65504), Save & Restart. Requires the HDB-DOS ROMs above on the SD card.
+**Turning it on:** F3 → Setup → DriveWire → **External Server**. A popup asks for
+the Host, Port (default 65504) and HDB-DOS ROM variant, and refuses to turn on
+while the ROM file is missing from `/roms`, naming the file to copy. Then
+Save & Restart. The screen warns when no WiFi network has been set up yet.
 
 **Known issue — FujiNet-PC's default read timeout.** FujiNet-PC's Becker-over-IP
 transport waits only 500 ms per byte by default. Since TCP never loses a byte
@@ -409,6 +424,52 @@ mode, with diagrams.
 - Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
 
 ## Changelog
+
+### v0.14.0 — October 6, 2026
+
+**Supervisor redesign.** Every OSD screen now shares one look, taken from the
+CoCo boot screen: a green box, black text and a dark blue accent.
+
+- **Main menu** is a 3x2 grid of icon tiles: Disks, Setup, Reset, Debug, About,
+  Resume. Icons are drawn in code.
+- **Disk Manager** has a button per drive, a denser file list (8 rows, names up
+  to 63 characters) and popups for mounting, replacing and unmounting, all
+  defaulting to No.
+- **Setup** is an icon list. Machine moved here from the main menu and is now a
+  popup; Keyboard Language and Key Mapper moved into a new **Keyboard**
+  submenu; Mouse Sensitivity is now the **Joy - Mouse Sensitivity** popup.
+- **Key Mapper** draws the CoCo 2 or CoCo 3 keyboard and is navigated with the
+  arrow keys, replacing the scrolling list.
+- **Debug** is an icon list; "Debug Log" moved here from Setup as **Echo Log**.
+  The status, hex dump, RS-232 and Dump RAM screens use the new frame.
+- **WiFi / Debug** shows a status panel above its five actions, which now fit
+  without scrolling.
+- **DriveWire** replaces "Mode" with an **External Server** on/off row. Turning
+  it on asks for Host, Port and ROM in a popup and checks the HDB-DOS ROM is on
+  the SD card. Host, Port and ROM rows show only while it is on, and a warning
+  appears when WiFi is not configured.
+- Screens repaint only the rows, tiles or keys that changed, so moving the
+  selection no longer flickers.
+- The TAB key now reaches the supervisor.
+
+**WiFi set up from the keyboard or the SD card.** The `CoCo3-Setup` access
+point and its web page are gone; the board no longer opens a network of its
+own.
+
+- **Config WiFi** (Setup → WiFi / Debug) scans, lists the networks with their
+  signal strength, and takes the password from the PS/2 keyboard.
+- **Read WiFi from SD Card** loads the network from `cocowifi.cfg` in the root
+  of the SD card:
+
+  ```ini
+  [WiFi]
+  enabled=1
+  SSID=MyNetwork
+  passphrase=secret
+  ```
+
+  `enabled=0` saves the network but leaves WiFi off. The file is read only when
+  you choose the row, and the password in it is plain text.
 
 ### v0.12.2 — October 1, 2026
 
@@ -434,151 +495,7 @@ taking almost the whole 1/60 s. They now take about half of it.
   out for every byte.
 - Tested with a disk game and OS-9 at a steady 60 FPS.
 
-### v0.12.1 — October 1, 2026
-
-- **Fixed: black rectangle left on screen after closing the supervisor menu in
-  CoCo 3 mode** (introduced in v0.12.0). The menu's clear-on-close could land
-  after the screen had been redrawn, and unchanged lines were then never
-  repainted.
-
-### v0.12.0 — October 1, 2026
-
-**CoCo 3 runs at full speed: 60 FPS in text and graphics modes.**
-
-| CoCo 3 mode | v0.11.0 | v0.12.0 |
-|---|---|---|
-| BASIC prompt (32-column) | ~39 FPS | **60** |
-| `WIDTH 40` | ~34 | **60** |
-| `WIDTH 80` | ~24 | **~58** |
-| `HSCREEN 2` (320×192, 16 colours) | ~20 | **60** |
-| `HSCREEN 3` (640×192, 2 colours) | ~25 | **60** |
-| `PMODE 4` | ~33 | **60** |
-
-Measured on a TTGO VGA32 v1.4 with the built-in FPS counter. A program that
-redraws the whole screen every frame can still dip below 60.
-
-- **Faster GIME video.** Each video mode now has its own tight scanline
-  renderer, instead of one routine that re-checked the mode for every four
-  pixels. Decoding a 320×192 16-colour frame went from 32 ms to 5 ms.
-- **Direct VGA output.** The renderer produces the final VGA bytes and the
-  display code copies them 32 bits at a time, replacing a per-pixel lookup in a
-  64 KB table (9.5 ms → 1.5 ms per frame).
-- **Unchanged lines are skipped.** A scanline whose video memory and video
-  settings are the same as in the previous frame is not redrawn.
-- **Real-time frame pacing.** The emulator never runs faster than 60 frames per
-  second, so cursor blink, `SOUND`/`PLAY` tempo and game speed match a real CoCo.
-  The F5 FPS overlay therefore tops out at 60. Build with
-  `FRAME_LIMIT_ENABLED 0` in `config.h` to remove the cap.
-- **Debug API:** `GET /api/screenshot.png?fb=1` returns the picture actually on
-  the VGA output (after scaling and borders).
-- **Developer tools:** `tools/gime_render_test/` checks the new renderers
-  against the original one on the host; `tools/perf/` holds the benchmark
-  programs and measurement scripts.
-
-Also in this release:
-
-- **DriveWire is External-only.** The Internal DriveWire server (v0.11.0) and the
-  planned embedded FujiNet were dropped: External mode against pyDriveWire, DW4
-  or FujiNet-PC covers the same use. A board saved in Internal DW mode boots with
-  the bus Off, so its mounted disks are served by the floppy controller again.
-- **More free internal RAM:** mounted disk images no longer hold an open file
-  (~5 KB → ~0.6 KB each), smaller debug-server and emulator task stacks, and a
-  Debug Server On/Off setting (WiFi / Debug screen) that, when Off, never starts
-  the server (+~7.8 KB).
-- **Screenshots no longer drop WiFi** when memory is low (sent in 4 KB chunks).
-- **Forget Credentials asks for confirmation.**
-- **Debug API:** `/api/status` adds `fps`, `int8_*` (usable internal RAM),
-  `srv_stack_free`, `loop_stack_free`, `osd_state`; new `POST /api/key` injects
-  OSD keys.
-
-### v0.11.0 — September 24, 2026
-
-**Internal DriveWire mode — HDB-DOS with no PC and no WiFi.** See
-[DriveWire / FujiNet Support](#drivewire--fujinet-support-experimental) above.
-
-- **`src/net/dw_server.*`** — a disk-only DriveWire 3/4 server built into the
-  firmware (core 0). It serves the Disk Manager's drives 0–3 (the same `.DSK`
-  images the floppy controller uses) as DriveWire drives 0–3; HDB-DOS
-  `DRIVE 1`–`3` map to Disk Manager drives 1–3. `TIME` uses SNTP when WiFi is
-  up. Survives CoCo resets mid-transaction.
-- **Background flush** — DriveWire writes reach the SD card ~2 s after the
-  last write. Flushes now write only the sectors that changed (floppy path
-  too), instead of the whole image.
-- **Debug API** — new `/api/disk` (list / mount / eject / flush), server
-  counters in `/api/bus`, internal-RAM figures in `/api/status`.
-
-### v0.10.0 — September 23, 2026
-
-**Experimental DriveWire / FujiNet support (External mode).** See
-[DriveWire / FujiNet Support](#drivewire--fujinet-support-experimental) above.
-
-- **`src/core/becker.*`** — an emulated Becker port (`$FF41`/`$FF42`) with
-  lock-free ring buffers between the CPU core and a core-0 network task;
-  flushes and reconnects cleanly across CoCo resets and link drops.
-- **`src/net/dw_client.*` / `dw_bus.*`** — a TCP DriveWire client to an
-  external server (pyDriveWire, DW4, FujiNet-PC), with settings (mode, host,
-  port, HDB-DOS ROM variant) in NVS and a new `/api/bus` debug endpoint.
-- **HDB-DOS ROM selection** — `hdbdw3bck.rom`/`hdbdw3bc3.rom` load in place of
-  `disk11.rom` while the bus is enabled, with automatic fallback (and an OSD
-  warning) if they're missing.
-- **New Settings → DriveWire OSD screen** to configure and monitor the link.
-- **`tools/dw_test_server.py`**, **`tools/dw_proxy.py`** — a minimal Python 3
-  DriveWire test server and a logging TCP proxy, for testing without a full
-  FujiNet-PC install.
-- Closes the DriveWire socket cleanly before any supervisor-triggered restart,
-  so an external server isn't left holding a dead connection.
-
-### v0.9.0 — September 21, 2026
-
-**ESP32_Bootloader support.** The emulator can now be launched from
-[ESP32_Bootloader](https://github.com/ESP-WORKS/ESP32_Bootloader)'s SD-card menu,
-so one TTGO VGA32 can hold several emulators and switch between them without a
-USB cable. See [Running under ESP32_Bootloader](#running-under-esp32_bootloader-sd-card-menu).
-
-- **New `BUILD_TARGET` switch in `config.h`**, defaulting to standalone. The
-  bootloader image is selected with `-DBUILD_TARGET=1` on the command line, so
-  both flavours build from identical sources and the USB build is untouched.
-
-- **`otadata` is blanked at the top of `setup()`** in bootloader builds, before
-  Serial, video or the SD probe. Without it the ESP32 would boot this app on
-  every power-up and the menu would become unreachable; with it, the ROM falls
-  back to the `factory` partition and the menu returns. The call compiles out
-  entirely in standalone builds.
-
-- **No partition-scheme change.** An ESP32 app image carries no partition table
-  and both `0x10000` and `ota_0`'s `0x130000` are 64 KB-aligned, so the same app
-  runs at either offset. `huge_app` stays the standalone scheme.
-
-- **`tools/build_firmware.sh` now builds both images** and validates them:
-  `0xE9` bare-image magic, the 2816 KB `ota_0` size limit, and a disassembly
-  check that the `otadata` erase is present in the bootloader build and absent
-  from the standalone one — the one failure that is otherwise silent.
-
-### v0.81 — September 2, 2026
-
-**CoCo 2 VDG colour accuracy.** Two bugs in the MC6847 path cancelled each other
-out, so artifact-colour games looked correct while true 4-colour games did not.
-
-- **PMODE 4 (RG6) is no longer rendered as PMODE 3 (CG6).** The VDG's GM0–GM2
-  mode bits were being taken from the SAM's V0–V2. On real hardware they come
-  from PIA1 PB4–PB6; the SAM's V bits only describe fetch geometry, which CG6
-  and RG6 share (both `V=110`, 6144 bytes, 32 per row), so the SAM cannot tell
-  the two apart. Every PMODE 4 screen was being decoded as 2bpp colour.
-
-- **CG6 with CSS=1 now uses the MC6847's real palette** — buff, cyan, magenta,
-  orange — in place of the NTSC artifact quad. Fixes titles such as *Pooyan*,
-  which rendered as black/blue/orange/white.
-
-- **NTSC artifact colour is now emulated where it actually occurs:** the 1bpp
-  RG6 path, where the pixel clock runs at the colour-subcarrier rate and a
-  composite TV decodes adjacent pixel *pairs* as black / blue / orange / white.
-  Always on, matching XRoar's default for NTSC machines — games such as
-  *Zaxxon* are drawn for it and are near-unreadable without it. The
-  lower-resolution RG modes clock at half that rate and stay monochrome.
-
-Verified against XRoar on hardware: the *Pooyan* title screen now matches the
-reference pixel-for-pixel (0 of 49152 pixel codes differ), and injected RG6 and
-CG6 test patterns produce the correct palette in each mode.
+Older releases (v0.12.1 and earlier) are in [ChangeHistory.md](ChangeHistory.md).
 
 ## ⚠️ Vibe Coding Alert
 

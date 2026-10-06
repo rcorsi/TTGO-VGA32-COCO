@@ -57,6 +57,9 @@ struct SV_DebugState {
     uint8_t        dump_result_lines;
 };
 
+// Force the next render to repaint the frame of the current debug screen
+// (otherwise only the text is rewritten).
+void sv_debug_invalidate(void);
 void sv_debug_init(Supervisor_t* sv);
 void sv_debug_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_debug_render(Supervisor_t* sv);

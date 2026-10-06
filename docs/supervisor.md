@@ -10,7 +10,7 @@ The OSD is rendered into the FabGL VGA framebuffer through the **OSD canvas** (`
 
 **Activation:** F3 toggles the overlay on/off. While active, `supervisor_update_and_render()` returns `true`, telling the main loop to skip emulation. (F1/F2 are reserved for the CoCo 3 keyboard matrix — see `keyboard-hal.md`.)
 
-**Machine selection:** The main menu's "Machine:" row reflects the runtime-active machine (`g_machine_type`, not the compile-time `MACHINE_NAME`). ENTER opens the `SV_MACHINE_SELECT` submenu (CoCo 2 / CoCo 3, `(current)` marker on the active one). Picking the other machine opens a confirm dialog; accepting calls `supervisor_set_machine_type()` which saves supervisor state, persists the choice in NVS (`"sv"` namespace, `"machine_type"` key), and calls `esp_restart()`. On boot, `supervisor_load_machine_type()` returns the NVS value or the compile-time `MACHINE_TYPE`. See `runtime-machine-switch.md` for the complete flow.
+**Machine selection:** The Settings menu's "Machine" row reflects the runtime-active machine (`g_machine_type`, not the compile-time `MACHINE_NAME`). ENTER opens the `SV_MACHINE_SELECT` popup over the Settings list (CoCo 2 / CoCo 3, `(current)` marker on the active one); ESC returns to Settings. Picking the other machine asks to confirm the restart in the same popup (No / Yes, defaults to No); accepting calls `supervisor_set_machine_type()` which saves supervisor state, persists the choice in NVS (`"sv"` namespace, `"machine_type"` key), and calls `esp_restart()`. On boot, `supervisor_load_machine_type()` returns the NVS value or the compile-time `MACHINE_TYPE`. See `runtime-machine-switch.md` for the complete flow.
 
 ---
 
@@ -53,16 +53,17 @@ States are defined in `supervisor.h` as `SV_State` enum:
 | `SV_INACTIVE` | OSD hidden, emulation running |
 | `SV_MAIN_MENU` | Top-level menu with 6 items |
 | `SV_FILE_BROWSER` | **Disk Manager**: 2-row drive strip (all 4 drives) + file browser below. Left/Right selects active drive; Enter mounts; U ejects; F flushes. Also used as the stand-alone file browser. |
-| `SV_MACHINE_SELECT` | Machine type submenu (CoCo 2 / CoCo 3 with `(current)` marker) |
-| `SV_SETTINGS` | Settings submenu: Debug Log / RS-232 Pak toggles (mutually exclusive; share UART0), Keyboard layout (US English / Spanish Latam), Key Mapper, Mouse Sensitivity |
-| `SV_JOY_SENSE` | Mouse Sensitivity: live cursor pad tracking the PS/2 mouse, sensitivity bar (1-10), Invert-Y toggle |
+| `SV_MACHINE_SELECT` | Machine select: popup over the Settings list (CoCo 2 / CoCo 3, `(current)` on the active one); picking the other asks to confirm the restart in the same window, defaulting to No |
+| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, RS-232 Pak toggle (shares UART0 with the Debug submenu's Echo Log; turning one on turns the other off), Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire |
+| `SV_KEYBOARD_MENU` | Settings -> Keyboard submenu: Keyboard Language (US English / Spanish Latam, cycles on ENTER) and Key Mapper |
+| `SV_JOY_SENSE` | Joy - Mouse Sensitivity: popup over the Settings list in the theme colours, with a live cursor pad tracking the PS/2 mouse, sensitivity bar (1-10), Invert-Y toggle |
 | `SV_ABOUT` | Info screen (version, free heap) |
-| `SV_DEBUG_MENU` | Debug submenu picker: CPU/GIME Status, Memory Hex Dump, RS-232 Pak, Dump RAM to SD |
+| `SV_DEBUG_MENU` | Debug submenu, an icon list in the wide green frame: CPU/GIME Status, Memory Hex Dump, RS-232 Pak, Dump RAM to SD, and the Echo Log toggle (debug output on the serial port, formerly "Debug Log" in Settings) |
 | `SV_DEBUG_DUMP` | Active debug screen (dispatched from `SV_DEBUG_MENU`) |
 | `SV_DEBUG_DUMP_NAME` | "Dump RAM to SD": filename entry → blocking save → result screen |
-| `SV_CONFIRM_DIALOG` | Yes/No dialog (used by Reset Machine, machine type change, Key Mapper clear-all) |
-| `SV_KEYMAP_LIST` | Key Mapper: scrollable list — Test Mappings, Clear All Mappings, then one row per remappable CoCo key with its current binding |
-| `SV_KEYMAP_CAPTURE` | Key Mapper: waits for the next raw keypress to bind (DEL clears the binding, ESC cancels) |
+| `SV_CONFIRM_DIALOG` | Yes/No dialog (used by Reset Machine) |
+| `SV_KEYMAP_LIST` | Key Mapper: a picture of the running machine's keyboard (CoCo 2 or CoCo 3 layout). Arrows move over it, ENTER remaps the selected key (a popup asks which character on two-character keys), T opens the test screen, C clears all mappings after a confirmation. Key style and the CoCo 2 geometry follow the CoCo2Keyboard on-screen keyboard from the CoCo2-CYD project (silver case, shadowed caps, red BREAK, triangle arrow glyphs, shifted character above the main one). The CoCo 3 layout was measured from a photo of the real keyboard (staggered rows, BREAK top right, arrow diamond down the right edge, F1/F2 beside the space bar). White keys are remappable, orange ones have a custom binding, cream ones are fixed; a legend is black when that character can be remapped and grey when it cannot |
+| `SV_KEYMAP_CAPTURE` | Key Mapper: popup over the keyboard that waits for the next raw keypress, then asks to confirm the binding (DEL clears the binding, ESC cancels) |
 | `SV_KEYMAP_TEST` | Key Mapper: shows what each pressed key would type, without injecting into the CoCo |
 
 **Transitions** are driven by `sv.state` assignment. `sv.prev_state` tracks where to return on ESC/cancel.
@@ -119,46 +120,49 @@ The OSD uses a **dirty-flag** redraw approach:
 
 ### sv_menu.cpp — Main Menu
 
-**Menu items** (static array `menu_items[]`):
+**Tiles** (static array `tiles[]`, 3x2 grid, each with a 64x28 icon drawn in code):
 
 | Index | Label | Action |
 |---|---|---|
-| 0 | Disk Manager | Opens unified Disk Manager (drive strip + file browser) |
-| 1 | Machine: CoCo 3 | Opens machine-select submenu (CoCo 2 / CoCo 3) |
-| 2 | Settings | Opens settings submenu (Debug Log / RS-232 Pak toggles) |
-| 3 | Reset Machine | Confirm dialog → `sv_disk_flush_all()` → `machine_reset()` |
-| 4 | Debug | Opens debug submenu picker (CPU/GIME Status, Hex Dump, RS-232 Pak, Dump RAM to SD) |
-| 5 | About | Info screen (version, free heap) |
+| 0 | Disks | Opens unified Disk Manager (drive strip + file browser) |
+| 1 | Setup | Opens settings submenu (first row "Machine" opens machine-select) |
+| 2 | Reset | Confirm dialog → `sv_disk_flush_all()` → `machine_reset()` |
+| 3 | Debug | Opens debug submenu (CPU/GIME Status, Hex Dump, RS-232 Pak, Dump RAM to SD, Echo Log toggle) |
+| 4 | About | Info screen in the wide green frame, untitled: logo in the title row, credits, version, free heap |
+| 5 | Resume | Closes the supervisor |
 
-**Key handling:** Up/Down move cursor, Enter executes action, ESC/F1 close.
+**Key handling:** all four arrows move through the grid, Enter executes the action, ESC/F1/F3 close.
+
+**Look and layout:** CoCo green box with black text and a dark blue accent, 560 px wide (wider than the 256 px submenu frame: 640x200 pixels are ~2.4x taller than wide, so tiles and icons are stretched horizontally to look square). Icons are built from `fillRect`, `fillEllipse` and `drawLine` on a 32x28 unit grid with 2-pixel-wide units.
+
+**Redraw:** `sv_menu_render()` repaints only the two tiles whose selection changed. `supervisor_update_and_render()` calls `sv_menu_invalidate()` when the main menu is entered from any other state (full repaint) and `sv_menu_clear_box()` before a submenu draws, so no green is left beside the narrower frame. The confirm dialog is left floating over the main menu.
 
 `execute_action()` is the dispatcher — modifies `sv.state` to transition screens. Reset uses the confirm dialog pattern with a lambda callback that flushes all dirty disk caches before resetting.
 
 ### sv_filebrowser.cpp — Disk Manager / File Browser
 
-This module serves double duty as the **unified Disk Manager** (the `SV_FILE_BROWSER` state). The screen has two areas:
+This module is the **unified Disk Manager** (the `SV_FILE_BROWSER` state), drawn in the wide green frame shared with the main menu. The screen has two areas and a focus that moves between them.
 
-**Drive strip (top 2 rows):** shows all 4 drives in a 2×2 grid.
-- Row 0: D0 (left half) / D2 (right half)
-- Row 1: D1 (left half) / D3 (right half)
-- Active drive is highlighted; mounted drives shown in cyan, empty in dim; a separator line runs below the strip.
-- Left/Right arrows cycle the active drive without closing the screen.
-- After a successful mount, the OSD **stays open** so the user can mount additional drives.
+**Drive buttons (top row):** one white button per drive (`DRIVE 0`..`DRIVE 3`) with a diskette icon (red when mounted, grey when empty) and the mounted file name on two 14-character lines without its extension. The focused button is filled with the accent colour.
 
-**File list (below the strip):** standard FAT32 directory browser.
-- **scan:** `sv_fb_scan_directory()` reads directory entries into `SV_FileEntry[]` (max 128)
-- **sort:** `..` always first, then directories (alphabetical), then supported files (.dsk/.vdk), then others
-- **navigate:** Enter on dir = descend, Backspace = parent, PgUp/PgDn/Home/End for fast scrolling
-- **mount:** Enter on a supported file = mount to `target_drive`, save state, stay on Disk Manager
-- **eject:** U key = eject active drive (flushes dirty cache first), save state
-- **flush:** F key = flush active drive's dirty cache to SD card immediately
-- **SPI bus note:** the SD card is on a dedicated HSPI bus separate from the VGA output path; there is no SPI bus contention.
+**File list (below):** FAT32 directory browser, 8 dense rows (`SV_FB_VISIBLE_ITEMS`, 8x8 font). Name on the left, `<DIR>` or the size right-aligned; the selected row is a full-width accent bar. A thin scrollbar appears only when the list is longer than the page.
+- **scan:** `sv_fb_scan_directory()` reads directory entries into `SV_FileEntry[]` (max 128, allocated once in PSRAM)
+- **sort:** `..` always first, then directories (alphabetical), then supported files (.dsk/.vdk), then others (dimmed, not mountable)
+
+**Keys:**
+- Tab switches between buttons and list; Up from the first file goes to the buttons, Down from the buttons returns to the list; Left/Right move between buttons.
+- List: Enter on a folder descends, Backspace = parent, PgUp/PgDn/Home/End.
+- Enter on a supported file opens the "Mount disk on" popup: each drive with its current contents plus Cancel, first empty drive preselected. Choosing an occupied drive asks "Replace disk?"; choosing an empty one while the image is already mounted elsewhere asks "Mount again?".
+- Enter on a mounted drive button asks "Unmount disk" (eject flushes the dirty cache first).
+- Every confirmation is No / Yes and defaults to No. After a mount the screen stays open.
+- F flushes the dirty cache to SD: the focused drive when on the buttons, all drives when in the list.
+- ESC returns to the main menu; F1/F3 close the supervisor.
+
+**Popups** are a sub-state of this screen (`pop` in `sv_filebrowser.cpp`), not an `SV_State`: white window, double accent border, accent title bar, up to two message lines, option rows. Closing one repaints the whole screen.
+
+**Redraw:** only the two affected rows or buttons repaint on a keypress; the list repaints when it scrolls or the folder changes. `sv_filebrowser_invalidate()` forces a full repaint (called by the supervisor when the screen is entered).
 
 **Supported formats:** `.dsk` (JVC) and `.vdk` = fully supported. `.dmk` = recognized but not mountable.
-
-Visible file window is 9 items (`SV_FB_VISIBLE_ITEMS`). Scrollbar rendered when list exceeds window.
-
-`sv_render_drive_strip(cells, mounted, active)` in `sv_render.cpp` draws the 2-row strip using the standard OSD color palette.
 
 ### sv_disk.cpp — FDC Emulation
 
@@ -218,6 +222,8 @@ Full WD1793 command-level emulation mapped at `$FF40-$FF5F`:
 
 ### sv_debug.cpp — Debug Memory Dump
 
+All debug screens (the three pages and the Dump RAM to SD screens) draw in the wide green frame: headings in the accent colour, data in black, 8x8 font. The frame is painted once per screen (`dbg_frame()`); later redraws only rewrite the text, padded so shorter values erase longer ones, which keeps hex-dump scrolling and filename typing flicker-free. `sv_debug_invalidate()` forces the frame to repaint and is called by the supervisor when a debug screen is entered.
+
 Dumps emulated CoCo memory to the serial port in **Motorola S-Record** or **Intel HEX** format. Reads memory via `machine_read()`, so the output reflects the live SAM/ROM mapping (exactly what the 6809 CPU sees).
 
 **UI fields** (navigate with Up/Down):
@@ -269,7 +275,7 @@ S9033C00xx
 
 #### Dump RAM to SD (`SV_DEBUG_DUMP_NAME`)
 
-The last row of the Debug submenu ("Dump RAM to SD") is an action, not a page: ENTER on it calls `sv_debug_begin_dump()` and enters the `SV_DEBUG_DUMP_NAME` state instead of opening a debug page. The screen has three sub-phases tracked by `SV_DumpPhase` in `SV_DebugState`:
+The "Dump RAM to SD" row of the Debug submenu is an action, not a page: ENTER on it calls `sv_debug_begin_dump()` and enters the `SV_DEBUG_DUMP_NAME` state instead of opening a debug page. The screen has three sub-phases tracked by `SV_DumpPhase` in `SV_DebugState`:
 
 - **`SV_DUMP_INPUT`** — filename entry. Type an up-to-8-char base name (defaults to `COCODUMP`); the supervisor HID route only delivers uppercase letters, digits, BACKSPACE, ENTER and ESC, which keeps names FAT-friendly. ENTER (non-empty) starts the save; ESC returns to the Debug submenu.
 - **`SV_DUMP_SAVING`** — the render draws a "Saving…" banner first (FabGL scans the framebuffer out continuously, so it is on screen immediately), then performs the **blocking** write, then flips to the result phase. Emulation is already paused while the supervisor is open.
@@ -294,9 +300,9 @@ Reached from **Settings → Key Mapper**. Lets the user bind any physical key to
 
 Capture/test receive **raw VirtualKeys**: `process_vk()` (hal_keyboard.cpp) calls `sv_keymap_on_raw_vk()` while `sv_keymap_wants_raw_vk()` is true, bypassing the lossy VK→HID-usage translation used by the other menus. At runtime the custom table is checked **before** `VK_MAP`, so a binding replaces the key's default meaning. Bindings persist immediately via `supervisor_save_keymap()` and load at boot from `setup()`.
 
-### sv_joystick.cpp — Mouse Sensitivity
+### sv_joystick.cpp — Joy - Mouse Sensitivity
 
-Reached from **Settings -> Mouse Sensitivity** (`SV_JOY_SENSE`). Lets the user tune the PS/2-mouse-as-joystick behavior described in `joystick-hal.md`.
+Reached from **Settings -> Joy - Mouse Sensitivity** (`SV_JOY_SENSE`). Lets the user tune the PS/2-mouse-as-joystick behavior described in `joystick-hal.md`.
 
 - **Live cursor pad:** a bordered box shows a cursor that tracks the live mouse position via `hal_joystick_get_pos()`.
   - **Flicker-free redraw (no double-buffer):** the OSD draws straight to the VGA framebuffer, so repainting the whole frame every tick flickers. Instead, the static frame/box/bar/labels are painted **once** by `sv_render_joystick_pad()` (in `sv_render.cpp`) when `s_full_redraw` is set — on open, and on any level/Invert-Y change. Between frames the cursor moves **incrementally** via `sv_render_joystick_cursor()`, which erases only the old cursor square and draws the new one (the box border is never touched).

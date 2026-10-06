@@ -45,17 +45,49 @@ is core-independent).
 ## WiFi flow
 
 `src/net/wifi_mgr.{h,cpp}` — state machine
-`OFF → AP_CONFIG → CONNECTING → STA_RUNNING / FAILED`.
+`OFF → CONNECTING → STA_RUNNING / FAILED`. The board only ever joins a network
+as a station; it never opens an access point of its own (the `CoCo3-Setup`
+config portal was removed).
 
-1. From the supervisor (**Settings → WiFi / Debug**) the user picks **Start
-   Config Portal**. The device brings up an open SoftAP `CoCo3-Setup`.
-2. The user joins that AP from a phone/PC and opens `http://192.168.4.1/`. The
-   served page scans networks, lets them pick an SSID and type the password
-   **in the browser** (no on-screen password entry).
-3. `POST /save` stores SSID+password to NVS (namespace `"sv"`: `wifi_ssid`,
-   `wifi_pass`, `wifi_auto`), switches to STA, and connects.
-4. The supervisor WiFi screen then shows **STA connected + the LAN IP** — the
-   debug-server address.
+There are two ways to give it a network, both under **F3 → Setup → WiFi /
+Debug**:
+
+**Config WiFi** — on screen, with the PS/2 keyboard.
+
+1. The row opens the *Config WiFi* window and scans (a few seconds). The list
+   shows each network once, strongest first, with signal bars and
+   `secured` / `open`. **R** scans again.
+2. ENTER on a secured network asks for the password in a popup. It is shown as
+   typed, with upper/lower case and symbols (these keys bypass the supervisor's
+   HID route — see `sv_wifi_on_text_key()`). A password must be 8–63
+   characters. An open network connects straight away.
+3. **Other network...** at the end of the list asks for the name first, for
+   hidden networks; an empty password there means an open network.
+4. ENTER stores SSID + password to NVS (namespace `"sv"`: `wifi_ssid`,
+   `wifi_pass`, `wifi_auto`) and connects.
+
+**Read WiFi from SD Card** — loads `cocowifi.cfg` from the root of the SD card:
+
+```ini
+[WiFi]
+enabled=1
+SSID=MyNetwork
+passphrase=secret
+```
+
+- `SSID` and `passphrase` are saved to NVS exactly as with Config WiFi. Keys
+  and the section name are case-insensitive; lines starting with `#` or `;`
+  are comments. `passphrase` may be empty for an open network.
+- `enabled=1` (the default when the line is missing) connects at once and turns
+  auto-connect on. `enabled=0` saves the network but disconnects and leaves
+  auto-connect off.
+- The file is read **only** when the row is chosen, never at boot. A popup
+  reports the result (file not found, no SSID, invalid lengths, or loaded).
+- The password sits on the card in plain text; remove the file afterwards if
+  the card leaves your hands.
+
+Either way, the WiFi screen then shows **Connected + the LAN IP** — the
+debug-server address.
 
 On boot, if `wifi_auto` is set, `setup()` kicks off a non-blocking STA connect
 with the saved credentials, so the API is reachable automatically (also required
@@ -64,8 +96,7 @@ for the machine-switch reboot to re-expose the API).
 **Debug Server On/Off** (last row of the WiFi / Debug screen) is saved in NVS
 (`"sv"` / `dbg_srv`, default On). Off stops serving the debug API immediately; from
 the next boot the server task is never created, which keeps ~7.8 KB of
-byte-addressable internal RAM free (measured 2026-09-27 with a disk mounted). Switching it back On starts the task at once, no reboot. The setup portal
-is served regardless: **Start Config Portal** creates the task if needed.
+byte-addressable internal RAM free (measured 2026-09-27 with a disk mounted). Switching it back On starts the task at once, no reboot.
 `wifi_mgr_tick()` runs from `loop()`, so WiFi connects with the server off.
 
 ## Device HTTP/JSON API (STA mode)
@@ -123,20 +154,6 @@ curl       http://$IP/api/nvram
   GIME area at its native width (320 or 640) × active lines.
 - **No authentication / TLS** — intended for a trusted LAN.
 
-## Config-portal routes (AP mode)
-
-These routes answer **only while the setup SoftAP is up** (`AP_CONFIG`); on a
-joined network they return 404, so nobody on the LAN can scan or change the
-WiFi credentials. To reconfigure, use the supervisor's **WiFi / Debug** screen:
-**Stop / Disconnect**, **Forget Credentials**, then **Start Config Portal**.
-
-| Method / Path | Description |
-|---|---|
-| `GET /` | HTML page: Scan button, SSID dropdown, password field |
-| `GET /scan` | JSON list of nearby SSIDs (rssi, secure) |
-| `POST /save` | `ssid=`, `pass=` — store + connect (STA) |
-| `GET /status` | `{state, ip}` — connection result for the page to poll |
-
 ## Screenshot capture
 
 `hal_video.cpp` gains a capture hook at the top of
@@ -150,8 +167,8 @@ table-free CRC32 + Adler32, allocated in PSRAM.
 
 | File | Responsibility |
 |---|---|
-| `wifi_mgr.{cpp,h}` | WiFi state machine, SoftAP, scan, STA connect, NVS creds |
-| `debug_server.{cpp,h}` | core-0 WebServer task; config-portal + debug-API routes; JSON ↔ params |
+| `wifi_mgr.{cpp,h}` | WiFi state machine, scan, STA connect, NVS creds |
+| `debug_server.{cpp,h}` | core-0 WebServer task; debug-API routes; JSON ↔ params |
 | `debug_rpc.{cpp,h}` | `DebugCmd`, single-slot queue, `debug_rpc_poll()` on core 1, pause flag |
 | `png_writer.{cpp,h}` | RGB565 → PNG (stored deflate) |
 

@@ -10,9 +10,9 @@
  *  Module : WiFi debug server (core-0 WebServer task)
  * ============================================================
  *
- * A single Arduino WebServer running in a core-0 task. It serves both the
- * AP-mode config portal and the STA-mode HTTP/JSON debug API. Emulator state
- * is reached only through debug_rpc (cross-core), never touched directly.
+ * A single Arduino WebServer running in a core-0 task, serving the HTTP/JSON
+ * debug API once the board has joined a network. Emulator state is reached
+ * only through debug_rpc (cross-core), never touched directly.
  */
 
 #ifndef NET_DEBUG_SERVER_H
@@ -27,12 +27,9 @@
 // registered immediately; the WebServer starts once WiFi has an IP. Call once.
 void debug_server_begin(void);
 
-// Create the task regardless of the setting (the setup portal needs it).
-void debug_server_ensure_task(void);
-
 // The "Debug Server On/Off" toggle. Persisted in NVS. On starts the task if
 // needed; Off stops serving the debug API at once and skips the task (and its
-// internal RAM) from the next boot. The setup portal is served either way.
+// internal RAM) from the next boot.
 void debug_server_set_enabled(bool on);
 bool debug_server_enabled(void);
 
