@@ -18,11 +18,11 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 
 ### Built for Real Use
 
-- **Multi-language keyboards** — PS/2 input with US English and Spanish Latam layouts, switchable live from Settings with no reboot.
-- **Remap anything** — the supervisor Key Mapper lets you bind any physical key to any CoCo key, including the CoCo 3-only ALT, CTRL, CLEAR, F1 and F2.
+- **Multi-language keyboards** — PS/2 input with US English and Spanish Latam layouts, switchable live from Setup → Keyboard with no reboot.
+- **Remap on a picture of the keyboard** — the supervisor Key Mapper draws the running machine's keyboard (CoCo 2 or CoCo 3); move over it with the arrow keys and bind a physical key to the CoCo symbol keys, the arrows and the CoCo 3-only ALT, CTRL, CLEAR, F1 and F2.
 - **Joystick via PS/2 mouse** — with live, on-screen sensitivity tuning persisted in NVS.
 - **Real audio out** — ESP32 internal 8-bit DAC on GPIO25, straight to a 3.5 mm jack.
-- **Supervisor OSD** — mount disks, reset the machine, change settings, and check status without ever leaving your seat.
+- **Supervisor OSD** — an icon menu in the CoCo's own green, black and dark blue: mount disks, reset the machine, change settings, and check status without ever leaving your seat.
 - **Online debugging via WiFi + MCP (experimental)** — a WiFi debug server exposes a small HTTP/JSON API to inspect and control the running 6809 (registers, memory, pause/resume, code injection, reset, machine switch, screenshot). A host-side **MCP bridge** lets Claude / LLM agents drive it live. Set up from the supervisor's **WiFi / Debug** screen; see [docs/wifi-debug.md](docs/wifi-debug.md) and [`mcp-bridge/`](mcp-bridge/).
 - **Experimental RS-232 Pak support** — for the serial tinkerers.
 
@@ -190,7 +190,7 @@ arduino-cli lib install FabGL
 Edit `config.h` if you want to change:
 
 - `MACHINE_TYPE` — default compile-time machine (4 = CoCo 3, 3 = CoCo 2). The active machine is also runtime-switchable from the supervisor menu, persisted to NVS.
-- `KBD_LAYOUT_FIRST_BOOT_DEFAULT` — initial PS/2 keyboard layout (0 = US English, 1 = Spanish Latam) used the first time the device boots. After that the layout is runtime-switchable (live, no reboot) from the supervisor Settings menu and persisted to NVS.
+- `KBD_LAYOUT_FIRST_BOOT_DEFAULT` — initial PS/2 keyboard layout (0 = US English, 1 = Spanish Latam) used the first time the device boots. After that the layout is runtime-switchable (live, no reboot) from the supervisor Setup → Keyboard menu and persisted to NVS.
 
 ### 5. Compile & Upload
 
@@ -243,24 +243,30 @@ Version strings come from `FIRMWARE_VERSION` in `config.h`, which is also what t
 | Backspace | LEFT ARROW (BASIC line edit) |
 | Insert / Delete | CLEAR |
 
-PS/2 keyboard layout defaults to **US English** and can be switched live (no reboot) to **Spanish Latam** from the supervisor **Settings** menu; the choice is persisted in NVS.
+PS/2 keyboard layout defaults to **US English** and can be switched live (no reboot) to **Spanish Latam** from the supervisor **Setup → Keyboard → Keyboard Language** row; the choice is persisted in NVS.
 
 The shifted-symbol row is handled by FabGL's layout (it pre-resolves SHIFT+digit into `VK_HASH`, `VK_DOLLAR`, etc.); the HAL maps each symbol back to the corresponding CoCo SHIFT+N combination so `#`, `$`, `%`, `&`, `(`, `)`, `!`, `"`, `'`, `?`, `<`, `>`, `+` all produce the right CoCo character.
 
 ### Custom Key Mapping
 
-The supervisor **Settings → Key Mapper** screen lets you remap any physical PS/2 key to a CoCo key (including the CoCo 3-only ALT, CTRL, CLEAR, F1, and F2 keys, which are hidden when a CoCo 2 is active). A **Test Mappings** mode shows what each pressed key would type without sending it to the emulated CoCo, and **Clear All Mappings** restores the defaults. Mappings persist in NVS.
+The supervisor **Setup → Keyboard → Key Mapper** screen draws the keyboard of the running machine — the CoCo 2 or the CoCo 3 layout — and you move over it with the arrow keys:
+
+- **White** keys can be remapped, **cream** keys are fixed, **orange** keys already have a custom mapping. Two lines under the keyboard show what the selected key carries and its current binding.
+- **ENTER** remaps the selected key: press the physical key you want, then confirm. Keys with two remappable characters (`:` / `*`, `;` / `+`, ...) first ask which one. **DEL** clears a mapping.
+- **T** opens a test screen that shows what each pressed key would type without sending it to the emulated CoCo; **C** clears every mapping after a confirmation.
+
+The remappable keys are the symbol keys, the arrows and, on a CoCo 3, ALT, CTRL, CLEAR, F1 and F2. Mappings persist in NVS.
 
 ## On-Screen Display (OSD)
 
-Press **F3** to open the supervisor overlay. From here you can:
+Press **F3** to open the supervisor: a box in the CoCo's green, black and dark blue over the paused emulator picture. The main menu is a grid of six icon tiles — all four arrows move, **ENTER** opens a tile, **ESC** goes back one level and **F3** closes the menu from anywhere.
 
-- **Mount/Eject Disks** — browse the SD card and mount `.DSK`/`.VDK` images to drives 0–3
-- **Disk Manager** — view mounted drives and eject disks
-- **Machine** — switch between CoCo 2 / CoCo 3 (`esp_restart()` after confirm; persisted to NVS)
-- **Settings** — Debug Log, RS-232 Pak, **Keyboard** layout (US English / Spanish Latam, live switch), **Key Mapper** (custom key remapping), **Mouse Sensitivity** (joystick 1 / PS/2 mouse sensitivity adjustment, live preview), WiFi / Debug, and **DriveWire** (experimental FujiNet support — see below)
-- **Reset Machine** — warm or cold reset with confirmation
+- **Disks** — Disk Manager. A button per drive (0–3) shows what is mounted; the SD card browser sits below. **TAB** switches between drives and files. ENTER on a `.DSK`/`.VDK` image asks which drive takes it (the first empty one is preselected) and confirms before replacing a disk or mounting the same image twice; ENTER on a mounted drive asks to unmount it. **F** flushes cached writes to the SD card.
+- **Setup** — **Machine** (switch between CoCo 2 / CoCo 3; restarts after a confirmation, persisted to NVS), **RS-232 Pak**, **Keyboard** (Keyboard Language: US English / Spanish Latam, live switch; Key Mapper), **Joy - Mouse Sensitivity** (joystick 1 / PS/2 mouse, live preview), **WiFi / Debug**, and **DriveWire** (experimental FujiNet support — see below)
+- **Reset** — reset the machine, with confirmation
+- **Debug** — CPU / GIME status, memory hex dump, RS-232 Pak status, Dump RAM to SD, and the **Echo Log** toggle (debug output on the serial port; it shares the port with the RS-232 Pak, so turning one on turns the other off)
 - **About** — version info and free memory
+- **Resume** — back to the emulator
 
 ## Architecture
 
@@ -324,13 +330,13 @@ src/
 │   └── osd_canvas.h/cpp      OSD drawing API backed by FabGL Canvas (supervisor OSD)
 ├── supervisor/             On-Screen Display system (HAL-agnostic via osd_canvas)
 │   ├── supervisor.h/cpp      OSD lifecycle and state machine
-│   ├── sv_menu.h/cpp         Menu definitions and actions
+│   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard and Debug lists; machine popup
 │   ├── sv_disk.h/cpp         WD1793 FDC emulation and PSRAM cache
-│   ├── sv_filebrowser.h/cpp  SD card file browser
-│   ├── sv_render.h/cpp       OSD rendering (green phosphor theme)
+│   ├── sv_filebrowser.h/cpp  Disk Manager — drive buttons, SD card browser, mount popups
+│   ├── sv_render.h/cpp       OSD rendering — green frame, list rows, popups
 │   ├── sv_debug.h/cpp        Debug overlay — CPU status, GIME state, memory dump
-│   ├── sv_joystick.h/cpp     Mouse sensitivity screen — live cursor + adjust
-│   └── sv_keymap.h/cpp       Key mapper UI — remap physical keys to CoCo characters
+│   ├── sv_joystick.h/cpp     Joy - Mouse Sensitivity popup — live cursor + adjust
+│   └── sv_keymap.h/cpp       Key mapper UI — CoCo 2 / CoCo 3 keyboard picture, remap physical keys
 ├── roms/
 │   └── rom_loader.h/cpp      ROM loading with CRC-32 validation
 ├── tests/
@@ -366,7 +372,6 @@ All technical documentation is in the `docs/` directory:
 - Joystick 2 (left port) is a stub — returns centered, button released; only Joystick 1 is active via PS/2 mouse
 - NTSC composite simulation covers RG6 (PMODE 4) artifact colour only — there is no
   chroma/luma bleed modelling for the other modes
-- Supervisor OSD was sized for 320×240; on the 640×200 VGA surface its layout sits in the upper-left region
 
 ## DriveWire / FujiNet Support (Experimental)
 
@@ -386,8 +391,10 @@ DriveWire server also boots FujiNet's CONFIG app.
   mounts, the `N:` network device and the clock.
 - Reconnects on its own after a CoCo reset or a link drop.
 
-**Turning it on:** F3 → Settings → DriveWire → Mode: External, set Host/Port
-(default 65504), Save & Restart. Requires the HDB-DOS ROMs above on the SD card.
+**Turning it on:** F3 → Setup → DriveWire → **External Server**. A popup asks for
+the Host, Port (default 65504) and HDB-DOS ROM variant, and refuses to turn on
+while the ROM file is missing from `/roms`, naming the file to copy. Then
+Save & Restart. The screen warns when no WiFi network has been set up yet.
 
 **Known issue — FujiNet-PC's default read timeout.** FujiNet-PC's Becker-over-IP
 transport waits only 500 ms per byte by default. Since TCP never loses a byte
@@ -409,6 +416,33 @@ mode, with diagrams.
 - Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
 
 ## Changelog
+
+### Unreleased
+
+**Supervisor redesign.** Every OSD screen now shares one look, taken from the
+CoCo boot screen: a green box, black text and a dark blue accent.
+
+- **Main menu** is a 3x2 grid of icon tiles: Disks, Setup, Reset, Debug, About,
+  Resume. Icons are drawn in code.
+- **Disk Manager** has a button per drive, a denser file list (8 rows, names up
+  to 63 characters) and popups for mounting, replacing and unmounting, all
+  defaulting to No.
+- **Setup** is an icon list. Machine moved here from the main menu and is now a
+  popup; Keyboard Language and Key Mapper moved into a new **Keyboard**
+  submenu; Mouse Sensitivity is now the **Joy - Mouse Sensitivity** popup.
+- **Key Mapper** draws the CoCo 2 or CoCo 3 keyboard and is navigated with the
+  arrow keys, replacing the scrolling list.
+- **Debug** is an icon list; "Debug Log" moved here from Setup as **Echo Log**.
+  The status, hex dump, RS-232 and Dump RAM screens use the new frame.
+- **WiFi / Debug** shows a status panel above its five actions, which now fit
+  without scrolling.
+- **DriveWire** replaces "Mode" with an **External Server** on/off row. Turning
+  it on asks for Host, Port and ROM in a popup and checks the HDB-DOS ROM is on
+  the SD card. Host, Port and ROM rows show only while it is on, and a warning
+  appears when WiFi is not configured.
+- Screens repaint only the rows, tiles or keys that changed, so moving the
+  selection no longer flickers.
+- The TAB key now reaches the supervisor.
 
 ### v0.12.2 — October 1, 2026
 

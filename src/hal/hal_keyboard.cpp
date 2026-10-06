@@ -122,6 +122,7 @@ static uint8_t vk_to_hid_usage(fabgl::VirtualKey vk) {
         case fabgl::VK_LEFT:         return 0x50;
         case fabgl::VK_RIGHT:        return 0x4F;
         case fabgl::VK_BACKSPACE:    return 0x2A;
+        case fabgl::VK_TAB:          return 0x2B;
         case fabgl::VK_SPACE:        return 0x2C;
         case fabgl::VK_F1:           return 0x3A;
         case fabgl::VK_F2:           return 0x3B;

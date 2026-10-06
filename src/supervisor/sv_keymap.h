@@ -17,10 +17,13 @@
 #include <stdint.h>
 #include "supervisor.h"
 
-// Enter the Key Mapper list screen (from Settings).
+// Enter the Key Mapper keyboard screen (from Settings -> Keyboard).
 void sv_keymap_open(Supervisor_t* sv);
 
-// List-screen key handler (HID usage codes, like the other menus).
+// Force the next render to repaint the whole Key Mapper screen.
+void sv_keymap_invalidate(void);
+
+// Keyboard-screen key handler (HID usage codes, like the other menus).
 void sv_keymap_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 
 // Renderers for the three Key Mapper states.

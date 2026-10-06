@@ -45,6 +45,7 @@ enum SV_State : uint8_t {
     SV_JOY_SENSE,        // Mouse Sensitivity adjust screen
     SV_WIFI,             // WiFi / Debug server status + control screen
     SV_FUJINET,          // DriveWire / FujiNet bus settings screen
+    SV_KEYBOARD_MENU,    // Settings -> Keyboard submenu (language, Key Mapper)
 };
 
 struct SV_FileEntry;

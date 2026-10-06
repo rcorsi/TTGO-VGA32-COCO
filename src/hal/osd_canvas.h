@@ -70,6 +70,9 @@ public:
     void drawRect(int32_t x, int32_t y, int32_t w, int32_t h, uint16_t color);
     void drawFastHLine(int32_t x, int32_t y, int32_t w, uint16_t color);
     void drawFastVLine(int32_t x, int32_t y, int32_t h, uint16_t color);
+    void drawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint16_t color);
+    // Filled ellipse centred on (cx, cy), w x h pixels overall.
+    void fillEllipse(int32_t cx, int32_t cy, int32_t w, int32_t h, uint16_t color);
 
     // ----- Text -----
     void setTextFont(uint8_t font);

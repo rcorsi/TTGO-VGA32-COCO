@@ -62,13 +62,36 @@ static void capture_snapshot(void) {
 
 static void restore_snapshot(void) {
     // Clear the OSD area so no ghost pixels remain in border margins.
-    // The emulator sprite covers (32,24)-(288,216) and will repaint
-    // that region on the next frame. Clear the full OSD rect to be safe.
-    OSDCanvas* tft = hal_video_get_canvas();
-    if (tft) {
-        tft->fillRect(SV_BORDER_X, SV_BORDER_Y, SV_BORDER_W, SV_BORDER_H, OSD_BLACK);
+    // The emulator repaints its active area on the next frame; the main
+    // menu box is wider than the submenu box, so clear that whole rect.
+    sv_render_wide_clear();
+}
+
+// Wide-box bookkeeping: the main menu, Disk Manager, Settings, Debug screens and About share a frame wider
+// than the submenu one, so it is cleared before a submenu draws and the
+// screen is fully repainted whenever it is entered from another state.
+static bool uses_wide_frame(SV_State st) {
+    switch (st) {
+        case SV_MAIN_MENU:
+        case SV_FILE_BROWSER:
+        case SV_SETTINGS:
+        case SV_KEYBOARD_MENU:
+        case SV_ABOUT:
+        case SV_DEBUG_MENU:
+        case SV_DEBUG_DUMP:
+        case SV_DEBUG_DUMP_NAME:
+        case SV_KEYMAP_LIST:
+        case SV_KEYMAP_TEST:
+        case SV_WIFI:
+        case SV_FUJINET:
+            return true;
+        default:
+            return false;
     }
 }
+
+static bool     s_main_box_on_screen = false;
+static SV_State s_last_rendered = SV_INACTIVE;
 
 // ============================================================
 // About screen
@@ -114,102 +137,73 @@ static void draw_mono_bitmap_scaled(OSDCanvas* tft, int x0, int y0,
     tft->endWrite();
 }
 
-// About screen color palette
-#define ABOUT_GREEN      0x07E0  // Pure green
-#define ABOUT_DK_GREEN   0x03A0  // Dark green (decorative lines)
-#define ABOUT_CYAN       0x07FF  // Cyan accent
-#define ABOUT_AMBER      0xFBE0  // Warm amber for version
-
 static void about_render(Supervisor_t* s) {
+    (void)s;
     OSDCanvas* tft = hal_video_get_canvas();
     if (!tft) return;
 
-    // Use the standard frame but with custom title
-    sv_render_frame("About", "ESC = Back");
+    // No title: the logo sits in the title row.
+    sv_render_wide_frame("", "ESC Back   F3 Exit");
 
-    tft->startWrite();
+    const int cx  = SVW_BOX_X + SVW_BOX_W / 2;  // horizontal center
+    const int x1  = cx - 152;                    // separator left
+    const int x2  = cx + 152;                    // and right
 
-    // --- Layout constants (pixel positions within the OSD frame) ---
-    const int cx  = SV_BORDER_X + SV_BORDER_W / 2;  // horizontal center
-    const int x1  = SV_BORDER_X + 6;                 // left margin
-    const int x2  = SV_BORDER_X + SV_BORDER_W - 6;  // right margin
-    const int top = SV_CONTENT_Y + 2;                // top of content area
-
-    // --- Row 1: Logo (scaled 2x = 182x24) centered with green tint bg ---
+    // --- Row 1: Logo (scaled 2x = 182x24) centered ---
     const int logo_scale = 2;
     const int logo_sw = LOGO_W * logo_scale;  // 182
     const int logo_sh = LOGO_H * logo_scale;  // 24
-    const int logo_x = cx - logo_sw / 2;
-    const int logo_y = top;
-
-    tft->endWrite();
-
-    // Draw logo (has its own startWrite/endWrite)
-    draw_mono_bitmap_scaled(tft, logo_x, logo_y, bitmap_cocobyte,
-                            LOGO_W, LOGO_H, logo_scale, ABOUT_GREEN);
-
-    tft->startWrite();
+    const int logo_y = SVW_BOX_Y + 13;      // just under the top strip
+    draw_mono_bitmap_scaled(tft, cx - logo_sw / 2, logo_y, bitmap_cocobyte,
+                            LOGO_W, LOGO_H, logo_scale, SVW_DKBLUE);
 
     // --- Row 2: Project subtitle (two lines) ---
-    int y = logo_y + logo_sh + 8;
-    tft->setTextFont(1);  // 8px font for subtitle
-    tft->setTextColor(ABOUT_CYAN, SV_COLOR_BG);
-    tft->setTextDatum(TC_DATUM);
-    tft->drawString("CoCo 2&3 Emulator", cx, y);
-    y += 10;
-    tft->drawString("TTGO VGA", cx, y);
-
-    // --- Decorative separator ---
-    y += 14;
-    tft->drawFastHLine(x1 + 20, y, (x2 - x1) - 40, ABOUT_DK_GREEN);
-    tft->drawPixel(x1 + 18, y, ABOUT_GREEN);
-    tft->drawPixel(x2 - 18, y, ABOUT_GREEN);
-
-    // --- Row 3: Copyright ---
-    y += 8;
+    int y = logo_y + logo_sh + 10;
     tft->setTextFont(1);
-    tft->setTextColor(SV_COLOR_TEXT, SV_COLOR_BG);
+    tft->setTextColor(SVW_BLACK, SVW_GREEN);
     tft->setTextDatum(TC_DATUM);
+    tft->drawString("Tandy Color Computer 2 & 3 Emulator", cx, y);
+    y += 10;
+    tft->drawString("ESP32 TTGO VGA", cx, y);
+
+    // --- Separator ---
+    y += 16;
+    tft->drawFastHLine(x1, y, x2 - x1, SVW_DKBLUE);
+
+    // --- Rows 3-5: Copyright and credits ---
+    y += 10;
     tft->drawString("(C) 2026 Reinaldo Torres", cx, y);
-
-    // --- Row 4: XRoar credit ---
     y += 12;
-    tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
+    tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
     tft->drawString("Based on XRoar", cx, y);
-
-    // --- Row 5: Claude credit ---
     y += 12;
-    tft->setTextColor(SV_COLOR_DIM, SV_COLOR_BG);
     tft->drawString("Co-developed with Claude Code", cx, y);
 
-    // --- Decorative separator ---
-    y += 12;
-    tft->drawFastHLine(x1 + 20, y, (x2 - x1) - 40, ABOUT_DK_GREEN);
-    tft->drawPixel(x1 + 18, y, ABOUT_GREEN);
-    tft->drawPixel(x2 - 18, y, ABOUT_GREEN);
+    // --- Separator ---
+    y += 16;
+    tft->drawFastHLine(x1, y, x2 - x1, SVW_DKBLUE);
 
     // --- Row 6: Version badge ---
-    y += 6;
+    y += 9;
     // Built from config.h so the About screen cannot drift out of step with
     // the version the debug API reports (it read "Beta 1.0" until v0.81).
     const char* ver_str = "v" FIRMWARE_VERSION "  Build " FIRMWARE_BUILD_DATE;
     int ver_w = tft->textWidth(ver_str) + 16;
     int ver_x = cx - ver_w / 2;
-    tft->fillRect(ver_x, y, ver_w, 13, 0x0120);
-    tft->drawRect(ver_x, y, ver_w, 13, ABOUT_DK_GREEN);
-    tft->setTextColor(ABOUT_AMBER, 0x0120);
+    tft->fillRect(ver_x, y, ver_w, 13, SVW_WHITE);
+    tft->drawRect(ver_x, y, ver_w, 13, SVW_DKBLUE);
+    tft->setTextColor(SVW_BLACK, SVW_WHITE);
     tft->drawString(ver_str, cx, y + 3);
 
     // --- Row 7: System stats ---
-    y += 20;
+    y += 21;
     char stats[64];
     snprintf(stats, sizeof(stats), "Heap:%dK  PSRAM:%dK",
              ESP.getFreeHeap() / 1024, ESP.getFreePsram() / 1024);
-    tft->setTextColor(ABOUT_DK_GREEN, SV_COLOR_BG);
+    tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
     tft->drawString(stats, cx, y);
 
     tft->setTextDatum(TL_DATUM);
-    tft->endWrite();
 }
 
 // ============================================================
@@ -286,11 +280,12 @@ void supervisor_toggle(void) {
         sv.state = SV_MAIN_MENU;
         sv.menu_cursor = 0;
         sv.needs_redraw = true;
-        sv_menu_update_values(&sv);
+        s_last_rendered = SV_INACTIVE;
         DEBUG_PRINT("Supervisor: activated");
     } else {
         // Deactivate
         restore_snapshot();
+        s_main_box_on_screen = false;
         sv.state = SV_INACTIVE;
         hal_video_force_repaint();
         DEBUG_PRINT("Supervisor: deactivated");
@@ -362,6 +357,10 @@ void supervisor_on_key(uint8_t hid_usage, bool pressed) {
             sv_fujinet_on_key(&sv, hid_usage, pressed);
             break;
 
+        case SV_KEYBOARD_MENU:
+            sv_keyboard_menu_on_key(&sv, hid_usage, pressed);
+            break;
+
         case SV_JOY_SENSE:
             sv_joystick_on_key(&sv, hid_usage, pressed);
             break;
@@ -391,6 +390,36 @@ bool supervisor_update_and_render(void) {
     }
 
     sv.needs_redraw = false;
+
+    if (uses_wide_frame(sv.state)) {
+        if (s_last_rendered != sv.state) {
+            switch (sv.state) {
+                case SV_MAIN_MENU:    sv_menu_invalidate();        break;
+                case SV_FILE_BROWSER: sv_filebrowser_invalidate(); break;
+                case SV_DEBUG_MENU:   sv_debug_menu_invalidate();  break;
+                case SV_ABOUT:        break;    // always repaints in full
+                case SV_SETTINGS:
+                case SV_KEYBOARD_MENU: sv_settings_invalidate();   break;
+                case SV_KEYMAP_LIST:
+                case SV_KEYMAP_TEST:   sv_keymap_invalidate();     break;
+                case SV_WIFI:          sv_wifi_invalidate();       break;
+                case SV_FUJINET:       sv_fujinet_invalidate();    break;
+                default:              sv_debug_invalidate();       break;
+            }
+        }
+        s_main_box_on_screen = true;
+    } else if (sv.state == SV_MACHINE_SELECT) {
+        // Popup over the Settings list: leave the wide frame in place.
+        if (s_last_rendered != sv.state) sv_machine_select_invalidate();
+    } else if (sv.state == SV_KEYMAP_CAPTURE || sv.state == SV_JOY_SENSE) {
+        // Popups over the Key Mapper keyboard / the Settings list: leave the
+        // wide frame in place.
+    } else if (s_main_box_on_screen && sv.state != SV_CONFIRM_DIALOG) {
+        // The confirm dialog is left floating over the main menu.
+        sv_render_wide_clear();
+        s_main_box_on_screen = false;
+    }
+    s_last_rendered = sv.state;
 
     switch (sv.state) {
         case SV_MAIN_MENU:
@@ -447,6 +476,10 @@ bool supervisor_update_and_render(void) {
 
         case SV_FUJINET:
             sv_fujinet_render(&sv);
+            break;
+
+        case SV_KEYBOARD_MENU:
+            sv_keyboard_menu_render(&sv);
             break;
 
         case SV_JOY_SENSE:

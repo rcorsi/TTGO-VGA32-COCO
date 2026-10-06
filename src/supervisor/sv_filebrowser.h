@@ -24,11 +24,11 @@
 // Forward declaration
 struct Supervisor_t;
 
-#define SV_FB_VISIBLE_ITEMS    6
+#define SV_FB_VISIBLE_ITEMS    8
 #define SV_FB_MAX_ENTRIES      128
 
 struct SV_FileEntry {
-    char     name[32];
+    char     name[64];
     uint32_t size;
     bool     is_dir;
     bool     is_supported;
@@ -39,6 +39,9 @@ void sv_filebrowser_open(Supervisor_t* sv, const char* path, uint8_t target_driv
 void sv_filebrowser_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_filebrowser_render(Supervisor_t* sv);
 const char* sv_filebrowser_get_selected_path(Supervisor_t* sv);
+// Force the next render to repaint the whole Disk Manager screen; otherwise
+// only the rows / drive buttons that changed are redrawn.
+void sv_filebrowser_invalidate(void);
 
 int  sv_fb_scan_directory(const char* path, SV_FileEntry* entries, int max_entries);
 void sv_fb_sort_entries(SV_FileEntry* entries, int count);
