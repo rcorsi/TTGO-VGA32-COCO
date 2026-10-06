@@ -509,81 +509,6 @@ static void h_key() {
 }
 
 // =============================================================
-//  Config portal handlers (AP mode)
-// =============================================================
-
-// The setup portal exists only to get the board onto a network: it answers
-// only while the setup SoftAP is up. On a joined network it would let anyone
-// on the LAN scan or change the WiFi credentials; to reconfigure, use the
-// supervisor (WiFi / Debug: Stop, Forget Credentials, Start Config Portal).
-static bool portal_active(void) {
-    if (wifi_mgr_state() == WIFI_MGR_AP_CONFIG) return true;
-    send_err(404, "not found");
-    return false;
-}
-
-static void h_portal_root() {
-    if (!portal_active()) return;
-    String html =
-        "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1'>"
-        "<title>CoCo3 WiFi Setup</title>"
-        "<style>body{font-family:sans-serif;margin:1.5em;max-width:480px}"
-        "input,select,button{font-size:1em;padding:.5em;margin:.3em 0;width:100%;box-sizing:border-box}"
-        "</style></head><body><h2>CoCo3 Debug — WiFi Setup</h2>"
-        "<button onclick='scan()'>Scan networks</button>"
-        "<select id=ssid></select>"
-        "<input id=pass type=password placeholder='Password'>"
-        "<button onclick='save()'>Connect</button>"
-        "<p id=msg></p>"
-        "<script>"
-        "function scan(){msg.textContent='Scanning...';fetch('/scan').then(r=>r.json()).then(d=>{"
-        "ssid.innerHTML='';d.networks.forEach(n=>{var o=document.createElement('option');"
-        "o.value=n.ssid;o.textContent=n.ssid+' ('+n.rssi+'dBm)'+(n.secure?' 🔒':'');ssid.appendChild(o);});"
-        "msg.textContent=d.networks.length+' found';});}"
-        "function save(){msg.textContent='Connecting...';"
-        "fetch('/save',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},"
-        "body:'ssid='+encodeURIComponent(ssid.value)+'&pass='+encodeURIComponent(pass.value)})"
-        ".then(()=>poll());}"
-        "function poll(){fetch('/status').then(r=>r.json()).then(d=>{"
-        "msg.textContent=d.state+(d.ip!='0.0.0.0'?(' — '+d.ip):'');"
-        "if(d.state!='Connected'&&d.state!='Failed')setTimeout(poll,1500);});}"
-        "</script></body></html>";
-    s_server.send(200, "text/html; charset=utf-8", html);
-}
-
-static void h_portal_scan() {
-    if (!portal_active()) return;
-    int n = wifi_mgr_scan();
-    String j = "{\"networks\":[";
-    for (int i = 0; i < n; i++) {
-        if (i) j += ",";
-        String ssid = wifi_mgr_scan_ssid(i);
-        ssid.replace("\\", "\\\\");
-        ssid.replace("\"", "\\\"");
-        j += "{\"ssid\":\"" + ssid + "\",\"rssi\":" + wifi_mgr_scan_rssi(i) +
-             ",\"secure\":" + (wifi_mgr_scan_secure(i) ? "true" : "false") + "}";
-    }
-    j += "]}";
-    send_json(200, j);
-}
-
-static void h_portal_save() {
-    if (!portal_active()) return;
-    String ssid = s_server.arg("ssid");
-    String pass = s_server.arg("pass");
-    if (ssid.length() == 0) { send_err(400, "missing ssid"); return; }
-    send_json(200, "{\"ok\":true}");
-    wifi_mgr_connect(ssid.c_str(), pass.c_str());
-}
-
-static void h_portal_status() {
-    if (!portal_active()) return;
-    String j = String("{\"state\":\"") + wifi_mgr_state_str() +
-               "\",\"ip\":\"" + wifi_mgr_ip() + "\"}";
-    send_json(200, j);
-}
-
-// =============================================================
 //  Routing / task
 // =============================================================
 
@@ -608,12 +533,6 @@ static void register_routes() {
     s_server.on("/api/disk",          HTTP_POST, h_post_disk);
     s_server.on("/api/screenshot.png",HTTP_GET,  h_screenshot);
 
-    // Config portal (AP mode only — see portal_active)
-    s_server.on("/",        HTTP_GET,  h_portal_root);
-    s_server.on("/scan",    HTTP_GET,  h_portal_scan);
-    s_server.on("/save",    HTTP_POST, h_portal_save);
-    s_server.on("/status",  HTTP_GET,  h_portal_status);
-
     s_server.onNotFound([]() { send_err(404, "not found"); });
 }
 
@@ -622,15 +541,13 @@ static void server_task(void* arg) {
     register_routes();
     for (;;) {
         WifiMgrState st = wifi_mgr_state();
-        bool net_up = (st == WIFI_MGR_AP_CONFIG || st == WIFI_MGR_STA_RUNNING);
+        bool net_up = (st == WIFI_MGR_STA_RUNNING);
         if (net_up && !s_begun) {
             s_server.begin();
             s_begun = true;
             DEBUG_PRINT("debug_server: WebServer started on port 80");
         }
-        // The setup portal is always served while the setup AP is up, even with
-        // the debug API switched off.
-        if (s_begun && (s_enabled || st == WIFI_MGR_AP_CONFIG)) s_server.handleClient();
+        if (s_begun && s_enabled) s_server.handleClient();
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
@@ -655,7 +572,7 @@ static void save_enabled(bool on) {
     }
 }
 
-void debug_server_ensure_task(void) {
+static void ensure_task(void) {
     if (s_task) return;
     // Measured peak 1952 B (screenshots, 4 KB mem reads, NVS dump); see srv_stack_free.
     xTaskCreatePinnedToCore(server_task, "dbg_srv", 4096, nullptr, 1, &s_task, 0);
@@ -665,17 +582,17 @@ void debug_server_begin(void) {
     s_enabled = load_enabled();
     if (!s_enabled) {
         // Off: no task, routes or socket at all (~4.4 KB+ of internal RAM kept
-        // free). Turning it on, or starting the setup portal, creates it.
+        // free). Turning it on creates it.
         DEBUG_PRINT("debug_server: off (setting) - not started");
         return;
     }
-    debug_server_ensure_task();
+    ensure_task();
 }
 
 void debug_server_set_enabled(bool on) {
     s_enabled = on;
     save_enabled(on);
-    if (on) debug_server_ensure_task();   // off: stops serving now, memory freed at next boot
+    if (on) ensure_task();   // off: stops serving now, memory freed at next boot
 }
 
 bool debug_server_enabled(void) { return s_enabled; }

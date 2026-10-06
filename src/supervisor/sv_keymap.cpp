@@ -36,6 +36,7 @@
 #include "sv_render.h"
 #include "../hal/hal.h"
 #include "fabgl.h"
+#include <esp_heap_caps.h>
 #include "../utils/debug.h"
 
 extern OSDCanvas* hal_video_get_canvas(void);
@@ -90,7 +91,7 @@ struct KbKey {
     int8_t  km[2];
 };
 
-static KbKey   s_keys[KB_MAX_KEYS];
+static KbKey*  s_keys = nullptr;       // PSRAM, allocated on first use
 static uint8_t s_key_count = 0;
 static int16_t s_kb_width = 0;
 static bool    s_kb_coco3 = false;
@@ -153,10 +154,17 @@ static void kb_add_number_row(int x, int pitch, int w) {
 
 // Lay out the running machine's keyboard. Remap-table indices: symbols 0-21,
 // UP 22, DOWN 23, LEFT 24, RIGHT 25, ALT 26, CTRL 27, CLEAR 28, F1 29, F2 30.
-static void kb_build(void) {
+static bool kb_build(void) {
     s_kb_coco3 = (g_machine_type == 4);
     s_key_count = 0;
     s_kb_width = 0;
+    if (!s_keys) {
+        s_keys = (KbKey*)heap_caps_malloc(KB_MAX_KEYS * sizeof(KbKey), MALLOC_CAP_SPIRAM);
+        if (!s_keys) {
+            DEBUG_PRINT("keymap: failed to allocate the keyboard layout");
+            return false;
+        }
+    }
 
     if (s_kb_coco3) {
         // CoCo 3: 57 keys, measured from a photo of the real keyboard.
@@ -212,6 +220,7 @@ static void kb_build(void) {
         kb_add("SHIFT", 264, 3, 43);
         kb_add("SPACE", 58, 4, 190);
     }
+    return true;
 }
 
 static inline int kb_origin_x(void) {
@@ -269,7 +278,7 @@ static const char* km_binding_name(int idx) {
 }
 
 void sv_keymap_open(Supervisor_t* sv) {
-    kb_build();
+    if (!kb_build()) return;    // out of memory: stay on the Keyboard menu
     // Start on the first remappable key.
     km_sel = 0;
     for (int i = 0; i < s_key_count; i++) {
