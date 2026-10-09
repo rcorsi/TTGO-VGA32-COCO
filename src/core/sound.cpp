@@ -39,6 +39,7 @@ static bool    sbs_enabled  = false;
 static bool    sbs_level    = false;
 static bool    mux_enabled  = false;
 static uint8_t mux_source   = SOURCE_DAC;
+static uint8_t ext_level    = 0;      // 0-255, mono mix of the cartridge DACs
 
 static void sound_update(void) {
     unsigned sindex = sbs_enabled ? (sbs_level ? 2u : 1u) : 0u;
@@ -47,6 +48,9 @@ static void sound_update(void) {
     unsigned level  = (source == SOURCE_DAC) ? dac_level : 0u;
     unsigned out = (level * source_gain[source][sindex]) / 63u
                  + source_offset[source][sindex];
+    // The cartridge level sums into the output; one DAC, so saturate.
+    out += ext_level;
+    if (out > 255u) out = 255u;
     hal_audio_set_level((uint8_t)out);
 }
 
@@ -86,4 +90,11 @@ void sound_set_mux_source(uint8_t source) {
     mux_source = source;
     if (mux_enabled)
         sound_update();
+}
+
+void sound_set_external(uint8_t left, uint8_t right) {
+    uint8_t level = (uint8_t)(((unsigned)left + right) >> 1);
+    if (ext_level == level) return;
+    ext_level = level;
+    sound_update();
 }

@@ -229,6 +229,18 @@ The MUX only controls the speaker path; the joystick comparator always reads the
 
 ---
 
+## Orchestra-90/CC
+
+`src/core/orch90.cpp` is a port of XRoar's `orch90.c`: two write-only 8-bit unsigned DAC latches, left at `$FF7A` and right at `$FF7B`. There is no status register, timer or interrupt; the program writes sample values directly.
+
+- **Decode:** `machine_write_coco2()` / `machine_write_coco3()` forward the two addresses to `orch90_write()` only while `orch90_enabled()` (Settings → Orchestra-90, read from NVS at boot). Reads return `$FF`.
+- **Mixing:** the board has one free DAC pin (GPIO26 is the PS/2 mouse clock), so the channels are mixed to mono: `sound_set_external()` stores `(left + right) / 2` and `sound_update()` adds it to the level the mux/DAC/single-bit model computed, saturating at 255. As in XRoar the cartridge level is added whatever the mux selects.
+- **Levels:** unsigned, no centring: `$00` is silence and an idle `$80` is a DC offset the jack's AC coupling removes. The latches start at 0 and survive a machine reset.
+- **Bandwidth:** the level is captured once per scanline like every other source, so sample playback faster than ~7.8 kHz aliases.
+- **ROM:** the cartridge's 8 KB ROM is `orch90.rom` in `/roms/`, loaded at `$C000` in place of Disk BASIC and started automatically (see "Cartridge ROM" in `supervisor.md`). The toggle refuses to turn on without it.
+
+---
+
 ## Public API
 
 | Function | Purpose |

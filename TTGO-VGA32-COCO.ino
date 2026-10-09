@@ -133,6 +133,10 @@ void setup() {
     // DriveWire bus mode (Becker port). Read before ROM loading so later
     // phases can pick the HDB-DOS Becker ROM instead of disk11.rom.
     dw_bus_load_config();
+
+    // Orchestra-90 setting. After the DriveWire config so its cartridge
+    // ROM replaces the HDB-DOS ROM.
+    supervisor_load_cart_config();
     DEBUG_PRINTF("g_machine_type = %u (compile-time default %u)", g_machine_type, (uint8_t)MACHINE_TYPE);
 
     // Initialize emulated machine

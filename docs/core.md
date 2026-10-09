@@ -528,6 +528,7 @@ $FF20–$FF3F  PIA1 (4 regs mirrored every 4 bytes)
 $FF40–$FF5F  WD1793 Disk Controller (DSKREG + FDC regs)
 $FF60–$FFBF  Reserved (reads $FF) — except $FF68–$FF6B below
 $FF68–$FF6B  MC6551 ACIA — RS-232 Pak, only when enabled (see rs232-hal.md)
+$FF7A–$FF7B  Orchestra-90 left/right DAC latches (write-only), only when enabled (see audio-hal.md)
 $FFC0–$FFDF  SAM control (write-only bit set/clear)
 $FFE0–$FFFF  Interrupt vectors (from Color BASIC ROM $BFE0–$BFFF)
 ```

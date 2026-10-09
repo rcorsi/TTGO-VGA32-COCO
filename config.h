@@ -217,6 +217,10 @@
 #define ROM_BECKER_TO_COCO3_FILE  "hdbdw3bc3t.rom"
 
 #define ROM_COCO3_FILE          "coco3.rom"
+
+// Orchestra-90/CC cartridge ROM (8 KB). Optional: without it the DAC ports
+// still work for software loaded from disk.
+#define ROM_ORCH90_FILE         "orch90.rom"
 #define COCO3_ROM_SIZE          (32 * 1024)
 #define COCO3_PHYSICAL_RAM      (512 * 1024)
 

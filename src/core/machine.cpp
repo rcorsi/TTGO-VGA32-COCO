@@ -19,6 +19,7 @@
 #include "mc6551.h"   // RS-232 Pak (Deluxe RS-232 Program Pak) ACIA
 #include "becker.h"   // Becker port (DriveWire) at $FF41/$FF42
 #include "sound.h"    // Sound mixing core (mux/DAC/single-bit)
+#include "orch90.h"   // Orchestra-90/CC DAC latches at $FF7A/$FF7B
 
 // Global machine pointer for CPU memory callbacks
 static Machine* g_machine = nullptr;
@@ -84,6 +85,19 @@ static bool load_cart_rom(int idx, const char* rom_path, uint8_t* dst) {
         return true;
     }
     return false;
+}
+
+// A program cartridge ties CART to Q, so PIA1 CB1 keeps seeing edges and BASIC
+// starts the ROM as soon as it enables that FIRQ. Disk BASIC ROMs ('DK' at
+// $C000) leave CART alone. One pulse per frame is enough, as in XRoar.
+static inline bool cart_rom_autostarts(const uint8_t* rom) {
+    return !(rom[0] == 'D' && rom[1] == 'K');
+}
+
+static inline void cart_autostart_pulse(Machine* m) {
+    if (!m->cart_autostart) return;
+    mc6821_cb1_transition(&m->pia1, true);
+    mc6821_cb1_transition(&m->pia1, false);
 }
 
 // Cycles per scanline: CPU_CLOCK_HZ / TARGET_FPS / SCANLINES_PER_FRAME
@@ -322,6 +336,12 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
         return;
     }
 
+    // Orchestra-90 DAC latches ($FF7A/$FF7B). No-op unless the cartridge is on.
+    if (orch90_enabled() && (addr & 0xFFFE) == ORCH90_LEFT_ADDR) {
+        orch90_write(addr, val);
+        return;
+    }
+
     // Slow path: GIME address decode for I/O, registers
     bool is_reg = false;
     tcc1014_mem_cycle(g, addr, /*RnW=*/false, val, nullptr, &is_reg);
@@ -426,6 +446,7 @@ void machine_init_coco3(Machine* m) {
     m->ntsc = true;
     m->cycles_per_frame = CYCLES_PER_FRAME;
     m->cart_inserted = false;
+    m->cart_autostart = false;
 
     m->initialized = true;
     DEBUG_PRINTF("Machine: CoCo 3 init complete. Free heap: %d", ESP.getFreeHeap());
@@ -458,6 +479,7 @@ bool machine_load_roms_coco3(Machine* m, const char* rom_path) {
     // The CoCo3 checks for 'DK' signature at $C000 to detect Disk BASIC
     if (load_cart_rom(1, rom_path, m->rom_disk)) {
         m->rom_disk_loaded = true;
+        m->cart_autostart = cart_rom_autostarts(m->rom_disk);
         DEBUG_PRINTF("  Loaded %s (Disk BASIC 8KB)", g_cart_rom_loaded[1]);
     } else {
         DEBUG_PRINTF("  Optional: %s not found (no Disk BASIC)", ROM_DISK_FILE);
@@ -724,6 +746,7 @@ void machine_run_frame_coco3(Machine* m) {
 
     m->cycles_this_frame = 0;
     m->scanline = 0;
+    cart_autostart_pulse(m);
 
     for (int line = 0; line < SCANLINES_PER_FRAME; line++) {
         machine_run_scanline_coco3(m);
@@ -1013,6 +1036,12 @@ void machine_write_coco2(uint16_t addr, uint8_t val) {
             return;
         }
 
+        // Orchestra-90 DAC latches ($FF7A/$FF7B). No-op unless the cartridge is on.
+        if (orch90_enabled() && (addr & 0xFFFE) == ORCH90_LEFT_ADDR) {
+            orch90_write(addr, val);
+            return;
+        }
+
         // Reserved: $FF60-$FFBF
         if (addr < 0xFFC0) {
             return;
@@ -1109,6 +1138,7 @@ void machine_init_coco2(Machine* m) {
     m->ntsc = true;
     m->cycles_per_frame = CYCLES_PER_FRAME;
     m->cart_inserted = false;
+    m->cart_autostart = false;
 
     m->initialized = true;
     DEBUG_PRINTF("Machine: init complete. Free heap: %d", ESP.getFreeHeap());
@@ -1146,6 +1176,7 @@ bool machine_load_roms_coco2(Machine* m, const char* rom_path) {
     if (load_cart_rom(0, rom_path, m->rom_cart)) {
         m->rom_cart_loaded = true;
         m->cart_inserted = true;
+        m->cart_autostart = cart_rom_autostarts(m->rom_cart);
         DEBUG_PRINTF("  Loaded %s → $C000", g_cart_rom_loaded[0]);
     } else {
         DEBUG_PRINTF("  Optional: %s not found", ROM_DISK_FILE);
@@ -1295,6 +1326,7 @@ void machine_run_frame_coco2(Machine* m) {
 
     m->cycles_this_frame = 0;
     m->scanline = 0;
+    cart_autostart_pulse(m);
 
     for (int line = 0; line < SCANLINES_PER_FRAME; line++) {
         machine_run_scanline_coco2(m);

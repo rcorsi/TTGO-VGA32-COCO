@@ -60,6 +60,7 @@ enum SV_SettingsRow : uint8_t {
     SV_SET_JOYSTICK,    // Joy - Mouse Sensitivity screen
     SV_SET_WIFI,        // WiFi / Debug screen
     SV_SET_DRIVEWIRE,   // DriveWire screen
+    SV_SET_ORCH90,      // Orchestra-90 toggle (asks to restart)
     SV_SET_COUNT
 };
 enum SV_KeyboardRow : uint8_t {
@@ -74,13 +75,20 @@ void sv_keyboard_menu_render(Supervisor_t* sv);
 // Force the next render to repaint the whole Settings / Keyboard list.
 void sv_settings_invalidate(void);
 
+// SV_ORCH90_POPUP state: popup over the Settings list, opened from the
+// Orchestra-90 row. Asks to confirm the restart (No / Yes, defaults to No),
+// or, when turning it on without orch90.rom on the SD card, says the ROM
+// must be copied and changes nothing.
+void sv_orch90_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
+void sv_orch90_popup_render(Supervisor_t* sv);
+
 // 32x12 row icons for lists in the wide frame, drawn in code. bg/fg are the
 // row's own colours so an icon reads on the green box and on the selection bar.
 enum SV_RowIcon : uint8_t {
     ROW_ICON_MACHINE, ROW_ICON_SERIAL, ROW_ICON_KEYBOARD, ROW_ICON_JOYSTICK,
     ROW_ICON_WIFI, ROW_ICON_DRIVEWIRE, ROW_ICON_LANGUAGE, ROW_ICON_KEYCAP,
     ROW_ICON_CHIP, ROW_ICON_PAGE, ROW_ICON_SD, ROW_ICON_SPIDER,
-    ROW_ICON_CHECK, ROW_ICON_STOP, ROW_ICON_CROSS,
+    ROW_ICON_CHECK, ROW_ICON_STOP, ROW_ICON_CROSS, ROW_ICON_NOTE,
 };
 void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg);
 

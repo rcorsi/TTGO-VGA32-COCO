@@ -24,6 +24,7 @@
 #include "sv_joystick.h"
 #include "sv_wifi.h"
 #include "sv_fujinet.h"
+#include "../core/orch90.h"
 #include "../net/dw_bus.h"
 #include "../net/wifi_mgr.h"
 #include "../hal/hal.h"
@@ -544,6 +545,14 @@ static void draw_row_icon(OSDCanvas* tft, int icon, int x, int y, uint16_t bg, u
             for (int c = 0; c < 3; c++) row_icon_box(tft, x, y, 4 + c * 2, 1, 4 + c * 2, 4, SVW_WHITE);
             break;
 
+        case ROW_ICON_NOTE:         // beamed pair of eighth notes
+            row_icon_box(tft, x, y, 5, 1, 12, 2, fg);
+            row_icon_box(tft, x, y, 5, 1, 5, 9, fg);
+            row_icon_box(tft, x, y, 12, 1, 12, 8, fg);
+            row_icon_box(tft, x, y, 3, 8, 5, 10, fg);
+            row_icon_box(tft, x, y, 10, 7, 12, 9, fg);
+            break;
+
         case ROW_ICON_SPIDER: {     // spider: four legs each side, body, head, red eyes
             static const int8_t legs[4][4] = { { 6, 5, 1, 2 }, { 5, 6, 0, 6 }, { 5, 8, 0, 9 }, { 6, 9, 2, 11 } };
             for (int l = 0; l < 4; l++) {
@@ -582,6 +591,11 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //                The Echo Log toggle that shares the port is in the Debug submenu.
 //   Keyboard     opens the Keyboard submenu
 //   Joy - Mouse Sensitivity, WiFi / Debug, DriveWire   open their own screens
+//   Orchestra-90 toggle; the DAC ports and the cartridge ROM are set up at
+//                boot, so it asks to confirm and restarts:
+//                  ON  -> ports on, orch90.rom as the cartridge. Refused
+//                         with a popup if the ROM is not on the SD card.
+//                  OFF -> ports off, cartridge back to Disk BASIC
 //
 // Keyboard rows (SV_KeyboardRow):
 //   Keyboard Language   cycles the PS/2 layout (US English / Spanish Latam);
@@ -600,6 +614,7 @@ static const SV_ListRow SETTINGS_ROWS[SV_SET_COUNT] = {
     { "Joy - Mouse Sensitivity", ROW_ICON_JOYSTICK  },
     { "WiFi / Debug",            ROW_ICON_WIFI      },
     { "DriveWire",               ROW_ICON_DRIVEWIRE },
+    { "Orchestra-90",            ROW_ICON_NOTE      },
 };
 
 static const SV_ListRow KEYBOARD_ROWS[SV_KBD_COUNT] = {
@@ -613,6 +628,88 @@ static int8_t s_settings_drawn = -1;
 
 void sv_settings_invalidate(void) {
     s_settings_drawn = -1;
+}
+
+// Orchestra-90 toggle: a popup over the Settings list, wider than the usual
+// one for its two-line explanation. Turning it on needs orch90.rom on the SD
+// card: without it the popup only says so and nothing changes.
+#define ORCH90_POPUP_W   480
+
+static bool   s_orch90_target = false;     // state the toggle is asking for
+static bool   s_orch90_no_rom = false;     // message-only popup, single OK row
+static int8_t s_orch90_sel    = 0;         // 0 = No, 1 = Yes
+static int8_t s_orch90_drawn  = -1;        // row drawn selected; -1 = draw the window
+
+static void orch90_toggle_open(Supervisor_t* sv) {
+    s_orch90_target = !orch90_enabled();
+    s_orch90_no_rom = s_orch90_target &&
+                      !hal_storage_file_exists(ROM_BASE_PATH "/" ROM_ORCH90_FILE);
+    s_orch90_sel   = 0;
+    s_orch90_drawn = -1;
+    sv->prev_state = sv->state;
+    sv->state = SV_ORCH90_POPUP;
+    sv->needs_redraw = true;
+}
+
+void sv_orch90_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
+    if (!pressed) return;
+
+    switch (hid_usage) {
+        case HID_UP:
+        case HID_DOWN:
+            if (!s_orch90_no_rom) {
+                s_orch90_sel = (hid_usage == HID_DOWN) ? 1 : 0;
+                sv->needs_redraw = true;
+            }
+            break;
+
+        case HID_ENTER:
+            if (!s_orch90_no_rom && s_orch90_sel == 1) {
+                supervisor_save_orch90(s_orch90_target);
+                supervisor_save_cart_rom(s_orch90_target ? ROM_ORCH90_FILE : "");
+                supervisor_save_and_restart();   // never returns
+            }
+            // fall through: No / OK
+        case HID_ESC:
+            sv->state = SV_SETTINGS;
+            sv->needs_redraw = true;
+            break;
+
+        case HID_F1:
+            supervisor_toggle();
+            break;
+    }
+}
+
+void sv_orch90_popup_render(Supervisor_t* sv) {
+    (void)sv;
+    const char* title;
+    const char* msg1;
+    const char* msg2;
+    if (s_orch90_no_rom) {
+        title = "Orchestra 90 ROM missing";
+        msg1  = ROM_ORCH90_FILE " was not found.";
+        msg2  = "Copy it to " ROM_BASE_PATH "/ on the SD card.";
+    } else if (s_orch90_target) {
+        title = "Enable Orchestra 90?";
+        msg1  = "CoCo will restart with the Orchestra 90 ROM.";
+        msg2  = "Disable Orchestra 90 to return to Disk BASIC.";
+    } else {
+        title = "Disable Orchestra 90?";
+        msg1  = "Disabling Orchestra 90 will restart the CoCo";
+        msg2  = "with the Disk BASIC ROM.";
+    }
+
+    int count = s_orch90_no_rom ? 1 : 2;
+    bool all = (s_orch90_drawn < 0);
+    int ry = sv_render_popup_w(ORCH90_POPUP_W, title, msg1, msg2, count, all);
+    if (all) DEBUG_PRINTF("popup: %s: %s %s", title, msg1, msg2);
+    for (int i = 0; i < count; i++) {
+        if (!all && i != s_orch90_sel && i != s_orch90_drawn) continue;
+        const char* label = s_orch90_no_rom ? "OK" : (i == 0) ? "No" : "Yes";
+        sv_render_popup_row_w(ORCH90_POPUP_W, ry + i * SVP_ROW_H, label, NULL, i == s_orch90_sel);
+    }
+    s_orch90_drawn = s_orch90_sel;
 }
 
 static void settings_activate(Supervisor_t* sv, int row) {
@@ -640,6 +737,7 @@ static void settings_activate(Supervisor_t* sv, int row) {
         case SV_SET_JOYSTICK:  sv_joystick_open(sv); break;
         case SV_SET_WIFI:      sv_wifi_open(sv);     break;
         case SV_SET_DRIVEWIRE: sv_fujinet_open(sv);  break;
+        case SV_SET_ORCH90:    orch90_toggle_open(sv); break;
     }
 }
 
@@ -706,6 +804,7 @@ static const char* settings_value(int row, char* buf, size_t size) {
             return buf;
         case SV_SET_WIFI:      return wifi_mgr_state_str();
         case SV_SET_DRIVEWIRE: return dw_bus_mode_str(dw_bus_mode());
+        case SV_SET_ORCH90:    return orch90_enabled() ? "ON" : "OFF";
         default:               return NULL;
     }
 }
