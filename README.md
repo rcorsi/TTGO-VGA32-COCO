@@ -4,12 +4,14 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.14.0 — October 6, 2026** (LilyGo TTGO VGA32 port)
+**v0.15.0 — October 10, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
 - **One firmware, two CoCos** — CoCo 2 and CoCo 3 live in the same binary. Pick your machine at boot from NVS or flip it live in the supervisor menu.
 - **Cycle-accurate to the chip** — full MC6809 CPU emulation with accurate cycle counts, faithful enough to run the software that matters.
+- **MC6809 or HD6309** — switch the CPU from Setup → CPU. The Hitachi 6309 adds its extra registers and instructions, native mode and traps (new in v0.15.0, not yet tested on hardware).
+- **Orchestra-90/CC** — the stereo music cartridge's two DACs, mixed to mono on the audio jack, with its ROM in the cartridge slot.
 - **Authentic video, both eras** — MC6847 VDG for CoCo 2 (text plus every semigraphics and graphics mode) and the TCC1014 GIME for CoCo 3 (512 KB RAM with MMU, 16-color palette, native graphics up to 640 px), output over crisp VGA at 640×200 @ 60 Hz via FabGL in 64-color direct mode.
 - **Real-time speed** — CoCo 3 text and graphics modes run at a paced 60 FPS, the speed of the real machine (v0.12.0 rewrote the GIME video path; it used to manage ~39 FPS at the BASIC prompt and ~20 FPS in graphics).
 - **Real disk drives** — WD1793 floppy controller with `.DSK` and `.VDK` support, and entire disk images cached in PSRAM for zero-latency access.
@@ -319,13 +321,18 @@ src/
 ├── core/                   Emulation core (HAL-agnostic)
 │   ├── machine.h/cpp         CoCo machine — memory map, chip wiring, interrupts
 │   ├── mc6809.h/cpp          MC6809 CPU — full opcode set with cycle-accurate timing
+│   ├── mc6809_core_impl.h    CPU interpreter body, compiled once per CPU (6809 and 6309)
 │   ├── mc6809_opcodes.h      Opcode table and cycle counts
+│   ├── hd6309.cpp            HD6309 CPU — the same interpreter built with the 6309 additions
+│   ├── hd6309_ops.h          HD6309-only instructions, traps and native-mode timing
 │   ├── mc6821.h/cpp          6821 PIA — peripheral I/O
 │   ├── mc6847.h/cpp          MC6847 VDG — scanline video rendering (CoCo 2)
 │   ├── mc6551.h/cpp          MC6551 ACIA — RS-232 Pak chip emulation ($FF68-$FF6B)
 │   ├── tcc1014.h/cpp         TCC1014 GIME — MMU, video, interrupts (CoCo 3)
 │   ├── sam6883.h/cpp         SAM — address multiplexing and clock control
 │   ├── sound.h/cpp           Sound mixing core — mux/DAC/single-bit, XRoar gain model
+│   ├── orch90.h/cpp          Orchestra-90/CC cartridge — two DAC latches ($FF7A/$FF7B)
+│   ├── becker.h/cpp          Becker port ($FF41/$FF42) — DriveWire byte channel
 │   └── font_gime.h           GIME font ROM — 128 chars × 12 rows (PROGMEM)
 ├── hal/                    Hardware Abstraction Layer
 │   ├── hal.h/cpp             HAL dispatcher (init, input, render)
@@ -338,20 +345,38 @@ src/
 │   └── osd_canvas.h/cpp      OSD drawing API backed by FabGL Canvas (supervisor OSD)
 ├── supervisor/             On-Screen Display system (HAL-agnostic via osd_canvas)
 │   ├── supervisor.h/cpp      OSD lifecycle and state machine
-│   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard and Debug lists; machine popup
+│   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard and Debug lists; machine, CPU and Orchestra-90 popups
 │   ├── sv_disk.h/cpp         WD1793 FDC emulation and PSRAM cache
 │   ├── sv_filebrowser.h/cpp  Disk Manager — drive buttons, SD card browser, mount popups
 │   ├── sv_render.h/cpp       OSD rendering — green frame, list rows, popups
 │   ├── sv_debug.h/cpp        Debug overlay — CPU status, GIME state, memory dump
 │   ├── sv_joystick.h/cpp     Joy - Mouse Sensitivity popup — live cursor + adjust
-│   └── sv_keymap.h/cpp       Key mapper UI — CoCo 2 / CoCo 3 keyboard picture, remap physical keys
+│   ├── sv_keymap.h/cpp       Key mapper UI — CoCo 2 / CoCo 3 keyboard picture, remap physical keys
+│   ├── sv_wifi.h/cpp         WiFi / Debug screen — status, network scan, password entry
+│   └── sv_fujinet.h/cpp      DriveWire screen — External Server, host, port, ROM
+├── net/                    WiFi, debug server and DriveWire client
+│   ├── wifi_mgr.h/cpp        WiFi state machine, scan, NVS credentials
+│   ├── debug_server.h/cpp    HTTP/JSON debug API (core 0)
+│   ├── debug_rpc.h/cpp       Command queue that runs debug requests on the emulator core
+│   ├── png_writer.h/cpp      PNG encoder for /api/screenshot.png
+│   ├── dw_bus.h/cpp          DriveWire bus mode and configuration
+│   └── dw_client.h/cpp       TCP client for an external DriveWire server
 ├── roms/
 │   └── rom_loader.h/cpp      ROM loading with CRC-32 validation
 ├── tests/
 │   └── integration_test.h/cpp  LOADM binary verification
 └── utils/
     ├── debug.h               Debug output macros
+    ├── no_psram_memw.h       Drops the PSRAM cache-bug workaround from files that only store to internal RAM
     └── perf_probe.h/cpp      Lightweight esp_timer-based hot-path profiler
+tools/
+├── build_firmware.sh       Release images: single flashable .bin and ESP32_Bootloader package
+├── cpu_test/               Host tests for the CPU cores (vectors, 6809 vs 6309, optional XRoar comparison)
+├── gime_render_test/       Host test for the GIME scanline renderers
+├── perf/                   Benchmark and measurement scripts
+└── dw_test_server.py, dw_proxy.py   DriveWire test server and proxy
+mcp-bridge/                 Host-side MCP server that fronts the WiFi debug API
+docs/                       Technical documentation (see below)
 ```
 
 ## Documentation
@@ -361,7 +386,9 @@ All technical documentation is in the `docs/` directory:
 | File | Description |
 |------|-------------|
 | [Architecture.md](docs/Architecture.md) | System architecture — CoCo 2 and CoCo 3 extensions on TTGO VGA32 |
-| [core.md](docs/core.md) | MC6809 CPU, MC6821 PIA, MC6847 VDG, SAM6883, GIME machine integration |
+| [core.md](docs/core.md) | MC6821 PIA, MC6847 VDG, SAM6883, GIME and machine integration |
+| [cpu.md](docs/cpu.md) | MC6809 and HD6309 CPUs — registers, interrupts, native mode, traps, host tests |
+| [orchestra90.md](docs/orchestra90.md) | Orchestra-90/CC cartridge — DAC ports, audio mix, ROM and autostart |
 | [coco3-gime.md](docs/coco3-gime.md) | CoCo 3 GIME porting guide, register map, MMU |
 | [disk-hal.md](docs/disk-hal.md) | WD1793 FDC emulation, HALT/NMI flow, PSRAM disk cache |
 | [drivewire.md](docs/drivewire.md) | DriveWire modes, Becker port, built-in server; diagrams of the floppy vs DriveWire sector path |
@@ -372,10 +399,13 @@ All technical documentation is in the `docs/` directory:
 | [joystick-hal.md](docs/joystick-hal.md) | Joystick HAL — PS/2 mouse as CoCo joystick 1, comparator emulation, lessons learned |
 | [rs232-hal.md](docs/rs232-hal.md) | RS-232 Pak emulation, MC6551 ACIA, HAL bridge |
 | [runtime-machine-switch.md](docs/runtime-machine-switch.md) | Runtime CoCo 2 / CoCo 3 switching, NVS state |
+| [wifi-debug.md](docs/wifi-debug.md) | WiFi debug server — HTTP/JSON API, WiFi setup, MCP bridge |
 
 ## Known Limitations
 
 - DMK disk format is recognized but not mountable
+- HD6309 support is new and has not been tested on the board yet; it is checked on the host against XRoar's CPU core
+- Orchestra-90 plays in mono (one DAC pin), and Disk BASIC is unavailable while it is on
 - Max 128 file entries in the SD card browser
 - Joystick 2 (left port) is a stub — returns centered, button released; only Joystick 1 is active via PS/2 mouse
 - NTSC composite simulation covers RG6 (PMODE 4) artifact colour only — there is no
@@ -419,11 +449,41 @@ mode, with diagrams.
 
 ## Planned
 
-- **HD6309 CPU support** — implemented, *not yet tested on hardware*. Settings → CPU switches between MC6809 and HD6309 (native mode, extra registers and instructions, traps). The core is checked on the host against XRoar's; see [docs/hd6309.md](docs/hd6309.md).
 - Testing and adjustment of RS-232 Pak support
 - Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
 
 ## Changelog
+
+### v0.15.0 — October 10, 2026
+
+**HD6309 CPU.** Setup → CPU switches between the Motorola MC6809 and the
+Hitachi HD6309; the choice is saved and the emulator restarts with it.
+
+- The 6309 adds the E, F, W, V and MD registers, all of its extra instructions
+  and addressing modes (including TFM block moves and the 16- and 32-bit
+  multiply and divide), native mode with its shorter timing and larger
+  interrupt frame, and the illegal-instruction and divide-by-zero trap.
+- On the 6309, undefined 6809 opcodes trap as they do on the real chip. Stay on
+  the MC6809 for software that relies on them.
+- The MC6809 is untouched: its compiled interpreter is byte-for-byte the same
+  as in v0.14.0.
+- **Status:** the 6309 core matches XRoar's over millions of random
+  instructions in a host test (`tools/cpu_test`), but it has **not yet been
+  tested on the board**.
+- The debug API and MCP bridge report the CPU, read and write the 6309
+  registers, and can switch the CPU (`POST /api/machine` with `cpu=6309`).
+
+**Orchestra-90/CC sound cartridge.** Setup → Orchestra-90 turns on the
+cartridge's two DACs at `$FF7A`/`$FF7B` and loads `orch90.rom` in place of Disk
+BASIC, starting it automatically.
+
+- The two channels are mixed to mono, because the board has one DAC pin.
+- The toggle needs `orch90.rom` in `/roms/` and restarts the emulator; turning
+  it off brings Disk BASIC back.
+
+**Documentation.** New [docs/cpu.md](docs/cpu.md) (MC6809 and HD6309) and
+[docs/orchestra90.md](docs/orchestra90.md); `docs/core.md` now covers the
+support chips and the machine only.
 
 ### v0.14.0 — October 6, 2026
 
@@ -471,31 +531,7 @@ own.
   `enabled=0` saves the network but leaves WiFi off. The file is read only when
   you choose the row, and the password in it is plain text.
 
-### v0.12.2 — October 1, 2026
-
-**CoCo 3 frame time roughly halved, so 60 FPS now has real headroom.** v0.12.1
-ran 2–3 FPS under 60 in `WIDTH 40`, `WIDTH 80` and `HSCREEN 2`: frames were
-taking almost the whole 1/60 s. They now take about half of it.
-
-| CoCo 3 mode | v0.12.1 | v0.12.2 |
-|---|---|---|
-| BASIC prompt, `PMODE 4`, `HSCREEN 3` | 59–60 FPS | **60** |
-| `WIDTH 40` | ~57.5 | **60** |
-| `WIDTH 80` | ~56 | **60** |
-| `HSCREEN 2` | ~56 | **60** |
-| Full-screen `HCLS` loop in `HSCREEN 2` | — | **60** |
-
-- **Chip-bug workaround applied only where needed.** ESP32 chips before
-  revision 3 need a compiler workaround for a PSRAM bug, which slows every
-  memory store. It now stays off in the CPU, GIME, PIA and audio code, which
-  only store to internal RAM, and on everywhere else. This alone removed about
-  40% of each frame. Build with `-DPSRAM_MEMW_KEEP` to apply it everywhere again.
-- **Faster 6809 memory access.** The CPU core reads and writes ordinary RAM
-  directly through a page table that follows the GIME MMU, instead of calling
-  out for every byte.
-- Tested with a disk game and OS-9 at a steady 60 FPS.
-
-Older releases (v0.12.1 and earlier) are in [ChangeHistory.md](ChangeHistory.md).
+Older releases (v0.12.2 and earlier) are in [ChangeHistory.md](ChangeHistory.md).
 
 ## ⚠️ Vibe Coding Alert
 

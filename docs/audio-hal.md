@@ -231,6 +231,8 @@ The MUX only controls the speaker path; the joystick comparator always reads the
 
 ## Orchestra-90/CC
 
+Full description in `orchestra90.md`; the audio side in short:
+
 `src/core/orch90.cpp` is a port of XRoar's `orch90.c`: two write-only 8-bit unsigned DAC latches, left at `$FF7A` and right at `$FF7B`. There is no status register, timer or interrupt; the program writes sample values directly.
 
 - **Decode:** `machine_write_coco2()` / `machine_write_coco3()` forward the two addresses to `orch90_write()` only while `orch90_enabled()` (Settings → Orchestra-90, read from NVS at boot). Reads return `$FF`.

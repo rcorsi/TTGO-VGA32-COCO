@@ -349,7 +349,7 @@ The supervisor's coordinate system is the framebuffer (`DISPLAY_WIDTH` × `DISPL
 |---------|-------|-------------|
 | BOARD_TYPE | BOARD_TYPE_VGA32 | TTGO VGA32 v1.4 |
 | MACHINE_TYPE | 4 (CoCo 3) or 3 (CoCo 2) | Compile-time default; runtime-switchable via NVS |
-| CPU_VARIANT | 0 | MC6809 (default only; Settings → CPU selects MC6809 or HD6309 at runtime, see `hd6309.md`) |
+| CPU_VARIANT | 0 | MC6809 (default only; Settings → CPU selects MC6809 or HD6309 at runtime, see `cpu.md`) |
 | RAM_SIZE_KB | 512 (CoCo 3) | |
 | CPU_CLOCK_HZ | 895000 | 0.895 MHz NTSC |
 | TARGET_FPS | 60 | NTSC timing |
@@ -447,7 +447,7 @@ All files below are **required**. Missing any will trigger the boot validation h
 machine_run_frame()
   for scanline = 0..261:
     sv_disk_tick()              // Deferred INTRQ countdown
-    mc6809_run(~57 cycles)      // CPU executes instructions
+    mc6809_run_variant(~57 cycles)  // CPU executes instructions (MC6809 or HD6309)
       check_interrupts()        //   NMI > FIRQ > IRQ dispatch
       execute_one()             //   Fetch-decode-execute
         machine_read/write()    //   Memory/IO dispatch

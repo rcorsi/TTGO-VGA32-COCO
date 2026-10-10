@@ -3,6 +3,30 @@
 Releases before the two most recent ones. The latest changes are in the
 [Changelog section of the README](README.md#changelog).
 
+### v0.12.2 — October 1, 2026
+
+**CoCo 3 frame time roughly halved, so 60 FPS now has real headroom.** v0.12.1
+ran 2–3 FPS under 60 in `WIDTH 40`, `WIDTH 80` and `HSCREEN 2`: frames were
+taking almost the whole 1/60 s. They now take about half of it.
+
+| CoCo 3 mode | v0.12.1 | v0.12.2 |
+|---|---|---|
+| BASIC prompt, `PMODE 4`, `HSCREEN 3` | 59–60 FPS | **60** |
+| `WIDTH 40` | ~57.5 | **60** |
+| `WIDTH 80` | ~56 | **60** |
+| `HSCREEN 2` | ~56 | **60** |
+| Full-screen `HCLS` loop in `HSCREEN 2` | — | **60** |
+
+- **Chip-bug workaround applied only where needed.** ESP32 chips before
+  revision 3 need a compiler workaround for a PSRAM bug, which slows every
+  memory store. It now stays off in the CPU, GIME, PIA and audio code, which
+  only store to internal RAM, and on everywhere else. This alone removed about
+  40% of each frame. Build with `-DPSRAM_MEMW_KEEP` to apply it everywhere again.
+- **Faster 6809 memory access.** The CPU core reads and writes ordinary RAM
+  directly through a page table that follows the GIME MMU, instead of calling
+  out for every byte.
+- Tested with a disk game and OS-9 at a steady 60 FPS.
+
 ### v0.12.1 — October 1, 2026
 
 - **Fixed: black rectangle left on screen after closing the supervisor menu in
