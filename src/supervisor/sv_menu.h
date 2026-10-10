@@ -41,7 +41,7 @@ void sv_menu_render(Supervisor_t* sv);
 // two tiles whose selection changed are redrawn.
 void sv_menu_invalidate(void);
 
-// Machine select (SV_MACHINE_SELECT state): a popup over the Settings list,
+// Machine select (SV_MACHINE_SELECT state): a popup over the Machine submenu,
 // opened from its "Machine" row. Picking the other machine asks to confirm
 // the restart in the same window (defaults to No); on Yes it calls
 // supervisor_set_machine_type(), which persists the choice and restarts.
@@ -54,8 +54,7 @@ void sv_machine_select_invalidate(void);
 // (SV_KEYBOARD_MENU state): icon lists in the wide green frame. Sub-screens
 // use these row numbers to put the cursor back on their own row.
 enum SV_SettingsRow : uint8_t {
-    SV_SET_MACHINE,     // opens machine-select
-    SV_SET_CPU,         // MC6809 / HD6309 switch (asks to restart)
+    SV_SET_MACHINE,     // opens the Machine submenu
     SV_SET_RS232,       // RS-232 Pak toggle (shares UART0 with the Echo Log)
     SV_SET_KEYBOARD,    // opens the Keyboard submenu
     SV_SET_JOYSTICK,    // Joy - Mouse Sensitivity screen
@@ -63,6 +62,14 @@ enum SV_SettingsRow : uint8_t {
     SV_SET_DRIVEWIRE,   // DriveWire screen
     SV_SET_ORCH90,      // Orchestra-90 toggle (asks to restart)
     SV_SET_COUNT
+};
+// Machine submenu (SV_MACHINE_MENU state). Everything here is fixed at boot,
+// so each row asks to confirm and restarts the emulator.
+enum SV_MachineRow : uint8_t {
+    SV_MACH_TYPE,       // CoCo 2 / CoCo 3 (machine-select popup)
+    SV_MACH_CPU,        // MC6809 / HD6309
+    SV_MACH_RAM,        // CoCo 3 memory: 128K / 512K / 1024K / 2048K
+    SV_MACH_COUNT
 };
 enum SV_KeyboardRow : uint8_t {
     SV_KBD_LANGUAGE,    // cycles the PS/2 keyboard layout
@@ -73,6 +80,8 @@ void sv_settings_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_settings_render(Supervisor_t* sv);
 void sv_keyboard_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_keyboard_menu_render(Supervisor_t* sv);
+void sv_machine_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
+void sv_machine_menu_render(Supervisor_t* sv);
 // Force the next render to repaint the whole Settings / Keyboard list.
 void sv_settings_invalidate(void);
 
@@ -83,11 +92,18 @@ void sv_settings_invalidate(void);
 void sv_orch90_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_orch90_popup_render(Supervisor_t* sv);
 
-// SV_CPU_POPUP state: popup over the Settings list, opened from the CPU row.
+// SV_CPU_POPUP state: popup over the Machine submenu, opened from its CPU row.
 // Asks to confirm switching to the other CPU (No / Yes, defaults to No); Yes
 // persists it and restarts.
 void sv_cpu_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_cpu_popup_render(Supervisor_t* sv);
+
+// SV_RAM_SELECT state: popup over the Machine submenu, opened from its
+// "CoCo 3 Memory" row. Lists the four sizes ("(current)" on the active one);
+// picking another asks to confirm the restart (No / Yes, defaults to No), then
+// persists it with supervisor_save_coco3_ram() and restarts.
+void sv_ram_select_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
+void sv_ram_select_render(Supervisor_t* sv);
 
 // 32x12 row icons for lists in the wide frame, drawn in code. bg/fg are the
 // row's own colours so an icon reads on the green box and on the selection bar.

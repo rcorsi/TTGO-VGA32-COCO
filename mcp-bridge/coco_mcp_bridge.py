@@ -147,16 +147,17 @@ def reset() -> dict:
 
 @mcp.tool()
 def get_machine() -> dict:
-    """Get the current machine type (3 = CoCo 2, 4 = CoCo 3) and CPU
-    ("6809" or "6309")."""
+    """Get the current machine type (3 = CoCo 2, 4 = CoCo 3), CPU ("6809" or
+    "6309") and CoCo 3 memory size in KB."""
     return _get("/api/machine").json()
 
 
 @mcp.tool()
-def set_machine(machine_type: int, wait: bool = True, cpu: int | None = None) -> dict:
+def set_machine(machine_type: int, wait: bool = True, cpu: int | None = None,
+                ram_kb: int | None = None) -> dict:
     """Switch machine type (3 = CoCo 2, 4 = CoCo 3) and, optionally, the CPU
-    (`cpu` = 6809 or 6309). Pass the current machine type to change only
-    the CPU.
+    (`cpu` = 6809 or 6309) and the CoCo 3 memory size (`ram_kb` = 128, 512,
+    1024 or 2048). Pass the current machine type to change only the others.
 
     IMPORTANT: this reboots the device — the current connection drops. If
     `wait` is true, the tool polls /api/status until the device comes back
@@ -165,6 +166,8 @@ def set_machine(machine_type: int, wait: bool = True, cpu: int | None = None) ->
     fields = {"type": machine_type}
     if cpu is not None:
         fields["cpu"] = cpu
+    if ram_kb is not None:
+        fields["ram"] = ram_kb
     resp = _post("/api/machine", **fields).json()
     if not wait or not resp.get("rebooting"):
         return resp
@@ -175,7 +178,8 @@ def set_machine(machine_type: int, wait: bool = True, cpu: int | None = None) ->
         try:
             st = _get("/api/status").json()
             if int(st.get("machine_type", -1)) == machine_type and \
-               (cpu is None or st.get("cpu") == str(cpu)):
+               (cpu is None or st.get("cpu") == str(cpu)) and \
+               (ram_kb is None or int(st.get("coco3_ram_kb", -1)) == ram_kb):
                 return {"rebooted": True, "status": st}
         except Exception:
             pass

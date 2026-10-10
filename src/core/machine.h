@@ -66,6 +66,16 @@ extern uint8_t g_machine_type;
 // machine_init(); changing it afterwards needs a restart.
 extern uint8_t g_cpu_variant;
 
+// CoCo 3 RAM in KB (128, 512, 1024 or 2048). Initialized from NVS at boot,
+// default = compile-time COCO3_RAM_KB. Read by machine_init(), which lowers it
+// to 512 if the chosen size cannot be allocated; changing it needs a restart.
+extern uint16_t g_coco3_ram_kb;
+
+// True for the sizes above.
+static inline bool coco3_ram_kb_valid(unsigned kb) {
+    return kb == 128 || kb == 512 || kb == 1024 || kb == 2048;
+}
+
 // Cartridge ROM selection, indexed [0] = CoCo 2, [1] = CoCo 3.
 // g_cart_rom_request: file to load instead of ROM_DISK_FILE (nullptr = disk11);
 //   set before machine_load_roms() by the DriveWire bus (HDB-DOS Becker ROM)

@@ -642,7 +642,7 @@ static void perform_dump(Supervisor_t* sv) {
     snprintf(path, sizeof(path), "/DUMPS/%s-CPU.txt", dbg.dump_name);
     cpu_bytes = write_hex_cpu(path);
 
-    uint32_t ram_size = (g_machine_type == 4) ? COCO3_PHYSICAL_RAM : 0x10000;
+    uint32_t ram_size = (g_machine_type == 4) ? (uint32_t)m->ram_size : 0x10000;
     Serial.printf("[DUMP] Writing %u KB physical RAM to /DUMPS/%s-RAM.txt ...\n",
                   (unsigned)(ram_size / 1024), dbg.dump_name);
     snprintf(path, sizeof(path), "/DUMPS/%s-RAM.txt", dbg.dump_name);
@@ -806,7 +806,7 @@ void sv_debug_dump_render(Supervisor_t* sv) {
     dbg_text(tft, x, y, l); y += 10;
     snprintf(l, sizeof(l), "  %s-RAM.txt  %uKB physical RAM",
              dbg.dump_name_len ? dbg.dump_name : "NAME",
-             (unsigned)(((g_machine_type == 4) ? COCO3_PHYSICAL_RAM : 0x10000) / 1024));
+             (unsigned)(((g_machine_type == 4) ? (uint32_t)g_coco3_ram_kb * 1024 : 0x10000) / 1024));
     dbg_text(tft, x, y, l); y += 14;
     tft->drawString("Machine is paused during the dump.", x, y);
 }

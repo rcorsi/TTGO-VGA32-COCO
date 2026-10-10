@@ -130,6 +130,7 @@ void setup() {
     // Must happen before machine_init() so later steps can branch on it.
     g_machine_type = supervisor_load_machine_type();
     g_cpu_variant  = supervisor_load_cpu_variant();
+    g_coco3_ram_kb = supervisor_load_coco3_ram();
 
     // DriveWire bus mode (Becker port). Read before ROM loading so later
     // phases can pick the HDB-DOS Becker ROM instead of disk11.rom.
@@ -140,6 +141,7 @@ void setup() {
     supervisor_load_cart_config();
     DEBUG_PRINTF("g_machine_type = %u (compile-time default %u)", g_machine_type, (uint8_t)MACHINE_TYPE);
     DEBUG_PRINTF("CPU: %s", g_cpu_variant == CPU_VARIANT_HD6309 ? "HD6309" : "MC6809");
+    DEBUG_PRINTF("CoCo 3 RAM: %u KB", (unsigned)g_coco3_ram_kb);
 
     // Initialize emulated machine
     machine_init(&coco);

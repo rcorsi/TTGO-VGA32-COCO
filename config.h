@@ -25,7 +25,7 @@
 // Firmware version (reported by the WiFi debug API /api/status and shown on
 // the supervisor About screen). Bump both of these together on a release —
 // they are the single source of truth; nothing else should hardcode a version.
-#define FIRMWARE_VERSION        "0.15.0"
+#define FIRMWARE_VERSION        "0.15.1"
 #define FIRMWARE_BUILD_DATE     "10.10.2026"
 
 // ------------------------------------------------------------
@@ -225,6 +225,12 @@
 #define ROM_ORCH90_FILE         "orch90.rom"
 #define COCO3_ROM_SIZE          (32 * 1024)
 #define COCO3_PHYSICAL_RAM      (512 * 1024)
+
+// CoCo 3 RAM in KB: 128, 512, 1024 or 2048. Compile-time default only — the
+// active size is g_coco3_ram_kb (core/machine.h), initialized from NVS at boot
+// and changed from Setup -> Machine -> CoCo 3 Memory. 1024 and 2048 emulate a
+// memory expansion board (extra MMU bits 7-6, video bank in $FF9B).
+#define COCO3_RAM_KB            512
 
 // ============================================================
 // Memory layout

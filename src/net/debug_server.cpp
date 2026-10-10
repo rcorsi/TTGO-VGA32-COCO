@@ -131,6 +131,7 @@ static void h_status() {
     j += "\"machine_type\":" + String(g_machine_type);
     j += ",\"machine\":\"" + String(machine_name(g_machine_type)) + "\"";
     j += ",\"cpu\":\"" + String(cpu_name(g_cpu_variant)) + "\"";
+    j += ",\"coco3_ram_kb\":" + String(g_coco3_ram_kb);
     j += ",\"paused\":" + String(debug_rpc_is_paused() ? "true" : "false");
     j += ",\"firmware\":\"" FIRMWARE_VERSION "\"";
     j += ",\"api\":" + String(DEBUG_API_VERSION);
@@ -407,7 +408,8 @@ static void h_reset() {
 static void h_get_machine() {
     String j = String("{\"machine_type\":") + g_machine_type +
                ",\"machine\":\"" + machine_name(g_machine_type) +
-               "\",\"cpu\":\"" + cpu_name(g_cpu_variant) + "\"}";
+               "\",\"cpu\":\"" + cpu_name(g_cpu_variant) +
+               "\",\"coco3_ram_kb\":" + g_coco3_ram_kb + "}";
     send_json(200, j);
 }
 
@@ -423,17 +425,25 @@ static void h_post_machine() {
         if (c != 6809 && c != 6309) { send_err(400, "cpu must be 6809 or 6309"); return; }
         cpu = (c == 6309) ? CPU_VARIANT_HD6309 : CPU_VARIANT_MC6809;
     }
-    if (t == g_machine_type && cpu == g_cpu_variant) { h_get_machine(); return; }
+    // Optional ram=128|512|1024|2048: CoCo 3 memory in KB, also applied at boot.
+    uint16_t ram = g_coco3_ram_kb;
+    if (s_server.hasArg("ram")) {
+        uint32_t kb = arg_u32("ram", 0);
+        if (!coco3_ram_kb_valid(kb)) { send_err(400, "ram must be 128, 512, 1024 or 2048"); return; }
+        ram = (uint16_t)kb;
+    }
+    if (t == g_machine_type && cpu == g_cpu_variant && ram == g_coco3_ram_kb) { h_get_machine(); return; }
 
     // Respond BEFORE switching: supervisor_set_machine_type() reboots and
     // never returns. Freeze core 1 first to avoid touching emulator state
     // mid-frame during the disk-cache flush + state save.
     send_json(200, String("{\"rebooting\":true,\"machine_type\":") + t +
-                   ",\"cpu\":\"" + cpu_name(cpu) + "\"}");
+                   ",\"cpu\":\"" + cpu_name(cpu) + "\",\"coco3_ram_kb\":" + ram + "}");
     delay(200);
     debug_rpc_set_paused(true);
     delay(50);
     supervisor_save_cpu_variant(cpu);
+    supervisor_save_coco3_ram(ram);
     supervisor_set_machine_type(t);   // flushes caches, saves state, esp_restart()
 }
 

@@ -61,6 +61,9 @@ uint8_t g_machine_type = MACHINE_TYPE;
 // Runtime-active CPU. Set from NVS before machine_init() in the main sketch.
 uint8_t g_cpu_variant = CPU_VARIANT;
 
+// CoCo 3 RAM size in KB. Set from NVS before machine_init() in the main sketch.
+uint16_t g_coco3_ram_kb = COCO3_RAM_KB;
+
 const char* g_cart_rom_request[2]  = { nullptr, nullptr };
 const char* g_cart_rom_loaded[2]   = { nullptr, nullptr };
 bool        g_cart_rom_fallback[2] = { false, false };
@@ -197,11 +200,9 @@ uint8_t machine_read_coco3(uint16_t addr) {
     // Phase 5: Fast path — most reads are RAM below $FE00
     if (__builtin_expect(addr < 0xFE00, 1)) {
         unsigned bank = g->active_banks[addr >> 13];
-        if (g->TY || bank < 0x3C) {
-            uint32_t Z = ((uint32_t)bank << 13) | (addr & 0x1FFF);
-            if (__builtin_expect(Z < COCO3_PHYSICAL_RAM, 1))
-                return m->ram_physical[Z];
-            return 0xFF;
+        if (g->TY || (bank & 0x3F) < 0x3C) {
+            uint32_t Z = (((uint32_t)bank << 13) | (addr & 0x1FFF)) & g->ram_mask;
+            return m->ram_physical[Z];
         }
         // bank >= 0x3C, TY=0: ROM area — need full decode for ROM/CTS
         // Fall through to slow path
@@ -222,11 +223,8 @@ uint8_t machine_read_coco3(uint16_t addr) {
     if (is_reg) return reg_data;
 
     // RAM access
-    if (g->RAS) {
-        if (g->Z < COCO3_PHYSICAL_RAM)
-            return m->ram_physical[g->Z];
-        return 0xFF;
-    }
+    if (g->RAS)
+        return m->ram_physical[g->Z & g->ram_mask];
 
     switch (g->S) {
     case 0: // ROM — use CPU address, NOT GIME Z (which depends on MMU banks)
@@ -325,11 +323,9 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
     // to RAM underneath ROM before switching to all-RAM mode (TY=1).
     if (__builtin_expect(addr < 0xFE00, 1)) {
         unsigned bank = g->active_banks[addr >> 13];
-        uint32_t Z = ((uint32_t)bank << 13) | (addr & 0x1FFF);
-        if (__builtin_expect(Z < COCO3_PHYSICAL_RAM, 1)) {
-            m->ram_physical[Z] = val;
-            g->dirty_frame = true;
-        }
+        uint32_t Z = (((uint32_t)bank << 13) | (addr & 0x1FFF)) & g->ram_mask;
+        m->ram_physical[Z] = val;
+        g->dirty_frame = true;
         return;
     }
 
@@ -354,10 +350,8 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
 
     // RAM access (from slow path — $FE00+ with MC3, or other RAS paths)
     if (g->RAS) {
-        if (g->Z < COCO3_PHYSICAL_RAM) {
-            m->ram_physical[g->Z] = val;
-            g->dirty_frame = true;
-        }
+        m->ram_physical[g->Z & g->ram_mask] = val;
+        g->dirty_frame = true;
         return;
     }
 
@@ -394,9 +388,18 @@ void machine_init_coco3(Machine* m) {
     memset(m, 0, sizeof(Machine));
     g_machine = m;
 
-    // Allocate 512KB physical RAM
-    m->ram_size = COCO3_PHYSICAL_RAM;
-    m->ram_physical = machine_alloc(m->ram_size, "RAM-512K");
+    // Allocate physical RAM: 128 KB, 512 KB, 1 MB or 2 MB (g_coco3_ram_kb).
+    // The larger sizes share the 4 MB of PSRAM with the disk caches, so fall
+    // back to 512 KB rather than fail to boot if the block is not there.
+    if (!coco3_ram_kb_valid(g_coco3_ram_kb)) g_coco3_ram_kb = COCO3_RAM_KB;
+    m->ram_size = (size_t)g_coco3_ram_kb * 1024;
+    m->ram_physical = machine_alloc(m->ram_size, "RAM-CoCo3");
+    if (!m->ram_physical && g_coco3_ram_kb > 512) {
+        DEBUG_PRINTF("  RAM: %u KB not available, falling back to 512 KB", (unsigned)g_coco3_ram_kb);
+        g_coco3_ram_kb = 512;
+        m->ram_size = COCO3_PHYSICAL_RAM;
+        m->ram_physical = machine_alloc(m->ram_size, "RAM-CoCo3");
+    }
     if (!m->ram_physical) return;
     // Alias m->ram to the first 64KB so the CoCo 2 code path (not running
     // on this boot, but present in the binary) sees a valid buffer.
@@ -503,15 +506,13 @@ void machine_reset_coco3(Machine* m) {
     DEBUG_PRINT("Machine: CoCo 3 RESET");
 
     // Clear RAM (CoCo 3 clears to 0 on hard reset)
-    memset(m->ram_physical, 0, COCO3_PHYSICAL_RAM);
+    memset(m->ram_physical, 0, m->ram_size);
 
     // Reset GIME
     tcc1014_reset(&m->gime);
 
     // Wire GIME to physical RAM
-    m->gime.ram = m->ram_physical;
-    m->gime.ram_size = COCO3_PHYSICAL_RAM;
-    tcc1014_update_active_banks(&m->gime);   // rebuild the CPU's RAM page tables
+    tcc1014_set_ram(&m->gime, m->ram_physical, (uint32_t)m->ram_size);   // also rebuilds the CPU's RAM page tables
 
     // Reset PIAs
     mc6821_reset(&m->pia0);

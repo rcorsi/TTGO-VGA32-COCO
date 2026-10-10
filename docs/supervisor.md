@@ -10,7 +10,7 @@ The OSD is rendered into the FabGL VGA framebuffer through the **OSD canvas** (`
 
 **Activation:** F3 toggles the overlay on/off. While active, `supervisor_update_and_render()` returns `true`, telling the main loop to skip emulation. (F1/F2 are reserved for the CoCo 3 keyboard matrix — see `keyboard-hal.md`.)
 
-**Machine selection:** The Settings menu's "Machine" row reflects the runtime-active machine (`g_machine_type`, not the compile-time `MACHINE_NAME`). ENTER opens the `SV_MACHINE_SELECT` popup over the Settings list (CoCo 2 / CoCo 3, `(current)` marker on the active one); ESC returns to Settings. Picking the other machine asks to confirm the restart in the same popup (No / Yes, defaults to No); accepting calls `supervisor_set_machine_type()` which saves supervisor state, persists the choice in NVS (`"sv"` namespace, `"machine_type"` key), and calls `esp_restart()`. On boot, `supervisor_load_machine_type()` returns the NVS value or the compile-time `MACHINE_TYPE`. See `runtime-machine-switch.md` for the complete flow.
+**Machine selection:** The Settings menu's "Machine" row reflects the runtime-active machine (`g_machine_type`, not the compile-time `MACHINE_NAME`) and opens the Machine submenu; its own "Machine" row opens the `SV_MACHINE_SELECT` popup over that list (CoCo 2 / CoCo 3, `(current)` marker on the active one); ESC returns to the submenu. Picking the other machine asks to confirm the restart in the same popup (No / Yes, defaults to No); accepting calls `supervisor_set_machine_type()` which saves supervisor state, persists the choice in NVS (`"sv"` namespace, `"machine_type"` key), and calls `esp_restart()`. On boot, `supervisor_load_machine_type()` returns the NVS value or the compile-time `MACHINE_TYPE`. See `runtime-machine-switch.md` for the complete flow.
 
 ---
 
@@ -286,7 +286,7 @@ The "Dump RAM to SD" row of the Debug submenu is an action, not a page: ENTER on
 | File | Contents |
 |---|---|
 | `/DUMPS/<NAME>-CPU.txt` | 64KB CPU address space via `machine_read($0000–$FFFF)` — RAM through the current MMU map, plus mapped ROM and I/O (what the 6809 sees now). 4-digit addresses. |
-| `/DUMPS/<NAME>-RAM.txt` | Full physical RAM straight from `m->ram_physical`: 512KB on CoCo 3 (5-digit addresses), 64KB on CoCo 2. |
+| `/DUMPS/<NAME>-RAM.txt` | Full physical RAM straight from `m->ram_physical`: the configured size on CoCo 3 (512KB by default) (5-digit addresses), 64KB on CoCo 2. |
 
 Lines are batched through a 4KB static buffer (`s_dump_buf`) so a 512KB dump becomes ~256 bulk SD writes rather than 32K per-line writes. The RAM hex file is ~2.4 MB and the write blocks for roughly 20–30s on the 4 MHz SD bus; serial logging reports progress.
 
@@ -352,9 +352,17 @@ SV_CONTENT_Y = BORDER_Y + TITLE_H + 4
 
 ---
 
-### CPU — MC6809 / HD6309
+### Machine submenu — machine type, CPU, CoCo 3 memory
 
-The Settings row **CPU** shows the active CPU (`g_cpu_variant`). ENTER opens a popup (`SV_CPU_POPUP` state, same 480 px window as the Orchestra-90 one) asking No / Yes to switch to the other CPU; Yes calls `supervisor_save_cpu_variant()` (NVS `"sv"` / `cpu_variant`) and `supervisor_save_and_restart()`. On boot `supervisor_load_cpu_variant()` seeds `g_cpu_variant` before `machine_init()`. See `cpu.md`.
+The Settings row **Machine** opens a submenu (`SV_MACHINE_MENU` state, an icon list like the Keyboard submenu) with three rows. All three are fixed at boot, so each asks to confirm (No / Yes, default No) and restarts the emulator. The Settings list has room for seven rows, which is why these live in a submenu.
+
+| Row | Value shown | Popup | Persisted as |
+|---|---|---|---|
+| Machine | CoCo 2 / CoCo 3 | `SV_MACHINE_SELECT` | `machine_type` |
+| CPU | MC6809 / HD6309 | `SV_CPU_POPUP` — switches to the other CPU; see `cpu.md` | `cpu_variant` |
+| CoCo 3 Memory | 128K / 512K / 1024K / 2048K | `SV_RAM_SELECT` — lists the four sizes with `(current)` on the active one, then confirms; see "RAM sizes" in `coco3-gime.md` | `coco3_ram` |
+
+`supervisor_load_cpu_variant()` and `supervisor_load_coco3_ram()` seed `g_cpu_variant` and `g_coco3_ram_kb` in `setup()` before `machine_init()`. The memory size is used by the CoCo 3 only; it can be set while the CoCo 2 is running and applies the next time the CoCo 3 is selected.
 
 ### Cartridge ROM — Orchestra-90 toggle
 
@@ -386,6 +394,7 @@ Namespace: `"sv"`. Stored in NVS flash.
 | `joyInv` | Bool | Mouse-as-joystick Invert-Y flag (default false) |
 | `orch90` | Bool | Orchestra-90 DAC ports enabled (default false) |
 | `cpu_variant` | UChar | 0 = MC6809, 1 = HD6309 (default `CPU_VARIANT`) |
+| `coco3_ram` | UShort | CoCo 3 memory in KB: 128, 512, 1024 or 2048 (default `COCO3_RAM_KB`) |
 | `cart_rom` | String | Cartridge ROM file in `/roms/` loaded at `$C000`, set to `orch90.rom` by the Orchestra-90 toggle; absent = default (Disk BASIC) |
 
 - `supervisor_save_state()` — writes current dir + all mounted disk paths
