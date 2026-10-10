@@ -34,6 +34,28 @@
 // Branchless CC_PUT: ternary compiles to conditional-move on Xtensa (MOVNEZ)
 #define CC_PUT(f,c)  do { cpu->cc = (cpu->cc & ~(f)) | ((c) ? (f) : 0); } while(0)
 
+#if CPU_HD6309
+#define NATIVE()   (cpu->md & HD6309_MD_NM)
+#define GET_E()    ((uint8_t)(cpu->w >> 8))
+#define GET_F()    ((uint8_t)(cpu->w & 0xFF))
+#define SET_E(v)   do { cpu->w = (cpu->w & 0x00FF) | ((uint16_t)(uint8_t)(v) << 8); } while(0)
+#define SET_F(v)   do { cpu->w = (cpu->w & 0xFF00) | (uint8_t)(v); } while(0)
+// Native mode stacks E and F between DP and B whenever the entire state is
+// saved, at two extra cycles; RTI pulls them back in the same place.
+#define HD6309_PUSH_EF(cpu) do { if (NATIVE()) { push8s(cpu, GET_F()); push8s(cpu, GET_E()); cpu->cycles += 2; } } while(0)
+#define HD6309_PULL_EF(cpu) do { if (NATIVE()) { SET_E(pull8s(cpu)); SET_F(pull8s(cpu)); cpu->cycles += 2; } } while(0)
+#else
+#define HD6309_PUSH_EF(cpu) ((void)0)
+#define HD6309_PULL_EF(cpu) ((void)0)
+#endif
+
+// Taking an interrupt abandons a part-done TFM; RTI restarts it from the top.
+#if CPU_HD6309
+#define HD6309_IRQ_ENTRY(cpu) (cpu->tfm_busy = false)
+#else
+#define HD6309_IRQ_ENTRY(cpu) ((void)0)
+#endif
+
 // ============================================================
 // Memory access helpers
 // ============================================================
@@ -249,9 +271,34 @@ static uint16_t addr_indexed(MC6809* cpu) {
         return ea;
     }
 
+#if CPU_HD6309
+    // W-based modes use the postbytes the 6809 leaves undefined:
+    // $8F/$90 ,W   $AF/$B0 n16,W   $CF/$D0 ,W++   $EF/$F0 ,--W  (second = indirect)
+    if ((postbyte & 0x9F) == 0x8F || (postbyte & 0x9F) == 0x90) {
+        switch ((postbyte >> 5) & 0x03) {
+            case 0:  ea = cpu->w; break;
+            case 1:  ea = cpu->w + fetch16(cpu); cpu->cycles += 2; break;
+            case 2:  ea = cpu->w; cpu->w += 2;   cpu->cycles += 1; break;
+            default: cpu->w -= 2; ea = cpu->w;   cpu->cycles += 1; break;
+        }
+        if (postbyte & 0x10) {
+            ea = mem_read16(cpu, ea);
+            cpu->cycles += 3;
+        }
+        return ea;
+    }
+#endif
+
     uint16_t* reg = idx_reg(cpu, postbyte);
     indirect = (postbyte & 0x10) != 0;
     uint8_t mode = postbyte & 0x0F;
+
+#if CPU_HD6309
+    // Native mode drops the dead cycles from these modes. Taken off before the
+    // mode adds its own count; cycles is unsigned, so the order is harmless.
+    static const uint8_t native_save[16] = { 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 2, 0, 2, 0, 1 };
+    if (NATIVE()) cpu->cycles -= native_save[mode];
+#endif
 
     switch (mode) {
         case 0x00: // ,R+  (no indirect allowed)
@@ -294,6 +341,23 @@ static uint16_t addr_indexed(MC6809* cpu) {
             ea = *reg + (int16_t)(int8_t)GET_A();
             cpu->cycles += indirect ? 4 : 1;
             break;
+
+#if CPU_HD6309
+        case 0x07: // E,R
+            ea = *reg + (int16_t)(int8_t)GET_E();
+            cpu->cycles += indirect ? 4 : 1;
+            break;
+
+        case 0x0A: // F,R
+            ea = *reg + (int16_t)(int8_t)GET_F();
+            cpu->cycles += indirect ? 4 : 1;
+            break;
+
+        case 0x0E: // W,R
+            ea = *reg + cpu->w;
+            cpu->cycles += indirect ? 4 : 1;
+            break;
+#endif
 
         case 0x08: { // 8-bit offset, R
             int8_t offset = (int8_t)fetch8(cpu);
@@ -356,8 +420,9 @@ static uint16_t addr_indexed(MC6809* cpu) {
 }
 
 // ============================================================
-// TFR/EXG register access
+// TFR/EXG register access (MC6809; the HD6309 rules are in hd6309_ops.h)
 // ============================================================
+#if !CPU_HD6309
 
 static uint16_t tfr_read_reg(MC6809* cpu, uint8_t code) {
     switch (code & 0x0F) {
@@ -389,6 +454,8 @@ static void tfr_write_reg(MC6809* cpu, uint8_t code, uint16_t val) {
         case 0xB: cpu->dp = (uint8_t)val; break;
     }
 }
+
+#endif // !CPU_HD6309
 
 // ============================================================
 // PSHS/PULS/PSHU/PULU helpers
@@ -473,19 +540,37 @@ static inline __attribute__((always_inline)) bool eval_branch(MC6809* cpu, uint8
     return false;
 }
 
+#if CPU_HD6309
+#include "hd6309_ops.h"
+#endif
+
 // ============================================================
 // Page 2 opcode execution ($10 prefix)
 // ============================================================
 static void execute_page2(MC6809* cpu) {
     uint8_t opcode = fetch8(cpu);
 
+#if CPU_HD6309
+    // Repeated prefix bytes are skipped, one cycle each; the first one wins.
+    while (opcode == 0x10 || opcode == 0x11) {
+        opcode = fetch8(cpu);
+        cpu->cycles += 1;
+    }
+    // Long branches ($10 $21-$2F; $10 $20 is illegal on the 6309)
+    if (opcode >= 0x21 && opcode <= 0x2F) {
+#else
     // Long branches ($10 $2x)
     if (opcode >= 0x20 && opcode <= 0x2F) {
+#endif
         int16_t offset = (int16_t)fetch16(cpu);
         bool take = eval_branch(cpu, opcode & 0x0F);
         if (take) {
             cpu->pc += offset;
+#if CPU_HD6309
+            cpu->cycles += NATIVE() ? 5 : 6;
+#else
             cpu->cycles += 6;
+#endif
         } else {
             cpu->cycles += 5;
         }
@@ -501,6 +586,7 @@ static void execute_page2(MC6809* cpu) {
             push16s(cpu, cpu->y);
             push16s(cpu, cpu->x);
             push8s(cpu, cpu->dp);
+            HD6309_PUSH_EF(cpu);
             push8s(cpu, GET_B());
             push8s(cpu, GET_A());
             push8s(cpu, cpu->cc);
@@ -690,17 +776,39 @@ static void execute_page2(MC6809* cpu) {
         }
 
         default:
+#if CPU_HD6309
+            if (!hd6309_exec_page2(cpu, opcode)) {
+                cpu->cycles += 4;
+                hd6309_trap(cpu, HD6309_MD_IL);
+                return;
+            }
+            break;
+#else
             // Unimplemented page 2 opcode - treat as NOP
             cpu->cycles += 2;
             break;
+#endif
     }
+#if CPU_HD6309
+    if (NATIVE()) cpu->cycles -= hd6309_native_save_p2[opcode];
+#endif
 }
 
 // ============================================================
 // Page 3 opcode execution ($11 prefix)
 // ============================================================
 static void execute_page3(MC6809* cpu) {
+#if CPU_HD6309
+    uint16_t insn_pc = cpu->pc - 1;     // the $11 prefix; TFM restarts from here
+#endif
     uint8_t opcode = fetch8(cpu);
+
+#if CPU_HD6309
+    while (opcode == 0x10 || opcode == 0x11) {
+        opcode = fetch8(cpu);
+        cpu->cycles += 1;
+    }
+#endif
 
     switch (opcode) {
         case 0x3F: { // SWI3
@@ -710,6 +818,7 @@ static void execute_page3(MC6809* cpu) {
             push16s(cpu, cpu->y);
             push16s(cpu, cpu->x);
             push8s(cpu, cpu->dp);
+            HD6309_PUSH_EF(cpu);
             push8s(cpu, GET_B());
             push8s(cpu, GET_A());
             push8s(cpu, cpu->cc);
@@ -777,10 +886,22 @@ static void execute_page3(MC6809* cpu) {
         }
 
         default:
+#if CPU_HD6309
+            if (!hd6309_exec_page3(cpu, opcode, insn_pc)) {
+                cpu->cycles += 4;
+                hd6309_trap(cpu, HD6309_MD_IL);
+                return;
+            }
+            break;
+#else
             // Unimplemented page 3 opcode - treat as NOP
             cpu->cycles += 2;
             break;
+#endif
     }
+#if CPU_HD6309
+    if (NATIVE()) cpu->cycles -= hd6309_native_save_p3[opcode];
+#endif
 }
 
 // ============================================================
@@ -990,10 +1111,17 @@ static void execute_one(MC6809* cpu) {
         uint8_t postbyte = fetch8(cpu);
         uint8_t src = (postbyte >> 4) & 0x0F;
         uint8_t dst = postbyte & 0x0F;
+#if CPU_HD6309
+        uint16_t sv = h_tfr_read(cpu, src);
+        uint16_t dv = h_tfr_read(cpu, dst);
+        h_tfr_write(cpu, dst, sv);
+        h_tfr_write(cpu, src, dv);
+#else
         uint16_t sv = tfr_read_reg(cpu, src);
         uint16_t dv = tfr_read_reg(cpu, dst);
         tfr_write_reg(cpu, src, dv);
         tfr_write_reg(cpu, dst, sv);
+#endif
         cpu->cycles += 8;
         break;
     }
@@ -1002,8 +1130,12 @@ static void execute_one(MC6809* cpu) {
         uint8_t postbyte = fetch8(cpu);
         uint8_t src = (postbyte >> 4) & 0x0F;
         uint8_t dst = postbyte & 0x0F;
+#if CPU_HD6309
+        h_tfr_write(cpu, dst, h_tfr_read(cpu, src));
+#else
         uint16_t val = tfr_read_reg(cpu, src);
         tfr_write_reg(cpu, dst, val);
+#endif
         cpu->cycles += 6;
         break;
     }
@@ -1098,6 +1230,7 @@ static void execute_one(MC6809* cpu) {
         if (CC_TST(MC6809_FLAG_E)) {
             SET_A(pull8s(cpu));
             SET_B(pull8s(cpu));
+            HD6309_PULL_EF(cpu);
             cpu->dp = pull8s(cpu);
             cpu->x = pull16s(cpu);
             cpu->y = pull16s(cpu);
@@ -1121,6 +1254,7 @@ static void execute_one(MC6809* cpu) {
         push16s(cpu, cpu->y);
         push16s(cpu, cpu->x);
         push8s(cpu, cpu->dp);
+        HD6309_PUSH_EF(cpu);
         push8s(cpu, GET_B());
         push8s(cpu, GET_A());
         push8s(cpu, cpu->cc);
@@ -1146,6 +1280,7 @@ static void execute_one(MC6809* cpu) {
         push16s(cpu, cpu->y);
         push16s(cpu, cpu->x);
         push8s(cpu, cpu->dp);
+        HD6309_PUSH_EF(cpu);
         push8s(cpu, GET_B());
         push8s(cpu, GET_A());
         push8s(cpu, cpu->cc);
@@ -2508,11 +2643,23 @@ static void execute_one(MC6809* cpu) {
     // Default: unimplemented opcode
     // ============================================================
     default:
+#if CPU_HD6309
+        if (!hd6309_exec_page1(cpu, opcode)) {
+            cpu->cycles += 3;
+            hd6309_trap(cpu, HD6309_MD_IL);
+            return;
+        }
+        break;
+#else
         // Treat as NOP (2 cycles)
         cpu->cycles += 2;
         break;
+#endif
 
     } // end switch
+#if CPU_HD6309
+    if (NATIVE()) cpu->cycles -= hd6309_native_save_p1[opcode];
+#endif
 }
 
 // ============================================================
@@ -2541,6 +2688,8 @@ void mc6809_reset(MC6809* cpu) {
     cpu->nmi_pending = false;
     cpu->firq_pending = false;
     cpu->irq_pending = false;
+    cpu->md = 0;            // HD6309: back to emulation mode; W and V are kept
+    cpu->tfm_busy = false;
     cpu->cycles = 0;
 
     if (cpu->read) {
@@ -2560,6 +2709,7 @@ static void check_interrupts(MC6809* cpu) {
     if (cpu->nmi_pending && cpu->nmi_armed) {
         cpu->nmi_pending = false;
         cpu->nmi_line = false;  // Consume edge — require new transition for next NMI
+        HD6309_IRQ_ENTRY(cpu);
         if (!cpu->cwai_state) {
             CC_SET(MC6809_FLAG_E);
             push16s(cpu, cpu->pc);
@@ -2567,6 +2717,7 @@ static void check_interrupts(MC6809* cpu) {
             push16s(cpu, cpu->y);
             push16s(cpu, cpu->x);
             push8s(cpu, cpu->dp);
+            HD6309_PUSH_EF(cpu);
             push8s(cpu, GET_B());
             push8s(cpu, GET_A());
             push8s(cpu, cpu->cc);
@@ -2583,6 +2734,23 @@ static void check_interrupts(MC6809* cpu) {
 
     // FIRQ: masked by F flag
     if (cpu->firq_pending && !CC_TST(MC6809_FLAG_F)) {
+        HD6309_IRQ_ENTRY(cpu);
+#if CPU_HD6309
+        if (!cpu->cwai_state && (cpu->md & HD6309_MD_FM)) {
+            // MD.FM: FIRQ saves the entire state, like IRQ
+            CC_SET(MC6809_FLAG_E);
+            push16s(cpu, cpu->pc);
+            push16s(cpu, cpu->u);
+            push16s(cpu, cpu->y);
+            push16s(cpu, cpu->x);
+            push8s(cpu, cpu->dp);
+            HD6309_PUSH_EF(cpu);
+            push8s(cpu, GET_B());
+            push8s(cpu, GET_A());
+            push8s(cpu, cpu->cc);
+            cpu->cycles += 19;
+        } else
+#endif
         if (!cpu->cwai_state) {
             CC_CLR(MC6809_FLAG_E);  // Only CC and PC saved
             push16s(cpu, cpu->pc);
@@ -2602,6 +2770,7 @@ static void check_interrupts(MC6809* cpu) {
 
     // IRQ: masked by I flag
     if (cpu->irq_pending && !CC_TST(MC6809_FLAG_I)) {
+        HD6309_IRQ_ENTRY(cpu);
         if (!cpu->cwai_state) {
             CC_SET(MC6809_FLAG_E);
             push16s(cpu, cpu->pc);
@@ -2609,6 +2778,7 @@ static void check_interrupts(MC6809* cpu) {
             push16s(cpu, cpu->y);
             push16s(cpu, cpu->x);
             push8s(cpu, cpu->dp);
+            HD6309_PUSH_EF(cpu);
             push8s(cpu, GET_B());
             push8s(cpu, GET_A());
             push8s(cpu, cpu->cc);
