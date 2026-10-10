@@ -61,9 +61,15 @@
 // Step 1: declared but not yet branched on — all paths still use #if MACHINE_TYPE.
 extern uint8_t g_machine_type;
 
+// Runtime-active CPU (CPU_VARIANT_MC6809 / CPU_VARIANT_HD6309, see mc6809.h).
+// Initialized from NVS at boot, default = compile-time CPU_VARIANT. Read by
+// machine_init(); changing it afterwards needs a restart.
+extern uint8_t g_cpu_variant;
+
 // Cartridge ROM selection, indexed [0] = CoCo 2, [1] = CoCo 3.
 // g_cart_rom_request: file to load instead of ROM_DISK_FILE (nullptr = disk11);
-//   set before machine_load_roms() by the DriveWire bus (HDB-DOS Becker ROM).
+//   set before machine_load_roms() by the DriveWire bus (HDB-DOS Becker ROM)
+//   or by the supervisor's Orchestra-90 setting.
 // g_cart_rom_loaded: file actually loaded (nullptr = none).
 // g_cart_rom_fallback: the requested ROM was missing and disk11 was loaded.
 extern const char* g_cart_rom_request[2];
@@ -108,6 +114,7 @@ typedef struct Machine {
     // --- Flags ---
     bool     initialized;
     bool     cart_inserted;
+    bool     cart_autostart;      // program cartridge (no 'DK'): pulse CART → PIA1 CB1 each frame
     bool     ntsc;                // true = 60 Hz NTSC, false = 50 Hz PAL
     uint32_t frame_count;
 } Machine;

@@ -95,6 +95,10 @@ static const char* machine_name(uint8_t t) {
     return (t == 4) ? MACHINE_NAME_COCO3 : MACHINE_NAME_COCO2;
 }
 
+static const char* cpu_name(uint8_t variant) {
+    return (variant == CPU_VARIANT_HD6309) ? "6309" : "6809";
+}
+
 static void send_json(int code, const String& body) {
     s_server.send(code, "application/json", body);
 }
@@ -126,6 +130,7 @@ static void h_status() {
     String j = "{";
     j += "\"machine_type\":" + String(g_machine_type);
     j += ",\"machine\":\"" + String(machine_name(g_machine_type)) + "\"";
+    j += ",\"cpu\":\"" + String(cpu_name(g_cpu_variant)) + "\"";
     j += ",\"paused\":" + String(debug_rpc_is_paused() ? "true" : "false");
     j += ",\"firmware\":\"" FIRMWARE_VERSION "\"";
     j += ",\"api\":" + String(DEBUG_API_VERSION);
@@ -277,6 +282,13 @@ static void h_get_registers() {
     j += ",\"V\":" + String((c.cc & 0x02) ? 1 : 0);
     j += ",\"C\":" + String((c.cc & 0x01) ? 1 : 0);
     j += "}";
+    j += ",\"cpu\":\"" + String(c.cpu == CPU_VARIANT_HD6309 ? "6309" : "6809") + "\"";
+    if (c.cpu == CPU_VARIANT_HD6309) {
+        // E/F are the halves of W; MD bits: 7 div-by-zero, 6 illegal op, 1 FIRQ mode, 0 native
+        j += ",\"e\":" + String(c.w >> 8) + ",\"f\":" + String(c.w & 0xFF) + ",\"w\":" + String(c.w);
+        j += ",\"v\":" + String(c.v) + ",\"md\":" + String(c.md);
+        j += ",\"native\":" + String((c.md & HD6309_MD_NM) ? 1 : 0);
+    }
     j += ",\"cycles\":" + String(c.cycles);
     j += "}";
     send_json(200, j);
@@ -299,6 +311,11 @@ static void h_post_registers() {
     if (s_server.hasArg("s"))  { c.s  = (uint16_t)arg_u32("s",  c.s);  mask |= DBG_REG_S; }
     if (s_server.hasArg("dp")) { c.dp = (uint8_t) arg_u32("dp", c.dp); mask |= DBG_REG_DP; }
     if (s_server.hasArg("cc")) { c.cc = (uint8_t) arg_u32("cc", c.cc); mask |= DBG_REG_CC; }
+    if (s_server.hasArg("w"))  { c.w  = (uint16_t)arg_u32("w",  c.w);  mask |= DBG_REG_W; }
+    if (s_server.hasArg("e"))  { c.w  = (uint16_t)((arg_u32("e", c.w >> 8) << 8) | (c.w & 0xFF)); mask |= DBG_REG_W; }
+    if (s_server.hasArg("f"))  { c.w  = (uint16_t)((c.w & 0xFF00) | (arg_u32("f", c.w & 0xFF) & 0xFF)); mask |= DBG_REG_W; }
+    if (s_server.hasArg("v"))  { c.v  = (uint16_t)arg_u32("v",  c.v);  mask |= DBG_REG_V; }
+    if (s_server.hasArg("md")) { c.md = (uint8_t) arg_u32("md", c.md); mask |= DBG_REG_MD; }
 
     if (mask == 0) { send_err(400, "no registers given"); return; }
 
@@ -389,7 +406,8 @@ static void h_reset() {
 
 static void h_get_machine() {
     String j = String("{\"machine_type\":") + g_machine_type +
-               ",\"machine\":\"" + machine_name(g_machine_type) + "\"}";
+               ",\"machine\":\"" + machine_name(g_machine_type) +
+               "\",\"cpu\":\"" + cpu_name(g_cpu_variant) + "\"}";
     send_json(200, j);
 }
 
@@ -397,15 +415,25 @@ static void h_post_machine() {
     if (!s_server.hasArg("type")) { send_err(400, "missing type (3=CoCo2,4=CoCo3)"); return; }
     uint8_t t = (uint8_t)arg_u32("type", g_machine_type);
     if (t != 3 && t != 4) { send_err(400, "type must be 3 or 4"); return; }
-    if (t == g_machine_type) { h_get_machine(); return; }
+
+    // Optional cpu=6809|6309; like the machine type it takes effect at boot.
+    uint8_t cpu = g_cpu_variant;
+    if (s_server.hasArg("cpu")) {
+        uint32_t c = arg_u32("cpu", 0);
+        if (c != 6809 && c != 6309) { send_err(400, "cpu must be 6809 or 6309"); return; }
+        cpu = (c == 6309) ? CPU_VARIANT_HD6309 : CPU_VARIANT_MC6809;
+    }
+    if (t == g_machine_type && cpu == g_cpu_variant) { h_get_machine(); return; }
 
     // Respond BEFORE switching: supervisor_set_machine_type() reboots and
     // never returns. Freeze core 1 first to avoid touching emulator state
     // mid-frame during the disk-cache flush + state save.
-    send_json(200, String("{\"rebooting\":true,\"machine_type\":") + t + "}");
+    send_json(200, String("{\"rebooting\":true,\"machine_type\":") + t +
+                   ",\"cpu\":\"" + cpu_name(cpu) + "\"}");
     delay(200);
     debug_rpc_set_paused(true);
     delay(50);
+    supervisor_save_cpu_variant(cpu);
     supervisor_set_machine_type(t);   // flushes caches, saves state, esp_restart()
 }
 

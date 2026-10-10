@@ -27,6 +27,7 @@
 #include "sv_joystick.h"
 #include "sv_wifi.h"
 #include "sv_fujinet.h"
+#include "../core/orch90.h"
 #include "../net/dw_bus.h"
 #include "sv_render.h"
 #include "../hal/hal.h"
@@ -357,6 +358,14 @@ void supervisor_on_key(uint8_t hid_usage, bool pressed) {
             sv_fujinet_on_key(&sv, hid_usage, pressed);
             break;
 
+        case SV_ORCH90_POPUP:
+            sv_orch90_popup_on_key(&sv, hid_usage, pressed);
+            break;
+
+        case SV_CPU_POPUP:
+            sv_cpu_popup_on_key(&sv, hid_usage, pressed);
+            break;
+
         case SV_KEYBOARD_MENU:
             sv_keyboard_menu_on_key(&sv, hid_usage, pressed);
             break;
@@ -411,7 +420,8 @@ bool supervisor_update_and_render(void) {
     } else if (sv.state == SV_MACHINE_SELECT) {
         // Popup over the Settings list: leave the wide frame in place.
         if (s_last_rendered != sv.state) sv_machine_select_invalidate();
-    } else if (sv.state == SV_KEYMAP_CAPTURE || sv.state == SV_JOY_SENSE) {
+    } else if (sv.state == SV_KEYMAP_CAPTURE || sv.state == SV_JOY_SENSE ||
+               sv.state == SV_ORCH90_POPUP || sv.state == SV_CPU_POPUP) {
         // Popups over the Key Mapper keyboard / the Settings list: leave the
         // wide frame in place.
     } else if (s_main_box_on_screen && sv.state != SV_CONFIRM_DIALOG) {
@@ -476,6 +486,14 @@ bool supervisor_update_and_render(void) {
 
         case SV_FUJINET:
             sv_fujinet_render(&sv);
+            break;
+
+        case SV_ORCH90_POPUP:
+            sv_orch90_popup_render(&sv);
+            break;
+
+        case SV_CPU_POPUP:
+            sv_cpu_popup_render(&sv);
             break;
 
         case SV_KEYBOARD_MENU:
@@ -555,6 +573,21 @@ uint8_t supervisor_load_machine_type(void) {
     return mt;
 }
 
+uint8_t supervisor_load_cpu_variant(void) {
+    Preferences prefs;
+    prefs.begin("sv", true);
+    uint8_t v = prefs.getUChar("cpu_variant", (uint8_t)CPU_VARIANT);
+    prefs.end();
+    return (v == CPU_VARIANT_HD6309) ? CPU_VARIANT_HD6309 : CPU_VARIANT_MC6809;
+}
+
+void supervisor_save_cpu_variant(uint8_t variant) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putUChar("cpu_variant", variant);
+    prefs.end();
+}
+
 SerialPortMode supervisor_load_serial_mode(void) {
     Preferences prefs;
     prefs.begin("sv", true);
@@ -625,6 +658,40 @@ void supervisor_load_joystick(void) {
     prefs.end();
     hal_joystick_set_sensitivity(level);   // clamps internally
     hal_joystick_set_invert_y(invert);
+}
+
+static char s_cart_rom[48] = "";
+
+void supervisor_load_cart_config(void) {
+    Preferences prefs;
+    prefs.begin("sv", true);
+    g_orch90_enabled = prefs.getBool("orch90", false);
+    String rom = prefs.getString("cart_rom", "");
+    prefs.end();
+
+    strncpy(s_cart_rom, rom.c_str(), sizeof(s_cart_rom) - 1);
+    s_cart_rom[sizeof(s_cart_rom) - 1] = '\0';
+    if (s_cart_rom[0]) {
+        g_cart_rom_request[0] = s_cart_rom;
+        g_cart_rom_request[1] = s_cart_rom;
+    }
+    DEBUG_PRINTF("Cartridge: Orchestra-90 %s, cart ROM %s",
+                 g_orch90_enabled ? "on" : "off", s_cart_rom[0] ? s_cart_rom : "(default)");
+}
+
+void supervisor_save_orch90(bool enabled) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putBool("orch90", enabled);
+    prefs.end();
+}
+
+void supervisor_save_cart_rom(const char* name) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    if (name && name[0]) prefs.putString("cart_rom", name);
+    else                 prefs.remove("cart_rom");
+    prefs.end();
 }
 
 void supervisor_save_and_restart(void) {

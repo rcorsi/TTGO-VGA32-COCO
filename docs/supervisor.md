@@ -352,6 +352,23 @@ SV_CONTENT_Y = BORDER_Y + TITLE_H + 4
 
 ---
 
+### CPU — MC6809 / HD6309
+
+The Settings row **CPU** shows the active CPU (`g_cpu_variant`). ENTER opens a popup (`SV_CPU_POPUP` state, same 480 px window as the Orchestra-90 one) asking No / Yes to switch to the other CPU; Yes calls `supervisor_save_cpu_variant()` (NVS `"sv"` / `cpu_variant`) and `supervisor_save_and_restart()`. On boot `supervisor_load_cpu_variant()` seeds `g_cpu_variant` before `machine_init()`. See `cpu.md`.
+
+### Cartridge ROM — Orchestra-90 toggle
+
+See `orchestra90.md` for the cartridge itself (DAC ports, audio mix, ROM autostart).
+
+The Settings row **Orchestra-90** (ON/OFF) turns the `$FF7A`/`$FF7B` DAC ports on and puts `orch90.rom` in the cartridge slot at `$C000` in place of Disk BASIC. The ROM is read once at boot (`load_cart_rom()` in `machine.cpp`), so the row opens a popup (`SV_ORCH90_POPUP` state, 480 px wide, drawn with `sv_render_popup_w()` in the theme colours) that explains the ROM change and asks No / Yes before calling `supervisor_save_and_restart()`.
+
+- **Turning it on** first checks for `/roms/orch90.rom`. If the file is missing, the popup only says it must be copied to the SD card and nothing changes.
+- **Turning it off** clears the stored cartridge, so Disk BASIC is back after the restart.
+
+`supervisor_load_cart_config()` runs in `setup()` after `dw_bus_load_config()`, so the Orchestra-90 ROM replaces DriveWire's HDB-DOS ROM. While it is on there is no Disk BASIC.
+
+A ROM that does not start with `DK` is a program cartridge: `machine.cpp` pulses CART (PIA1 CB1) once per frame, so BASIC starts it at power-on as on the real machine.
+
 ## Persistence (ESP32 Preferences)
 
 Namespace: `"sv"`. Stored in NVS flash.
@@ -367,6 +384,9 @@ Namespace: `"sv"`. Stored in NVS flash.
 | `keymap` | Bytes | Key Mapper bindings: `int16_t[KM_COUNT]` blob, one FabGL VirtualKey per remappable CoCo key (-1 = default) |
 | `joyLevel` | UChar | Mouse-as-joystick sensitivity level, 1..10 (default 7) |
 | `joyInv` | Bool | Mouse-as-joystick Invert-Y flag (default false) |
+| `orch90` | Bool | Orchestra-90 DAC ports enabled (default false) |
+| `cpu_variant` | UChar | 0 = MC6809, 1 = HD6309 (default `CPU_VARIANT`) |
+| `cart_rom` | String | Cartridge ROM file in `/roms/` loaded at `$C000`, set to `orch90.rom` by the Orchestra-90 toggle; absent = default (Disk BASIC) |
 
 - `supervisor_save_state()` — writes current dir + all mounted disk paths
 - `supervisor_load_state()` — restores dir + auto-mounts disks on boot

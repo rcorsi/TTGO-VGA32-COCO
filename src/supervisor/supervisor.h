@@ -46,6 +46,8 @@ enum SV_State : uint8_t {
     SV_WIFI,             // WiFi / Debug server status + control screen
     SV_FUJINET,          // DriveWire / FujiNet bus settings screen
     SV_KEYBOARD_MENU,    // Settings -> Keyboard submenu (language, Key Mapper)
+    SV_ORCH90_POPUP,     // popup over Settings: Orchestra-90 on/off confirm, ROM missing
+    SV_CPU_POPUP,        // popup over Settings: MC6809 / HD6309 switch confirm
 };
 
 struct SV_FileEntry;
@@ -138,6 +140,24 @@ void      supervisor_save_kbd_layout(KbdLayout layout);
 // if NVS has nothing); called from setup() before the emulator runs.
 void supervisor_load_keymap(void);
 void supervisor_save_keymap(void);
+
+// CPU selection (NVS "sv" namespace, key "cpu_variant"): CPU_VARIANT_MC6809 or
+// CPU_VARIANT_HD6309. load returns the stored value, or the compile-time
+// CPU_VARIANT if none; called from setup() before machine_init() to seed
+// g_cpu_variant. save only persists: the caller restarts to apply it.
+uint8_t supervisor_load_cpu_variant(void);
+void    supervisor_save_cpu_variant(uint8_t variant);
+
+// Cartridge settings (NVS "sv" namespace): key "orch90" turns the
+// Orchestra-90 DAC ports on, key "cart_rom" names the 8 KB ROM in
+// ROM_BASE_PATH to load at $C000 instead of Disk BASIC ("" = default);
+// the Orchestra-90 toggle sets it to ROM_ORCH90_FILE.
+// load applies both (g_orch90_enabled, g_cart_rom_request); called from
+// setup() after dw_bus_load_config() and before machine_init(). The saves
+// only persist: the caller restarts the emulator to apply them.
+void        supervisor_load_cart_config(void);
+void        supervisor_save_orch90(bool enabled);
+void        supervisor_save_cart_rom(const char* name);
 
 // Access global supervisor (for disk manager sub-screens)
 Supervisor_t* supervisor_get(void);

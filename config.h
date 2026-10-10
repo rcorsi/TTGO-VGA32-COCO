@@ -25,8 +25,8 @@
 // Firmware version (reported by the WiFi debug API /api/status and shown on
 // the supervisor About screen). Bump both of these together on a release —
 // they are the single source of truth; nothing else should hardcode a version.
-#define FIRMWARE_VERSION        "0.14.0"
-#define FIRMWARE_BUILD_DATE     "06.10.2026"
+#define FIRMWARE_VERSION        "0.15.0"
+#define FIRMWARE_BUILD_DATE     "10.10.2026"
 
 // ------------------------------------------------------------
 // Build target — standalone USB flash vs. ESP32_Bootloader
@@ -80,6 +80,8 @@
 #endif
 
 // CPU variant: 0 = MC6809, 1 = HD6309
+// Compile-time default only — the active CPU is g_cpu_variant (core/machine.h),
+// initialized from NVS at boot and changed from Settings -> CPU.
 #define CPU_VARIANT             0
 
 // RAM size in KB (CoCo3 = 512)
@@ -217,6 +219,10 @@
 #define ROM_BECKER_TO_COCO3_FILE  "hdbdw3bc3t.rom"
 
 #define ROM_COCO3_FILE          "coco3.rom"
+
+// Orchestra-90/CC cartridge ROM (8 KB). Optional: without it the DAC ports
+// still work for software loaded from disk.
+#define ROM_ORCH90_FILE         "orch90.rom"
 #define COCO3_ROM_SIZE          (32 * 1024)
 #define COCO3_PHYSICAL_RAM      (512 * 1024)
 

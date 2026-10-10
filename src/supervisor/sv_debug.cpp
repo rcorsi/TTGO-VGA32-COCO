@@ -98,19 +98,26 @@ static void status_render(Supervisor_t* sv) {
     // --- CPU Registers ---
     MC6809* cpu = &m->cpu;
     tft->setTextColor(SVW_DKBLUE, SVW_GREEN);
-    tft->drawString("CPU Registers", x, y);
+    tft->drawString(cpu->variant == CPU_VARIANT_HD6309 ? "CPU Registers (HD6309)" : "CPU Registers", x, y);
     y += lh + 2;
 
+    // An HD6309 adds W, V and MD at the end of the three register lines.
+    bool h6309 = (cpu->variant == CPU_VARIANT_HD6309);
+    char ext[12] = "";
+
     tft->setTextColor(SVW_BLACK, SVW_GREEN);
-    snprintf(buf, sizeof(buf), "PC=%04X  S=%04X  U=%04X",
-             cpu->pc, cpu->s, cpu->u);
+    if (h6309) snprintf(ext, sizeof(ext), "  W=%04X", cpu->w);
+    snprintf(buf, sizeof(buf), "PC=%04X  S=%04X  U=%04X%s",
+             cpu->pc, cpu->s, cpu->u, ext);
     dbg_text(tft, x, y, buf); y += lh;
 
-    snprintf(buf, sizeof(buf), " X=%04X  Y=%04X  D=%04X",
-             cpu->x, cpu->y, cpu->d);
+    if (h6309) snprintf(ext, sizeof(ext), "  V=%04X", cpu->v);
+    snprintf(buf, sizeof(buf), " X=%04X  Y=%04X  D=%04X%s",
+             cpu->x, cpu->y, cpu->d, ext);
     dbg_text(tft, x, y, buf); y += lh;
 
-    snprintf(buf, sizeof(buf), "DP=%02X  CC=%02X [%c%c%c%c%c%c%c%c]",
+    if (h6309) snprintf(ext, sizeof(ext), "  MD=%02X", cpu->md);
+    snprintf(buf, sizeof(buf), "DP=%02X  CC=%02X [%c%c%c%c%c%c%c%c]%s",
              cpu->dp, cpu->cc,
              (cpu->cc & 0x80) ? 'E' : '-',
              (cpu->cc & 0x40) ? 'F' : '-',
@@ -119,7 +126,7 @@ static void status_render(Supervisor_t* sv) {
              (cpu->cc & 0x08) ? 'N' : '-',
              (cpu->cc & 0x04) ? 'Z' : '-',
              (cpu->cc & 0x02) ? 'V' : '-',
-             (cpu->cc & 0x01) ? 'C' : '-');
+             (cpu->cc & 0x01) ? 'C' : '-', ext);
     dbg_text(tft, x, y, buf); y += lh;
 
     snprintf(buf, sizeof(buf), "HALT=%d CWAI=%d NMI=%d IRQ=%d FIRQ=%d",
@@ -192,6 +199,10 @@ static void status_dump_to_serial(Supervisor_t* sv) {
                   (cpu->cc & 0x20) ? 'H' : '-', (cpu->cc & 0x10) ? 'I' : '-',
                   (cpu->cc & 0x08) ? 'N' : '-', (cpu->cc & 0x04) ? 'Z' : '-',
                   (cpu->cc & 0x02) ? 'V' : '-', (cpu->cc & 0x01) ? 'C' : '-');
+    if (cpu->variant == CPU_VARIANT_HD6309) {
+        Serial.printf("HD6309: W=%04X V=%04X MD=%02X (%s mode)\n", cpu->w, cpu->v, cpu->md,
+                      (cpu->md & HD6309_MD_NM) ? "native" : "emulation");
+    }
     Serial.printf("HALT=%d CWAI=%d NMI=%d IRQ=%d FIRQ=%d\n",
                   cpu->halted, cpu->wait_for_interrupt,
                   cpu->nmi_pending, cpu->irq_pending, cpu->firq_pending);

@@ -53,8 +53,10 @@ def status() -> dict:
 
 @mcp.tool()
 def read_registers() -> dict:
-    """Read the 6809 CPU registers (A, B, D, X, Y, U, S, PC, DP, CC),
-    decoded condition-code flags (E F H I N Z V C), and the cycle count."""
+    """Read the CPU registers (A, B, D, X, Y, U, S, PC, DP, CC), decoded
+    condition-code flags (E F H I N Z V C), and the cycle count. `cpu` is
+    "6809" or "6309"; on a 6309 the reply also has E, F, W, V, MD and `native`
+    (MD bit 0)."""
     return _get("/api/registers").json()
 
 
@@ -70,12 +72,20 @@ def write_registers(
     s: int | None = None,
     dp: int | None = None,
     cc: int | None = None,
+    e: int | None = None,
+    f: int | None = None,
+    w: int | None = None,
+    v: int | None = None,
+    md: int | None = None,
 ) -> dict:
-    """Set any subset of the 6809 registers. Only the values you pass are
-    changed. Returns the full register set after the write."""
-    fields = {k: v for k, v in dict(
-        pc=pc, a=a, b=b, d=d, x=x, y=y, u=u, s=s, dp=dp, cc=cc
-    ).items() if v is not None}
+    """Set any subset of the CPU registers. Only the values you pass are
+    changed. E, F, W, V and MD are the HD6309 registers (MD bit 0 = native
+    mode, bit 1 = FIRQ stacks everything). Returns the full register set
+    after the write."""
+    fields = {k: val for k, val in dict(
+        pc=pc, a=a, b=b, d=d, x=x, y=y, u=u, s=s, dp=dp, cc=cc,
+        e=e, f=f, w=w, v=v, md=md
+    ).items() if val is not None}
     if not fields:
         raise ValueError("provide at least one register to write")
     return _post("/api/registers", **fields).json()
@@ -137,28 +147,35 @@ def reset() -> dict:
 
 @mcp.tool()
 def get_machine() -> dict:
-    """Get the current machine type (3 = CoCo 2, 4 = CoCo 3)."""
+    """Get the current machine type (3 = CoCo 2, 4 = CoCo 3) and CPU
+    ("6809" or "6309")."""
     return _get("/api/machine").json()
 
 
 @mcp.tool()
-def set_machine(machine_type: int, wait: bool = True) -> dict:
-    """Switch machine type (3 = CoCo 2, 4 = CoCo 3).
+def set_machine(machine_type: int, wait: bool = True, cpu: int | None = None) -> dict:
+    """Switch machine type (3 = CoCo 2, 4 = CoCo 3) and, optionally, the CPU
+    (`cpu` = 6809 or 6309). Pass the current machine type to change only
+    the CPU.
 
     IMPORTANT: this reboots the device — the current connection drops. If
     `wait` is true, the tool polls /api/status until the device comes back
     (requires auto-connect enabled so it rejoins WiFi automatically).
     """
-    resp = _post("/api/machine", type=machine_type).json()
-    if not wait:
+    fields = {"type": machine_type}
+    if cpu is not None:
+        fields["cpu"] = cpu
+    resp = _post("/api/machine", **fields).json()
+    if not wait or not resp.get("rebooting"):
         return resp
-    # Device reboots; wait for it to rejoin and report the new type.
+    # Device reboots; wait for it to rejoin and report the new settings.
     deadline = time.time() + 60
     time.sleep(3)
     while time.time() < deadline:
         try:
             st = _get("/api/status").json()
-            if int(st.get("machine_type", -1)) == machine_type:
+            if int(st.get("machine_type", -1)) == machine_type and \
+               (cpu is None or st.get("cpu") == str(cpu)):
                 return {"rebooted": True, "status": st}
         except Exception:
             pass
