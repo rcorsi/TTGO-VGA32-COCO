@@ -109,15 +109,15 @@ Responses are JSON. Transfers are capped at 4 KB per request.
 |---|---|
 | `GET /api/status` | machine type, paused flag, firmware/API version, bus summary, internal RAM (`int_free`, `int_min`, `int_largest` — includes the ~20 KB IRAM heap that only 32-bit accesses can use; `int8_free`, `int8_min`, `int8_largest` — byte-addressable part, what malloc/new can actually get), emulated `fps` (last second), `srv_stack_free` (debug-server task stack never used, bytes) |
 | `POST /api/pause`, `POST /api/resume` | freeze / un-freeze at frame boundary |
-| `GET /api/registers` | A,B,D,X,Y,U,S,PC,DP,CC + decoded flags + cycles |
-| `POST /api/registers` | set any subset: `pc=`, `a=`, `b=`, `d=`, `x=`, `y=`, `u=`, `s=`, `dp=`, `cc=` |
+| `GET /api/registers` | A,B,D,X,Y,U,S,PC,DP,CC + decoded flags + cycles, and `cpu` (`"6809"` / `"6309"`). On a 6309 also `e`, `f`, `w`, `v`, `md`, `native` |
+| `POST /api/registers` | set any subset: `pc=`, `a=`, `b=`, `d=`, `x=`, `y=`, `u=`, `s=`, `dp=`, `cc=`, and the 6309's `e=`, `f=`, `w=`, `v=`, `md=` |
 | `GET /api/mem?addr=&len=&space=cpu\|phys` | read bytes → `{..,"data":"hex"}` |
 | `POST /api/mem` | `addr=`, `data=`hex, `space=` — write bytes |
 | `POST /api/inject` | `addr=`, `data=`hex, optional `pc=`, `resume=1` |
 | `GET /api/screenshot.png` | arm capture, advance one frame, return PNG (core line output, before the video HAL). `?fb=1`: return the live display framebuffer instead (640x200, after HAL scaling/border), read with the emulator held paused |
 | `POST /api/reset` | clean in-place `machine_reset()` (device stays up) |
-| `GET /api/machine` | current machine type (3 = CoCo 2, 4 = CoCo 3) |
-| `POST /api/machine` | `type=3\|4` — **reboots the device** (see below) |
+| `GET /api/machine` | current machine type (3 = CoCo 2, 4 = CoCo 3) and `cpu` (`"6809"` / `"6309"`) |
+| `POST /api/machine` | `type=3\|4`, optional `cpu=6809\|6309` — **reboots the device** if either changes (see below) |
 | `GET /api/nvram` | dump all `"sv"` NVS settings as JSON |
 | `GET /api/bus` | DriveWire bus mode, host/port, link state, byte counters, `connects`, `max_reply_ms`, `slow_replies` |
 | `POST /api/bus` | `mode=0\|1` (Off / External), `host=`, `port=`, `rom_to=` — **reboots** |

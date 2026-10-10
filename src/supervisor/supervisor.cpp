@@ -362,6 +362,10 @@ void supervisor_on_key(uint8_t hid_usage, bool pressed) {
             sv_orch90_popup_on_key(&sv, hid_usage, pressed);
             break;
 
+        case SV_CPU_POPUP:
+            sv_cpu_popup_on_key(&sv, hid_usage, pressed);
+            break;
+
         case SV_KEYBOARD_MENU:
             sv_keyboard_menu_on_key(&sv, hid_usage, pressed);
             break;
@@ -417,7 +421,7 @@ bool supervisor_update_and_render(void) {
         // Popup over the Settings list: leave the wide frame in place.
         if (s_last_rendered != sv.state) sv_machine_select_invalidate();
     } else if (sv.state == SV_KEYMAP_CAPTURE || sv.state == SV_JOY_SENSE ||
-               sv.state == SV_ORCH90_POPUP) {
+               sv.state == SV_ORCH90_POPUP || sv.state == SV_CPU_POPUP) {
         // Popups over the Key Mapper keyboard / the Settings list: leave the
         // wide frame in place.
     } else if (s_main_box_on_screen && sv.state != SV_CONFIRM_DIALOG) {
@@ -486,6 +490,10 @@ bool supervisor_update_and_render(void) {
 
         case SV_ORCH90_POPUP:
             sv_orch90_popup_render(&sv);
+            break;
+
+        case SV_CPU_POPUP:
+            sv_cpu_popup_render(&sv);
             break;
 
         case SV_KEYBOARD_MENU:
@@ -563,6 +571,21 @@ uint8_t supervisor_load_machine_type(void) {
     uint8_t mt = prefs.getUChar("machine_type", (uint8_t)MACHINE_TYPE);
     prefs.end();
     return mt;
+}
+
+uint8_t supervisor_load_cpu_variant(void) {
+    Preferences prefs;
+    prefs.begin("sv", true);
+    uint8_t v = prefs.getUChar("cpu_variant", (uint8_t)CPU_VARIANT);
+    prefs.end();
+    return (v == CPU_VARIANT_HD6309) ? CPU_VARIANT_HD6309 : CPU_VARIANT_MC6809;
+}
+
+void supervisor_save_cpu_variant(uint8_t variant) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putUChar("cpu_variant", variant);
+    prefs.end();
 }
 
 SerialPortMode supervisor_load_serial_mode(void) {

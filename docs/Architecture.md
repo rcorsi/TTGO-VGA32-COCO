@@ -349,7 +349,7 @@ The supervisor's coordinate system is the framebuffer (`DISPLAY_WIDTH` × `DISPL
 |---------|-------|-------------|
 | BOARD_TYPE | BOARD_TYPE_VGA32 | TTGO VGA32 v1.4 |
 | MACHINE_TYPE | 4 (CoCo 3) or 3 (CoCo 2) | Compile-time default; runtime-switchable via NVS |
-| CPU_VARIANT | 0 | MC6809 |
+| CPU_VARIANT | 0 | MC6809 (default only; Settings → CPU selects MC6809 or HD6309 at runtime, see `hd6309.md`) |
 | RAM_SIZE_KB | 512 (CoCo 3) | |
 | CPU_CLOCK_HZ | 895000 | 0.895 MHz NTSC |
 | TARGET_FPS | 60 | NTSC timing |
@@ -508,6 +508,9 @@ TTGO-VGA32-COCO/
     machine.cpp/.h            System integration, memory map, frame loop
     mc6809.cpp/.h             MC6809 CPU emulation
     mc6809_opcodes.h          Opcode tables
+    mc6809_core_impl.h        Interpreter body shared by the two CPU builds
+    hd6309.cpp                HD6309 build of the interpreter
+    hd6309_ops.h              HD6309-only instructions, traps, native timing
     mc6821.cpp/.h             MC6821 PIA (2 instances)
     mc6847.cpp/.h             MC6847 VDG (CoCo 2)
     sam6883.cpp/.h            SAM6883 address mux (CoCo 2)

@@ -46,6 +46,7 @@ static void exec_read_regs(DebugCmd* c) {
     MC6809* cpu = &s_machine->cpu;
     c->pc = cpu->pc; c->d = cpu->d; c->x = cpu->x; c->y = cpu->y;
     c->u = cpu->u;   c->s = cpu->s; c->dp = cpu->dp; c->cc = cpu->cc;
+    c->w = cpu->w;   c->v = cpu->v; c->md = cpu->md; c->cpu = cpu->variant;
     c->cycles = (uint32_t)cpu->cycles;
     c->result = DBG_OK;
 }
@@ -60,6 +61,9 @@ static void exec_write_regs(DebugCmd* c) {
     if (c->reg_mask & DBG_REG_S)  cpu->s  = c->s;
     if (c->reg_mask & DBG_REG_DP) cpu->dp = c->dp;
     if (c->reg_mask & DBG_REG_CC) cpu->cc = c->cc;
+    if (c->reg_mask & DBG_REG_W)  cpu->w  = c->w;
+    if (c->reg_mask & DBG_REG_V)  cpu->v  = c->v;
+    if (c->reg_mask & DBG_REG_MD) cpu->md = c->md;
     c->result = DBG_OK;
 }
 

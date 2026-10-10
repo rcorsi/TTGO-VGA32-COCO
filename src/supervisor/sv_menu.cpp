@@ -585,6 +585,8 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //
 // Settings rows (SV_SettingsRow):
 //   Machine      opens the machine-select submenu (CoCo 2 / CoCo 3)
+//   CPU          MC6809 / HD6309; the CPU is chosen at boot, so it asks to
+//                confirm and restarts
 //   RS-232 Pak   toggle; owns UART0 while on:
 //                  ON  -> SERIAL_MODE_RS232  (forces the debug Echo Log off)
 //                  OFF -> SERIAL_MODE_OFF
@@ -609,6 +611,7 @@ struct SV_ListRow {
 
 static const SV_ListRow SETTINGS_ROWS[SV_SET_COUNT] = {
     { "Machine",                 ROW_ICON_MACHINE   },
+    { "CPU",                     ROW_ICON_CHIP      },
     { "RS-232 Pak",              ROW_ICON_SERIAL    },
     { "Keyboard",                ROW_ICON_KEYBOARD  },
     { "Joy - Mouse Sensitivity", ROW_ICON_JOYSTICK  },
@@ -712,10 +715,75 @@ void sv_orch90_popup_render(Supervisor_t* sv) {
     s_orch90_drawn = s_orch90_sel;
 }
 
+// CPU switch: the same kind of popup. The other CPU is always the target.
+#define CPU_POPUP_W   480
+
+static int8_t s_cpu_sel   = 0;             // 0 = No, 1 = Yes
+static int8_t s_cpu_drawn = -1;            // row drawn selected; -1 = draw the window
+
+static void cpu_toggle_open(Supervisor_t* sv) {
+    s_cpu_sel   = 0;
+    s_cpu_drawn = -1;
+    sv->prev_state = sv->state;
+    sv->state = SV_CPU_POPUP;
+    sv->needs_redraw = true;
+}
+
+void sv_cpu_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
+    if (!pressed) return;
+
+    switch (hid_usage) {
+        case HID_UP:
+        case HID_DOWN:
+            s_cpu_sel = (hid_usage == HID_DOWN) ? 1 : 0;
+            sv->needs_redraw = true;
+            break;
+
+        case HID_ENTER:
+            if (s_cpu_sel == 1) {
+                supervisor_save_cpu_variant(g_cpu_variant == CPU_VARIANT_HD6309 ? CPU_VARIANT_MC6809
+                                                                                 : CPU_VARIANT_HD6309);
+                supervisor_save_and_restart();   // never returns
+            }
+            // fall through: No
+        case HID_ESC:
+            sv->state = SV_SETTINGS;
+            sv->needs_redraw = true;
+            break;
+
+        case HID_F1:
+            supervisor_toggle();
+            break;
+    }
+}
+
+void sv_cpu_popup_render(Supervisor_t* sv) {
+    (void)sv;
+    bool to_6309 = (g_cpu_variant != CPU_VARIANT_HD6309);
+    const char* title = to_6309 ? "Switch to HD6309?" : "Switch to MC6809?";
+    const char* msg1  = to_6309 ? "CoCo will restart with a Hitachi 6309 CPU."
+                                : "CoCo will restart with a Motorola 6809 CPU.";
+    const char* msg2  = to_6309 ? "Illegal 6809 opcodes will trap, as on the chip."
+                                : "6309 software will no longer run.";
+
+    bool all = (s_cpu_drawn < 0);
+    int ry = sv_render_popup_w(CPU_POPUP_W, title, msg1, msg2, 2, all);
+    if (all) DEBUG_PRINTF("popup: %s: %s %s", title, msg1, msg2);
+    for (int i = 0; i < 2; i++) {
+        if (!all && i != s_cpu_sel && i != s_cpu_drawn) continue;
+        sv_render_popup_row_w(CPU_POPUP_W, ry + i * SVP_ROW_H, (i == 0) ? "No" : "Yes", NULL, i == s_cpu_sel);
+    }
+    s_cpu_drawn = s_cpu_sel;
+}
+
 static void settings_activate(Supervisor_t* sv, int row) {
     switch (row) {
         case SV_SET_MACHINE:
             machine_select_open(sv);
+            break;
+
+        case SV_SET_CPU:
+            cpu_toggle_open(sv);
             break;
 
         case SV_SET_RS232: {
@@ -798,6 +866,7 @@ static const char* settings_value(int row, char* buf, size_t size) {
     switch (row) {
         // Runtime-active machine, not the compile-time default.
         case SV_SET_MACHINE:   return (g_machine_type == 4) ? MACHINE_NAME_COCO3 : MACHINE_NAME_COCO2;
+        case SV_SET_CPU:       return (g_cpu_variant == CPU_VARIANT_HD6309) ? "HD6309" : "MC6809";
         case SV_SET_RS232:     return (g_serial_mode == SERIAL_MODE_RS232) ? "ON" : "OFF";
         case SV_SET_JOYSTICK:
             snprintf(buf, size, "%u", (unsigned)hal_joystick_get_sensitivity());

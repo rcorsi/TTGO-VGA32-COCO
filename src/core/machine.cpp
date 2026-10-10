@@ -58,6 +58,9 @@ static void sound_pia1_written(Machine* m, uint8_t reg) {
 // Not yet branched on in core/HAL — that comes in later steps of coco2and3.md.
 uint8_t g_machine_type = MACHINE_TYPE;
 
+// Runtime-active CPU. Set from NVS before machine_init() in the main sketch.
+uint8_t g_cpu_variant = CPU_VARIANT;
+
 const char* g_cart_rom_request[2]  = { nullptr, nullptr };
 const char* g_cart_rom_loaded[2]   = { nullptr, nullptr };
 bool        g_cart_rom_fallback[2] = { false, false };
@@ -426,6 +429,7 @@ void machine_init_coco3(Machine* m) {
 
     // Initialize CPU
     mc6809_init(&m->cpu);
+    m->cpu.variant = g_cpu_variant;
     m->cpu.read = machine_read_coco3;
     m->cpu.write = machine_write_coco3;
     // OPT-M2: plain-RAM accesses below $FE00 bypass the callbacks via the
@@ -543,7 +547,7 @@ void machine_run_scanline_coco3(Machine* m) {
     int actual;
     {
         PERF_PROBE_SCOPE(PROBE_CPU_RUN);
-        actual = mc6809_run(&m->cpu, cycles_to_run);
+        actual = mc6809_run_variant(&m->cpu, cycles_to_run);
     }
     m->cycles_this_frame += actual;
 
@@ -1119,6 +1123,7 @@ void machine_init_coco2(Machine* m) {
 
     // --- Initialize core chips ---
     mc6809_init(&m->cpu);
+    m->cpu.variant = g_cpu_variant;
     m->cpu.read = machine_read_coco2;
     m->cpu.write = machine_write_coco2;
 
@@ -1248,7 +1253,7 @@ void machine_run_scanline_coco2(Machine* m) {
     sv_disk_tick(&m->fdc);
 
     // Execute CPU
-    int actual = mc6809_run(&m->cpu, cycles_to_run);
+    int actual = mc6809_run_variant(&m->cpu, cycles_to_run);
     m->cycles_this_frame += actual;
 
     // RS-232 Pak ACIA. Its IRQ shares the cartridge FIRQ line (CART), so when

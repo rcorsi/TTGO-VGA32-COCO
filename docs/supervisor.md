@@ -352,6 +352,10 @@ SV_CONTENT_Y = BORDER_Y + TITLE_H + 4
 
 ---
 
+### CPU — MC6809 / HD6309
+
+The Settings row **CPU** shows the active CPU (`g_cpu_variant`). ENTER opens a popup (`SV_CPU_POPUP` state, same 480 px window as the Orchestra-90 one) asking No / Yes to switch to the other CPU; Yes calls `supervisor_save_cpu_variant()` (NVS `"sv"` / `cpu_variant`) and `supervisor_save_and_restart()`. On boot `supervisor_load_cpu_variant()` seeds `g_cpu_variant` before `machine_init()`. See `hd6309.md`.
+
 ### Cartridge ROM — Orchestra-90 toggle
 
 The Settings row **Orchestra-90** (ON/OFF) turns the `$FF7A`/`$FF7B` DAC ports on and puts `orch90.rom` in the cartridge slot at `$C000` in place of Disk BASIC. The ROM is read once at boot (`load_cart_rom()` in `machine.cpp`), so the row opens a popup (`SV_ORCH90_POPUP` state, 480 px wide, drawn with `sv_render_popup_w()` in the theme colours) that explains the ROM change and asks No / Yes before calling `supervisor_save_and_restart()`.
@@ -379,6 +383,7 @@ Namespace: `"sv"`. Stored in NVS flash.
 | `joyLevel` | UChar | Mouse-as-joystick sensitivity level, 1..10 (default 7) |
 | `joyInv` | Bool | Mouse-as-joystick Invert-Y flag (default false) |
 | `orch90` | Bool | Orchestra-90 DAC ports enabled (default false) |
+| `cpu_variant` | UChar | 0 = MC6809, 1 = HD6309 (default `CPU_VARIANT`) |
 | `cart_rom` | String | Cartridge ROM file in `/roms/` loaded at `$C000`, set to `orch90.rom` by the Orchestra-90 toggle; absent = default (Disk BASIC) |
 
 - `supervisor_save_state()` — writes current dir + all mounted disk paths

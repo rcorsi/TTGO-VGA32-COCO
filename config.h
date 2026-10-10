@@ -80,6 +80,8 @@
 #endif
 
 // CPU variant: 0 = MC6809, 1 = HD6309
+// Compile-time default only — the active CPU is g_cpu_variant (core/machine.h),
+// initialized from NVS at boot and changed from Settings -> CPU.
 #define CPU_VARIANT             0
 
 // RAM size in KB (CoCo3 = 512)

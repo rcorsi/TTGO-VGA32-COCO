@@ -61,6 +61,11 @@
 // Step 1: declared but not yet branched on — all paths still use #if MACHINE_TYPE.
 extern uint8_t g_machine_type;
 
+// Runtime-active CPU (CPU_VARIANT_MC6809 / CPU_VARIANT_HD6309, see mc6809.h).
+// Initialized from NVS at boot, default = compile-time CPU_VARIANT. Read by
+// machine_init(); changing it afterwards needs a restart.
+extern uint8_t g_cpu_variant;
+
 // Cartridge ROM selection, indexed [0] = CoCo 2, [1] = CoCo 3.
 // g_cart_rom_request: file to load instead of ROM_DISK_FILE (nullptr = disk11);
 //   set before machine_load_roms() by the DriveWire bus (HDB-DOS Becker ROM)

@@ -55,6 +55,7 @@ void sv_machine_select_invalidate(void);
 // use these row numbers to put the cursor back on their own row.
 enum SV_SettingsRow : uint8_t {
     SV_SET_MACHINE,     // opens machine-select
+    SV_SET_CPU,         // MC6809 / HD6309 switch (asks to restart)
     SV_SET_RS232,       // RS-232 Pak toggle (shares UART0 with the Echo Log)
     SV_SET_KEYBOARD,    // opens the Keyboard submenu
     SV_SET_JOYSTICK,    // Joy - Mouse Sensitivity screen
@@ -81,6 +82,12 @@ void sv_settings_invalidate(void);
 // must be copied and changes nothing.
 void sv_orch90_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_orch90_popup_render(Supervisor_t* sv);
+
+// SV_CPU_POPUP state: popup over the Settings list, opened from the CPU row.
+// Asks to confirm switching to the other CPU (No / Yes, defaults to No); Yes
+// persists it and restarts.
+void sv_cpu_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
+void sv_cpu_popup_render(Supervisor_t* sv);
 
 // 32x12 row icons for lists in the wide frame, drawn in code. bg/fg are the
 // row's own colours so an icon reads on the green box and on the selection bar.

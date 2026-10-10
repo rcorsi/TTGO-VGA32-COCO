@@ -419,7 +419,7 @@ mode, with diagrams.
 
 ## Planned
 
-- **HD6309 CPU support** — *ongoing*. `CPU_VARIANT` already exists in `config.h`, but the core currently emulates the MC6809 only; the 6309's native mode, extra registers and inline instructions are not implemented yet.
+- **HD6309 CPU support** — implemented, *not yet tested on hardware*. Settings → CPU switches between MC6809 and HD6309 (native mode, extra registers and instructions, traps). The core is checked on the host against XRoar's; see [docs/hd6309.md](docs/hd6309.md).
 - Testing and adjustment of RS-232 Pak support
 - Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
 
