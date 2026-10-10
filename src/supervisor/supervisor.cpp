@@ -77,6 +77,7 @@ static bool uses_wide_frame(SV_State st) {
         case SV_FILE_BROWSER:
         case SV_SETTINGS:
         case SV_KEYBOARD_MENU:
+        case SV_MACHINE_MENU:
         case SV_ABOUT:
         case SV_DEBUG_MENU:
         case SV_DEBUG_DUMP:
@@ -366,6 +367,14 @@ void supervisor_on_key(uint8_t hid_usage, bool pressed) {
             sv_cpu_popup_on_key(&sv, hid_usage, pressed);
             break;
 
+        case SV_MACHINE_MENU:
+            sv_machine_menu_on_key(&sv, hid_usage, pressed);
+            break;
+
+        case SV_RAM_SELECT:
+            sv_ram_select_on_key(&sv, hid_usage, pressed);
+            break;
+
         case SV_KEYBOARD_MENU:
             sv_keyboard_menu_on_key(&sv, hid_usage, pressed);
             break;
@@ -408,6 +417,7 @@ bool supervisor_update_and_render(void) {
                 case SV_DEBUG_MENU:   sv_debug_menu_invalidate();  break;
                 case SV_ABOUT:        break;    // always repaints in full
                 case SV_SETTINGS:
+                case SV_MACHINE_MENU:
                 case SV_KEYBOARD_MENU: sv_settings_invalidate();   break;
                 case SV_KEYMAP_LIST:
                 case SV_KEYMAP_TEST:   sv_keymap_invalidate();     break;
@@ -421,9 +431,10 @@ bool supervisor_update_and_render(void) {
         // Popup over the Settings list: leave the wide frame in place.
         if (s_last_rendered != sv.state) sv_machine_select_invalidate();
     } else if (sv.state == SV_KEYMAP_CAPTURE || sv.state == SV_JOY_SENSE ||
-               sv.state == SV_ORCH90_POPUP || sv.state == SV_CPU_POPUP) {
-        // Popups over the Key Mapper keyboard / the Settings list: leave the
-        // wide frame in place.
+               sv.state == SV_ORCH90_POPUP || sv.state == SV_CPU_POPUP ||
+               sv.state == SV_RAM_SELECT) {
+        // Popups over the Key Mapper keyboard / the Settings and Machine
+        // lists: leave the wide frame in place.
     } else if (s_main_box_on_screen && sv.state != SV_CONFIRM_DIALOG) {
         // The confirm dialog is left floating over the main menu.
         sv_render_wide_clear();
@@ -494,6 +505,14 @@ bool supervisor_update_and_render(void) {
 
         case SV_CPU_POPUP:
             sv_cpu_popup_render(&sv);
+            break;
+
+        case SV_MACHINE_MENU:
+            sv_machine_menu_render(&sv);
+            break;
+
+        case SV_RAM_SELECT:
+            sv_ram_select_render(&sv);
             break;
 
         case SV_KEYBOARD_MENU:
@@ -585,6 +604,21 @@ void supervisor_save_cpu_variant(uint8_t variant) {
     Preferences prefs;
     prefs.begin("sv", false);
     prefs.putUChar("cpu_variant", variant);
+    prefs.end();
+}
+
+uint16_t supervisor_load_coco3_ram(void) {
+    Preferences prefs;
+    prefs.begin("sv", true);
+    uint16_t kb = prefs.getUShort("coco3_ram", (uint16_t)COCO3_RAM_KB);
+    prefs.end();
+    return coco3_ram_kb_valid(kb) ? kb : (uint16_t)COCO3_RAM_KB;
+}
+
+void supervisor_save_coco3_ram(uint16_t kb) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putUShort("coco3_ram", kb);
     prefs.end();
 }
 

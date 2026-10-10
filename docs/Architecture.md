@@ -349,8 +349,9 @@ The supervisor's coordinate system is the framebuffer (`DISPLAY_WIDTH` × `DISPL
 |---------|-------|-------------|
 | BOARD_TYPE | BOARD_TYPE_VGA32 | TTGO VGA32 v1.4 |
 | MACHINE_TYPE | 4 (CoCo 3) or 3 (CoCo 2) | Compile-time default; runtime-switchable via NVS |
-| CPU_VARIANT | 0 | MC6809 (default only; Settings → CPU selects MC6809 or HD6309 at runtime, see `cpu.md`) |
+| CPU_VARIANT | 0 | MC6809 (default only; Setup → Machine → CPU selects MC6809 or HD6309 at runtime, see `cpu.md`) |
 | RAM_SIZE_KB | 512 (CoCo 3) | |
+| COCO3_RAM_KB | 512 | CoCo 3 memory default; Setup → Machine → CoCo 3 Memory selects 128 / 512 / 1024 / 2048 KB at runtime |
 | CPU_CLOCK_HZ | 895000 | 0.895 MHz NTSC |
 | TARGET_FPS | 60 | NTSC timing |
 | SCANLINES_PER_FRAME | 262 | NTSC |

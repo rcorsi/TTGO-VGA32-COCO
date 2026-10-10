@@ -10,9 +10,9 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 
 - **One firmware, two CoCos** — CoCo 2 and CoCo 3 live in the same binary. Pick your machine at boot from NVS or flip it live in the supervisor menu.
 - **Cycle-accurate to the chip** — full MC6809 CPU emulation with accurate cycle counts, faithful enough to run the software that matters.
-- **MC6809 or HD6309** — switch the CPU from Setup → CPU. The Hitachi 6309 adds its extra registers and instructions, native mode and traps (new in v0.15.0, not yet tested on hardware).
+- **MC6809 or HD6309** — switch the CPU from Setup → Machine → CPU. The Hitachi 6309 adds its extra registers and instructions, native mode and traps (new in v0.15.0, not yet tested on hardware).
 - **Orchestra-90/CC** — the stereo music cartridge's two DACs, mixed to mono on the audio jack, with its ROM in the cartridge slot.
-- **Authentic video, both eras** — MC6847 VDG for CoCo 2 (text plus every semigraphics and graphics mode) and the TCC1014 GIME for CoCo 3 (512 KB RAM with MMU, 16-color palette, native graphics up to 640 px), output over crisp VGA at 640×200 @ 60 Hz via FabGL in 64-color direct mode.
+- **Authentic video, both eras** — MC6847 VDG for CoCo 2 (text plus every semigraphics and graphics mode) and the TCC1014 GIME for CoCo 3 (128 KB to 2 MB RAM with MMU, 16-color palette, native graphics up to 640 px), output over crisp VGA at 640×200 @ 60 Hz via FabGL in 64-color direct mode.
 - **Real-time speed** — CoCo 3 text and graphics modes run at a paced 60 FPS, the speed of the real machine (v0.12.0 rewrote the GIME video path; it used to manage ~39 FPS at the BASIC prompt and ~20 FPS in graphics).
 - **Real disk drives** — WD1793 floppy controller with `.DSK` and `.VDK` support, and entire disk images cached in PSRAM for zero-latency access.
 - **Complete hardware soul** — dual 6821 PIAs (keyboard, joystick, audio I/O), SAM6883 multiplexer on CoCo 2, GIME-integrated MMU on CoCo 3.
@@ -373,6 +373,7 @@ tools/
 ├── build_firmware.sh       Release images: single flashable .bin and ESP32_Bootloader package
 ├── cpu_test/               Host tests for the CPU cores (vectors, 6809 vs 6309, optional XRoar comparison)
 ├── gime_render_test/       Host test for the GIME scanline renderers
+├── gime_ram_test/          Host test for GIME address translation at each CoCo 3 RAM size
 ├── perf/                   Benchmark and measurement scripts
 └── dw_test_server.py, dw_proxy.py   DriveWire test server and proxy
 mcp-bridge/                 Host-side MCP server that fronts the WiFi debug API
@@ -405,6 +406,7 @@ All technical documentation is in the `docs/` directory:
 
 - DMK disk format is recognized but not mountable
 - HD6309 support is new and has not been tested on the board yet; it is checked on the host against XRoar's CPU core
+- CoCo 3 memory sizes other than 512K are new and have not been tested on the board yet
 - Orchestra-90 plays in mono (one DAC pin), and Disk BASIC is unavailable while it is on
 - Max 128 file entries in the SD card browser
 - Joystick 2 (left port) is a stub — returns centered, button released; only Joystick 1 is active via PS/2 mouse
@@ -456,7 +458,7 @@ mode, with diagrams.
 
 ### v0.15.0 — October 10, 2026
 
-**HD6309 CPU.** Setup → CPU switches between the Motorola MC6809 and the
+**HD6309 CPU.** Setup → Machine → CPU switches between the Motorola MC6809 and the
 Hitachi HD6309; the choice is saved and the emulator restarts with it.
 
 - The 6309 adds the E, F, W, V and MD registers, all of its extra instructions
@@ -480,6 +482,17 @@ BASIC, starting it automatically.
 - The two channels are mixed to mono, because the board has one DAC pin.
 - The toggle needs `orch90.rom` in `/roms/` and restarts the emulator; turning
   it off brings Disk BASIC back.
+
+**CoCo 3 memory size.** Setup → Machine → CoCo 3 Memory selects 128K, 512K,
+1024K or 2048K; the choice is saved and the emulator restarts with it.
+
+- 128K behaves like an unexpanded CoCo 3. 1024K and 2048K emulate a memory
+  expansion board: two extra bits in each MMU register, and the video bank in
+  `$FF9B`.
+- 2048K uses half of the board's PSRAM; if it cannot be allocated at boot the
+  machine starts with 512K.
+- Machine type, CPU and memory now share a **Machine** submenu under Setup.
+- Checked on the host (`tools/gime_ram_test`); **not yet tested on the board**.
 
 **Documentation.** New [docs/cpu.md](docs/cpu.md) (MC6809 and HD6309) and
 [docs/orchestra90.md](docs/orchestra90.md); `docs/core.md` now covers the

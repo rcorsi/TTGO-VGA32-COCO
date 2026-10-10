@@ -116,8 +116,8 @@ Responses are JSON. Transfers are capped at 4 KB per request.
 | `POST /api/inject` | `addr=`, `data=`hex, optional `pc=`, `resume=1` |
 | `GET /api/screenshot.png` | arm capture, advance one frame, return PNG (core line output, before the video HAL). `?fb=1`: return the live display framebuffer instead (640x200, after HAL scaling/border), read with the emulator held paused |
 | `POST /api/reset` | clean in-place `machine_reset()` (device stays up) |
-| `GET /api/machine` | current machine type (3 = CoCo 2, 4 = CoCo 3) and `cpu` (`"6809"` / `"6309"`) |
-| `POST /api/machine` | `type=3\|4`, optional `cpu=6809\|6309` — **reboots the device** if either changes (see below) |
+| `GET /api/machine` | current machine type (3 = CoCo 2, 4 = CoCo 3), `cpu` (`"6809"` / `"6309"`) and `coco3_ram_kb` |
+| `POST /api/machine` | `type=3\|4`, optional `cpu=6809\|6309` and `ram=128\|512\|1024\|2048` (CoCo 3 memory in KB) — **reboots the device** if any of them changes (see below) |
 | `GET /api/nvram` | dump all `"sv"` NVS settings as JSON |
 | `GET /api/bus` | DriveWire bus mode, host/port, link state, byte counters, `connects`, `max_reply_ms`, `slow_replies` |
 | `POST /api/bus` | `mode=0\|1` (Off / External), `host=`, `port=`, `rom_to=` — **reboots** |

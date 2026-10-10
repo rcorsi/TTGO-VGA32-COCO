@@ -47,7 +47,9 @@ enum SV_State : uint8_t {
     SV_FUJINET,          // DriveWire / FujiNet bus settings screen
     SV_KEYBOARD_MENU,    // Settings -> Keyboard submenu (language, Key Mapper)
     SV_ORCH90_POPUP,     // popup over Settings: Orchestra-90 on/off confirm, ROM missing
-    SV_CPU_POPUP,        // popup over Settings: MC6809 / HD6309 switch confirm
+    SV_CPU_POPUP,        // popup over the Machine submenu: MC6809 / HD6309 switch confirm
+    SV_MACHINE_MENU,     // Settings -> Machine submenu (machine type, CPU, CoCo 3 memory)
+    SV_RAM_SELECT,       // popup over the Machine submenu: CoCo 3 memory size, then confirm
 };
 
 struct SV_FileEntry;
@@ -147,6 +149,13 @@ void supervisor_save_keymap(void);
 // g_cpu_variant. save only persists: the caller restarts to apply it.
 uint8_t supervisor_load_cpu_variant(void);
 void    supervisor_save_cpu_variant(uint8_t variant);
+
+// CoCo 3 memory size in KB (NVS "sv" namespace, key "coco3_ram"): 128, 512,
+// 1024 or 2048. load returns the stored value, or the compile-time
+// COCO3_RAM_KB if none or invalid; called from setup() before machine_init()
+// to seed g_coco3_ram_kb. save only persists: the caller restarts to apply it.
+uint16_t supervisor_load_coco3_ram(void);
+void     supervisor_save_coco3_ram(uint16_t kb);
 
 // Cartridge settings (NVS "sv" namespace): key "orch90" turns the
 // Orchestra-90 DAC ports on, key "cart_rom" names the 8 KB ROM in

@@ -316,7 +316,7 @@ void sv_menu_render(Supervisor_t* sv) {
 }
 
 // ============================================================
-// Machine select — popup over the Settings list
+// Machine select — popup over the Machine submenu
 // ============================================================
 //
 // Two steps in the same window: pick CoCo 2 / CoCo 3, then confirm the
@@ -331,10 +331,11 @@ void sv_machine_select_invalidate(void) {
     s_machine_drawn = -1;
 }
 
-// Opened from the Settings "Machine" row; ESC and a no-op select return there.
+// Opened from the Machine submenu's "Machine" row; ESC and a no-op select
+// return there.
 static void restore_settings(Supervisor_t* sv) {
-    sv->state = SV_SETTINGS;
-    sv->menu_cursor = SV_SET_MACHINE;
+    sv->state = SV_MACHINE_MENU;
+    sv->menu_cursor = SV_MACH_TYPE;
     sv->needs_redraw = true;
 }
 
@@ -581,12 +582,10 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 // Settings submenu and its Keyboard submenu
 // ============================================================
 //
-// Both are icon lists in the wide green frame.
+// All are icon lists in the wide green frame.
 //
 // Settings rows (SV_SettingsRow):
-//   Machine      opens the machine-select submenu (CoCo 2 / CoCo 3)
-//   CPU          MC6809 / HD6309; the CPU is chosen at boot, so it asks to
-//                confirm and restarts
+//   Machine      opens the Machine submenu
 //   RS-232 Pak   toggle; owns UART0 while on:
 //                  ON  -> SERIAL_MODE_RS232  (forces the debug Echo Log off)
 //                  OFF -> SERIAL_MODE_OFF
@@ -598,6 +597,12 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //                  ON  -> ports on, orch90.rom as the cartridge. Refused
 //                         with a popup if the ROM is not on the SD card.
 //                  OFF -> ports off, cartridge back to Disk BASIC
+//
+// Machine rows (SV_MachineRow) — all fixed at boot, so each asks to confirm
+// and restarts:
+//   Machine         CoCo 2 / CoCo 3 popup
+//   CPU             MC6809 / HD6309 popup
+//   CoCo 3 Memory   128K / 512K / 1024K / 2048K popup
 //
 // Keyboard rows (SV_KeyboardRow):
 //   Keyboard Language   cycles the PS/2 layout (US English / Spanish Latam);
@@ -611,7 +616,6 @@ struct SV_ListRow {
 
 static const SV_ListRow SETTINGS_ROWS[SV_SET_COUNT] = {
     { "Machine",                 ROW_ICON_MACHINE   },
-    { "CPU",                     ROW_ICON_CHIP      },
     { "RS-232 Pak",              ROW_ICON_SERIAL    },
     { "Keyboard",                ROW_ICON_KEYBOARD  },
     { "Joy - Mouse Sensitivity", ROW_ICON_JOYSTICK  },
@@ -620,12 +624,18 @@ static const SV_ListRow SETTINGS_ROWS[SV_SET_COUNT] = {
     { "Orchestra-90",            ROW_ICON_NOTE      },
 };
 
+static const SV_ListRow MACHINE_ROWS[SV_MACH_COUNT] = {
+    { "Machine",       ROW_ICON_MACHINE },
+    { "CPU",           ROW_ICON_CHIP    },
+    { "CoCo 3 Memory", ROW_ICON_PAGE    },
+};
+
 static const SV_ListRow KEYBOARD_ROWS[SV_KBD_COUNT] = {
     { "Keyboard Language", ROW_ICON_LANGUAGE },
     { "Key Mapper",        ROW_ICON_KEYCAP   },
 };
 
-// Row last drawn as selected in whichever of the two lists is on screen;
+// Row last drawn as selected in whichever of the lists is on screen;
 // -1 = nothing on screen, draw the whole menu.
 static int8_t s_settings_drawn = -1;
 
@@ -747,7 +757,7 @@ void sv_cpu_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
             }
             // fall through: No
         case HID_ESC:
-            sv->state = SV_SETTINGS;
+            sv->state = SV_MACHINE_MENU;
             sv->needs_redraw = true;
             break;
 
@@ -776,14 +786,150 @@ void sv_cpu_popup_render(Supervisor_t* sv) {
     s_cpu_drawn = s_cpu_sel;
 }
 
+// CoCo 3 memory: pick one of four sizes, then confirm the restart. Keeps its
+// own cursor so the Machine submenu's is untouched.
+static const uint16_t    RAM_VALUES[4] = { 128, 512, 1024, 2048 };
+static const char* const RAM_LABELS[4] = { "128K", "512K", "1024K (1 MB)", "2048K (2 MB)" };
+
+static int8_t   s_ram_sel        = 0;      // row in the list, or 0 = No / 1 = Yes
+static int8_t   s_ram_drawn      = -1;     // row drawn selected; -1 = draw the window
+static bool     s_ram_confirming = false;
+static uint8_t  s_ram_pending    = 0;      // index into RAM_VALUES being confirmed
+// The two steps have different heights, so the list underneath is repainted
+// before the next window is drawn.
+static bool     s_ram_repaint    = false;
+
+static int ram_current_index(void) {
+    for (int i = 0; i < 4; i++) if (RAM_VALUES[i] == g_coco3_ram_kb) return i;
+    return 1;
+}
+
+static void ram_select_open(Supervisor_t* sv) {
+    s_ram_sel        = (int8_t)ram_current_index();
+    s_ram_drawn      = -1;
+    s_ram_confirming = false;
+    s_ram_repaint    = false;
+    sv->prev_state = sv->state;
+    sv->state = SV_RAM_SELECT;
+    sv->needs_redraw = true;
+}
+
+void sv_ram_select_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
+    if (!pressed) return;
+    int last = s_ram_confirming ? 1 : 3;
+
+    switch (hid_usage) {
+        case HID_UP:
+            if (s_ram_sel > 0) { s_ram_sel--; sv->needs_redraw = true; }
+            break;
+
+        case HID_DOWN:
+            if (s_ram_sel < last) { s_ram_sel++; sv->needs_redraw = true; }
+            break;
+
+        case HID_ENTER:
+            if (s_ram_confirming) {
+                if (s_ram_sel == 1) {
+                    supervisor_save_coco3_ram(RAM_VALUES[s_ram_pending]);
+                    supervisor_save_and_restart();   // never returns
+                }
+                sv->state = SV_MACHINE_MENU;         // No
+                sv->needs_redraw = true;
+                break;
+            }
+            if (RAM_VALUES[s_ram_sel] == g_coco3_ram_kb) {
+                sv->state = SV_MACHINE_MENU;         // already active
+                sv->needs_redraw = true;
+                break;
+            }
+            s_ram_pending    = (uint8_t)s_ram_sel;
+            s_ram_confirming = true;
+            s_ram_sel        = 0;                    // No
+            s_ram_drawn      = -1;
+            s_ram_repaint    = true;
+            sv->needs_redraw = true;
+            break;
+
+        case HID_ESC:
+            if (s_ram_confirming) {
+                // Back to the size list, on the size that was picked.
+                s_ram_confirming = false;
+                s_ram_sel        = (int8_t)s_ram_pending;
+                s_ram_drawn      = -1;
+                s_ram_repaint    = true;
+                sv->needs_redraw = true;
+            } else {
+                sv->state = SV_MACHINE_MENU;
+                sv->needs_redraw = true;
+            }
+            break;
+
+        case HID_F1:
+            supervisor_toggle();
+            break;
+    }
+}
+
+static void draw_ram_row(int y, int row, bool highlighted) {
+    const char* label;
+    const char* value = NULL;
+    if (s_ram_confirming) {
+        label = (row == 0) ? "No" : "Yes";
+    } else {
+        label = RAM_LABELS[row];
+        if (RAM_VALUES[row] == g_coco3_ram_kb) value = "(current)";
+    }
+    sv_render_popup_row(y, label, value, highlighted);
+    if (highlighted) DEBUG_PRINTF("popup: CoCo 3 Memory > %s %s", label, value ? value : "");
+}
+
+void sv_ram_select_render(Supervisor_t* sv) {
+    if (s_ram_repaint) {
+        s_ram_repaint = false;
+        sv_settings_invalidate();
+        sv_machine_menu_render(sv);
+    }
+
+    char msg[SVP_MSG_COLS + 1];
+    const char* title;
+    int count;
+    if (s_ram_confirming) {
+        title = "Restart emulator?";
+        snprintf(msg, sizeof(msg), "Set CoCo 3 memory to %uK and restart?",
+                 (unsigned)RAM_VALUES[s_ram_pending]);
+        count = 2;
+    } else {
+        title = "CoCo 3 Memory";
+        snprintf(msg, sizeof(msg), "Changing memory restarts the emulator.");
+        count = 4;
+    }
+
+    bool all = (s_ram_drawn < 0);
+    int ry = sv_render_popup(title, msg, NULL, count, all);
+    if (all) {
+        for (int i = 0; i < count; i++) draw_ram_row(ry + i * SVP_ROW_H, i, i == s_ram_sel);
+    } else if (s_ram_drawn != s_ram_sel) {
+        draw_ram_row(ry + s_ram_drawn * SVP_ROW_H, s_ram_drawn, false);
+        draw_ram_row(ry + s_ram_sel * SVP_ROW_H, s_ram_sel, true);
+    }
+    s_ram_drawn = s_ram_sel;
+}
+
+static void machine_menu_activate(Supervisor_t* sv, int row) {
+    switch (row) {
+        case SV_MACH_TYPE: machine_select_open(sv); break;
+        case SV_MACH_CPU:  cpu_toggle_open(sv);     break;
+        case SV_MACH_RAM:  ram_select_open(sv);     break;
+    }
+}
+
 static void settings_activate(Supervisor_t* sv, int row) {
     switch (row) {
         case SV_SET_MACHINE:
-            machine_select_open(sv);
-            break;
-
-        case SV_SET_CPU:
-            cpu_toggle_open(sv);
+            sv->prev_state = sv->state;
+            sv->state = SV_MACHINE_MENU;
+            sv->menu_cursor = 0;
+            sv->needs_redraw = true;
             break;
 
         case SV_SET_RS232: {
@@ -845,6 +991,22 @@ void sv_settings_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
     }
 }
 
+void sv_machine_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
+    if (!pressed) return;
+
+    switch (hid_usage) {
+        case HID_UP:
+        case HID_DOWN:  list_move_cursor(sv, hid_usage, SV_MACH_COUNT); break;
+        case HID_ENTER: machine_menu_activate(sv, sv->menu_cursor); break;
+        case HID_ESC:
+            sv->state = SV_SETTINGS;
+            sv->menu_cursor = SV_SET_MACHINE;
+            sv->needs_redraw = true;
+            break;
+        case HID_F1:    supervisor_toggle(); break;
+    }
+}
+
 void sv_keyboard_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
     if (!pressed) return;
 
@@ -866,7 +1028,6 @@ static const char* settings_value(int row, char* buf, size_t size) {
     switch (row) {
         // Runtime-active machine, not the compile-time default.
         case SV_SET_MACHINE:   return (g_machine_type == 4) ? MACHINE_NAME_COCO3 : MACHINE_NAME_COCO2;
-        case SV_SET_CPU:       return (g_cpu_variant == CPU_VARIANT_HD6309) ? "HD6309" : "MC6809";
         case SV_SET_RS232:     return (g_serial_mode == SERIAL_MODE_RS232) ? "ON" : "OFF";
         case SV_SET_JOYSTICK:
             snprintf(buf, size, "%u", (unsigned)hal_joystick_get_sensitivity());
@@ -878,10 +1039,25 @@ static const char* settings_value(int row, char* buf, size_t size) {
     }
 }
 
+// Current value shown right-aligned on a Machine submenu row.
+static const char* machine_value(int row, char* buf, size_t size) {
+    switch (row) {
+        case SV_MACH_TYPE: return (g_machine_type == 4) ? MACHINE_NAME_COCO3 : MACHINE_NAME_COCO2;
+        case SV_MACH_CPU:  return (g_cpu_variant == CPU_VARIANT_HD6309) ? "HD6309" : "MC6809";
+        case SV_MACH_RAM:
+            snprintf(buf, size, "%uK", (unsigned)g_coco3_ram_kb);
+            return buf;
+        default:           return NULL;
+    }
+}
+
+// Which of the icon lists render_icon_list() is drawing.
+enum { LIST_SETTINGS, LIST_KEYBOARD, LIST_MACHINE };
+
 // Shared renderer: first pass draws everything; afterwards the row left
 // behind and the selected row (whose value may have just been toggled).
 static void render_icon_list(Supervisor_t* sv, const char* title, const SV_ListRow* rows,
-                             int count, bool keyboard_menu) {
+                             int count, int list) {
     OSDCanvas* tft = hal_video_get_canvas();
     if (!tft) return;
 
@@ -896,9 +1072,10 @@ static void render_icon_list(Supervisor_t* sv, const char* title, const SV_ListR
         bool hl = (i == sel);
         int y = y0 + i * SVW_ROW_H;
         char buf[12];
-        const char* value = !keyboard_menu ? settings_value(i, buf, sizeof(buf))
-                          : (i == SV_KBD_LANGUAGE) ? hal_keyboard_layout_name(g_kbd_layout)
-                                                   : NULL;
+        const char* value = (list == LIST_SETTINGS) ? settings_value(i, buf, sizeof(buf))
+                          : (list == LIST_MACHINE)  ? machine_value(i, buf, sizeof(buf))
+                          : (i == SV_KBD_LANGUAGE)  ? hal_keyboard_layout_name(g_kbd_layout)
+                                                    : NULL;
         sv_render_wide_row(y, rows[i].label, value, hl);
         draw_row_icon(tft, rows[i].icon, SVW_ICON_X, y + 2,
                       hl ? SVW_DKBLUE : SVW_GREEN, hl ? SVW_WHITE : SVW_BLACK);
@@ -908,11 +1085,15 @@ static void render_icon_list(Supervisor_t* sv, const char* title, const SV_ListR
 }
 
 void sv_settings_render(Supervisor_t* sv) {
-    render_icon_list(sv, "Settings", SETTINGS_ROWS, SV_SET_COUNT, false);
+    render_icon_list(sv, "Settings", SETTINGS_ROWS, SV_SET_COUNT, LIST_SETTINGS);
 }
 
 void sv_keyboard_menu_render(Supervisor_t* sv) {
-    render_icon_list(sv, "Keyboard", KEYBOARD_ROWS, SV_KBD_COUNT, true);
+    render_icon_list(sv, "Keyboard", KEYBOARD_ROWS, SV_KBD_COUNT, LIST_KEYBOARD);
+}
+
+void sv_machine_menu_render(Supervisor_t* sv) {
+    render_icon_list(sv, "Machine", MACHINE_ROWS, SV_MACH_COUNT, LIST_MACHINE);
 }
 
 // ============================================================

@@ -4,7 +4,7 @@ The emulator has two CPUs built from one interpreter: the Motorola **MC6809**
 the CoCo shipped with, and the Hitachi **HD6309** many owners fitted in its
 place. Both derive from XRoar's CPU cores by Ciaran Anscomb.
 
-**Choosing the CPU:** F3 → Setup → CPU (MC6809 / HD6309). The choice is stored in
+**Choosing the CPU:** F3 → Setup → Machine → CPU (MC6809 / HD6309). The choice is stored in
 NVS (`"sv"` / `cpu_variant`) and applied at boot, so changing it restarts the
 emulator. `CPU_VARIANT` in `config.h` is only the default for a board with no
 stored value. The debug API can switch it too: `POST /api/machine` with
