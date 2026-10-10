@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.15.0 — October 10, 2026** (LilyGo TTGO VGA32 port)
+**v0.15.1 — October 10, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -451,14 +451,34 @@ mode, with diagrams.
 
 ## Planned
 
+- **Complete HD6309 testing on the board** with the [6809/6309 functional test suite](https://github.com/reyco2000/6809_6309_functional_tests). So far the 6309 core is only checked on the host against XRoar.
+- **Run NitrOS-9 testing** — boot and exercise NitrOS-9 Level 2, including the 6309 build, on both CPUs and at each CoCo 3 memory size.
 - Testing and adjustment of RS-232 Pak support
 - Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
 
 ## Changelog
 
+### v0.15.1 — October 10, 2026
+
+**CoCo 3 memory size.** Setup → Machine → CoCo 3 Memory selects 128K, 512K,
+1024K or 2048K; the choice is saved and the emulator restarts with it.
+
+- 128K behaves like an unexpanded CoCo 3. 1024K and 2048K emulate a memory
+  expansion board: two extra bits in each MMU register, and the video bank in
+  `$FF9B`.
+- 2048K uses half of the board's PSRAM; if it cannot be allocated at boot the
+  machine starts with 512K.
+- The debug API reports the size and can set it (`POST /api/machine` with
+  `ram=2048`).
+- Checked on the host (`tools/gime_ram_test`); **not yet tested on the board**.
+
+**Machine submenu.** Machine type, CPU and CoCo 3 Memory now share a
+**Machine** submenu under Setup, because the Setup list holds seven rows. The
+CPU option moved from Setup → CPU to Setup → Machine → CPU.
+
 ### v0.15.0 — October 10, 2026
 
-**HD6309 CPU.** Setup → Machine → CPU switches between the Motorola MC6809 and the
+**HD6309 CPU.** Setup → CPU (Setup → Machine → CPU since v0.15.1) switches between the Motorola MC6809 and the
 Hitachi HD6309; the choice is saved and the emulator restarts with it.
 
 - The 6309 adds the E, F, W, V and MD registers, all of its extra instructions
@@ -483,68 +503,11 @@ BASIC, starting it automatically.
 - The toggle needs `orch90.rom` in `/roms/` and restarts the emulator; turning
   it off brings Disk BASIC back.
 
-**CoCo 3 memory size.** Setup → Machine → CoCo 3 Memory selects 128K, 512K,
-1024K or 2048K; the choice is saved and the emulator restarts with it.
-
-- 128K behaves like an unexpanded CoCo 3. 1024K and 2048K emulate a memory
-  expansion board: two extra bits in each MMU register, and the video bank in
-  `$FF9B`.
-- 2048K uses half of the board's PSRAM; if it cannot be allocated at boot the
-  machine starts with 512K.
-- Machine type, CPU and memory now share a **Machine** submenu under Setup.
-- Checked on the host (`tools/gime_ram_test`); **not yet tested on the board**.
-
 **Documentation.** New [docs/cpu.md](docs/cpu.md) (MC6809 and HD6309) and
 [docs/orchestra90.md](docs/orchestra90.md); `docs/core.md` now covers the
 support chips and the machine only.
 
-### v0.14.0 — October 6, 2026
-
-**Supervisor redesign.** Every OSD screen now shares one look, taken from the
-CoCo boot screen: a green box, black text and a dark blue accent.
-
-- **Main menu** is a 3x2 grid of icon tiles: Disks, Setup, Reset, Debug, About,
-  Resume. Icons are drawn in code.
-- **Disk Manager** has a button per drive, a denser file list (8 rows, names up
-  to 63 characters) and popups for mounting, replacing and unmounting, all
-  defaulting to No.
-- **Setup** is an icon list. Machine moved here from the main menu and is now a
-  popup; Keyboard Language and Key Mapper moved into a new **Keyboard**
-  submenu; Mouse Sensitivity is now the **Joy - Mouse Sensitivity** popup.
-- **Key Mapper** draws the CoCo 2 or CoCo 3 keyboard and is navigated with the
-  arrow keys, replacing the scrolling list.
-- **Debug** is an icon list; "Debug Log" moved here from Setup as **Echo Log**.
-  The status, hex dump, RS-232 and Dump RAM screens use the new frame.
-- **WiFi / Debug** shows a status panel above its five actions, which now fit
-  without scrolling.
-- **DriveWire** replaces "Mode" with an **External Server** on/off row. Turning
-  it on asks for Host, Port and ROM in a popup and checks the HDB-DOS ROM is on
-  the SD card. Host, Port and ROM rows show only while it is on, and a warning
-  appears when WiFi is not configured.
-- Screens repaint only the rows, tiles or keys that changed, so moving the
-  selection no longer flickers.
-- The TAB key now reaches the supervisor.
-
-**WiFi set up from the keyboard or the SD card.** The `CoCo3-Setup` access
-point and its web page are gone; the board no longer opens a network of its
-own.
-
-- **Config WiFi** (Setup → WiFi / Debug) scans, lists the networks with their
-  signal strength, and takes the password from the PS/2 keyboard.
-- **Read WiFi from SD Card** loads the network from `cocowifi.cfg` in the root
-  of the SD card:
-
-  ```ini
-  [WiFi]
-  enabled=1
-  SSID=MyNetwork
-  passphrase=secret
-  ```
-
-  `enabled=0` saves the network but leaves WiFi off. The file is read only when
-  you choose the row, and the password in it is plain text.
-
-Older releases (v0.12.2 and earlier) are in [ChangeHistory.md](ChangeHistory.md).
+Older releases (v0.14.0 and earlier) are in [ChangeHistory.md](ChangeHistory.md).
 
 ## ⚠️ Vibe Coding Alert
 

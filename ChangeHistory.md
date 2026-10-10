@@ -3,6 +3,52 @@
 Releases before the two most recent ones. The latest changes are in the
 [Changelog section of the README](README.md#changelog).
 
+### v0.14.0 — October 6, 2026
+
+**Supervisor redesign.** Every OSD screen now shares one look, taken from the
+CoCo boot screen: a green box, black text and a dark blue accent.
+
+- **Main menu** is a 3x2 grid of icon tiles: Disks, Setup, Reset, Debug, About,
+  Resume. Icons are drawn in code.
+- **Disk Manager** has a button per drive, a denser file list (8 rows, names up
+  to 63 characters) and popups for mounting, replacing and unmounting, all
+  defaulting to No.
+- **Setup** is an icon list. Machine moved here from the main menu and is now a
+  popup; Keyboard Language and Key Mapper moved into a new **Keyboard**
+  submenu; Mouse Sensitivity is now the **Joy - Mouse Sensitivity** popup.
+- **Key Mapper** draws the CoCo 2 or CoCo 3 keyboard and is navigated with the
+  arrow keys, replacing the scrolling list.
+- **Debug** is an icon list; "Debug Log" moved here from Setup as **Echo Log**.
+  The status, hex dump, RS-232 and Dump RAM screens use the new frame.
+- **WiFi / Debug** shows a status panel above its five actions, which now fit
+  without scrolling.
+- **DriveWire** replaces "Mode" with an **External Server** on/off row. Turning
+  it on asks for Host, Port and ROM in a popup and checks the HDB-DOS ROM is on
+  the SD card. Host, Port and ROM rows show only while it is on, and a warning
+  appears when WiFi is not configured.
+- Screens repaint only the rows, tiles or keys that changed, so moving the
+  selection no longer flickers.
+- The TAB key now reaches the supervisor.
+
+**WiFi set up from the keyboard or the SD card.** The `CoCo3-Setup` access
+point and its web page are gone; the board no longer opens a network of its
+own.
+
+- **Config WiFi** (Setup → WiFi / Debug) scans, lists the networks with their
+  signal strength, and takes the password from the PS/2 keyboard.
+- **Read WiFi from SD Card** loads the network from `cocowifi.cfg` in the root
+  of the SD card:
+
+  ```ini
+  [WiFi]
+  enabled=1
+  SSID=MyNetwork
+  passphrase=secret
+  ```
+
+  `enabled=0` saves the network but leaves WiFi off. The file is read only when
+  you choose the row, and the password in it is plain text.
+
 ### v0.12.2 — October 1, 2026
 
 **CoCo 3 frame time roughly halved, so 60 FPS now has real headroom.** v0.12.1
