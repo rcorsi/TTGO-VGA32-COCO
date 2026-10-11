@@ -84,13 +84,16 @@ mc6809_run(cpu, budget):
       cycles = budget; break          // FDC HALT burns budget
     check_interrupts(cpu)             // NMI > FIRQ > IRQ priority
     if cpu->wait_for_interrupt:
-      cycles = budget; break          // CWAI/SYNC idles
+      if SYNC and (irq_pending or firq_pending):
+        wait_for_interrupt = false    // SYNC ends on any active line
+      else:
+        cycles = budget; break        // CWAI/SYNC idles
     execute_one(cpu)                  // Fetch-decode-execute
   return cycles
 ```
 
 - **HALT support**: When `cpu->halted` is true (set by the FDC's DRQ/HALT mechanism), the CPU burns its entire budget doing nothing — essential for disk I/O synchronization.
-- **CWAI/SYNC**: `wait_for_interrupt` flag causes the CPU to idle until an interrupt arrives. Any code that sets `irq_pending` or `firq_pending` must also clear `wait_for_interrupt` to wake the CPU — see "SYNC Wake-up Fix" in `core.md`.
+- **CWAI/SYNC**: `wait_for_interrupt` flag causes the CPU to idle until an interrupt arrives. The run loop decides when the wait ends, so code that drives the lines only sets `irq_pending` / `firq_pending`. SYNC ends as soon as a line is active, masked or not, including a line that was already active when SYNC executed; a masked line makes it continue with the next instruction. CWAI ends only when an unmasked interrupt is taken.
 
 ### Interrupt Handling
 

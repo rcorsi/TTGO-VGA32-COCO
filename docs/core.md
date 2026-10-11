@@ -449,22 +449,9 @@ FIRQ = PIA1 (IRQA | IRQB) OR GIME FIRQ
 
 Unlike CoCo 2 (which uses PIA callbacks → `mc6809_irq()`/`mc6809_firq()`), CoCo 3 computes the combined interrupt state each scanline via direct assignment to `cpu.irq_pending` and `cpu.firq_pending`. This is necessary because GIME interrupt state changes between scanlines (HBORD, VBORD, TMR).
 
-#### SYNC Wake-up Fix (April 2026)
+#### SYNC / CWAI wake-up
 
-**Bug:** The direct assignment `cpu.irq_pending = pia0_irq || gime.IRQ` bypassed `mc6809_irq()`, which normally clears `wait_for_interrupt`. When the 6809 executed a SYNC instruction (used by Super Extended BASIC's main loop at $E62D to wait for the 60Hz IRQ), the CPU would never wake up — `wait_for_interrupt` stayed true even though `irq_pending` was true.
-
-**Fix:** After computing the combined interrupt state, explicitly clear `wait_for_interrupt` when any interrupt becomes active:
-
-```cpp
-bool new_irq  = pia0_irq || m->gime.IRQ;
-bool new_firq = pia1_irq || m->gime.FIRQ;
-if (new_irq || new_firq)
-    m->cpu.wait_for_interrupt = false;
-m->cpu.irq_pending  = new_irq;
-m->cpu.firq_pending = new_firq;
-```
-
-This correctly wakes both SYNC (wake + continue or service) and CWAI (wake + vector to handler).
+The direct assignment does not need to wake the CPU. `mc6809_run()` / `hd6309_run()` test the line state on every pass through the run loop: SYNC ends when `irq_pending` or `firq_pending` is set (masked or not), CWAI ends when an unmasked interrupt is taken. Super Extended BASIC's main loop at $E62D relies on this to wait for the 60Hz IRQ with SYNC. See `cpu.md`.
 
 ### Frame Execution
 
@@ -629,7 +616,6 @@ machine_run_scanline() — CoCo 3:
   5. Combined IRQ routing:             // PIA + GIME → CPU
        new_irq  = pia0_irq || gime.IRQ
        new_firq = pia1_irq || gime.FIRQ
-       if (new_irq || new_firq) wait_for_interrupt = false  // SYNC wake-up
   6. Vertical state machine:
        Scanline 0:   FS falling → PIA0 CB1, latch vertical params
        Scanline 4:   FS rising → PIA0 CB1

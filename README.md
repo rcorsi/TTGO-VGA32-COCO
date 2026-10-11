@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.15.1 — October 10, 2026** (LilyGo TTGO VGA32 port)
+**v0.15.2 — October 10, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -457,6 +457,22 @@ mode, with diagrams.
 - Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
 
 ## Changelog
+
+### v0.15.2 — October 10, 2026
+
+**`SYNC` and `CWAI` wake-up fixed (MC6809 and HD6309).** Found with the
+[6809/6309 functional test suite](https://github.com/reyco2000/6809_6309_functional_tests)
+(`6809_interrupt_test`, test `$10`).
+
+- `SYNC` no longer hangs when a masked interrupt line is already active. It
+  now ends as soon as IRQ or FIRQ is active, masked or not, and carries on
+  with the next instruction if the interrupt is masked.
+- `CWAI` no longer ends when a masked interrupt line goes active. It waits
+  until an interrupt is taken.
+- The CPU run loop now makes this decision; the per-scanline wake-up in
+  `machine.cpp` is gone.
+- The suite passes all 8 runs on the host, on both CPU builds; **not yet
+  checked on the board**.
 
 ### v0.15.1 — October 10, 2026
 

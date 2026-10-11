@@ -2811,9 +2811,16 @@ int CPU_RUN_NAME(MC6809* cpu, int budget) {
         check_interrupts(cpu);
 
         if (cpu->wait_for_interrupt) {
-            // CWAI/SYNC: burn remaining cycles waiting
-            cpu->cycles = budget;
-            break;
+            // SYNC ends on any active line, masked or not (level-sensitive,
+            // so a line already active when SYNC executes ends it at once).
+            // CWAI only ends when check_interrupts() above takes an interrupt.
+            if (!cpu->cwai_state && (cpu->irq_pending || cpu->firq_pending)) {
+                cpu->wait_for_interrupt = false;
+            } else {
+                // CWAI/SYNC: burn remaining cycles waiting
+                cpu->cycles = budget;
+                break;
+            }
         }
 
         execute_one(cpu);
