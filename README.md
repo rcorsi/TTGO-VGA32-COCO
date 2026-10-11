@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.15.2 — October 10, 2026** (LilyGo TTGO VGA32 port)
+**v0.15.3 — October 11, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -375,7 +375,8 @@ tools/
 ├── gime_render_test/       Host test for the GIME scanline renderers
 ├── gime_ram_test/          Host test for GIME address translation at each CoCo 3 RAM size
 ├── perf/                   Benchmark and measurement scripts
-└── dw_test_server.py, dw_proxy.py   DriveWire test server and proxy
+├── dw_test_server.py, dw_proxy.py   DriveWire test server and proxy
+└── frequency_meter.py    Audio test: measures the pitch of the board's sound output from a PC audio input
 mcp-bridge/                 Host-side MCP server that fronts the WiFi debug API
 docs/                       Technical documentation (see below)
 ```
@@ -460,6 +461,27 @@ mode, with diagrams.
 - **CoCo SDC** emulation.
 
 ## Changelog
+
+### v0.15.3 — October 11, 2026
+
+**Cleaner sound.** The audio output was losing part of every frame since the
+60 Hz frame pacing of v0.12: measured on the board, 6.6 of each frame's 262
+samples were cut off, and late frames replayed stale audio.
+
+- Samples now go through a ring buffer between the emulation loop and the
+  audio interrupt, and the playback rate follows the buffer's fill level. No
+  samples are dropped or replayed, on static or animated screens.
+- When emulation stops (supervisor menu, debugger pause) the output holds its
+  level and restarts cleanly, instead of looping the last frame.
+- The pitch trim constant is gone. `PLAY` pitch is unchanged: `O2 A` is
+  217.84 Hz and `O4 A` is 867.73 Hz, which is the ROM's own timing, not
+  concert pitch (see [audio-hal.md](docs/audio-hal.md), "Pitch").
+- Sound now runs about 20–25 ms behind the emulation.
+- `/api/status` reports audio queue and interrupt timing counters (`audio`).
+- New `tools/frequency_meter.py`: measures the pitch of the board's sound
+  output from a PC audio input.
+- Checked on the board with `SOUND`, `PLAY` and Orchestra-90 on the CoCo 3;
+  **not yet checked in CoCo 2 mode**.
 
 ### v0.15.2 — October 10, 2026
 
