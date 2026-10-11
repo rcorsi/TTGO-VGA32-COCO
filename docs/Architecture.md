@@ -268,9 +268,9 @@ FabGL `VGAController` at **640×200 @ 60 Hz**, 64-color direct mode (RGB222, 2 b
 
 ESP32 internal **DAC1 on GPIO25** driven from a hardware timer ISR.
 
-- `hal_audio_init()` calls `dac_output_enable(DAC_CHANNEL_1)`, allocates `timerBegin(0, 80, true)` for a 1 µs timer base, and arms `timerAlarmWrite(timer, 1000000 / 22050, true)` for the 22050 Hz ISR.
-- The ISR pulls one sample per fire from the active double-buffer slot and calls `dac_output_voltage(DAC_CHANNEL_1, sample)`.
-- The 262-sample-per-frame scanline capture + commit-frame double-buffer model from the S3 build is preserved unchanged — the only difference is the output stage.
+- `hal_audio_init()` calls `dac_output_enable(DAC_CHANNEL_1)`, allocates `timerBegin(0, 80, true)` for a 1 µs timer base, and arms `timerAlarmWrite(timer, 45, true)` for a 45 µs (22 222 Hz) ISR.
+- The ISR takes samples from a ring buffer with a fractional stride and calls `dac_output_voltage(DAC_CHANNEL_1, sample)`.
+- The emulation loop pushes one sample per scanline (262 per frame) into the ring; at frame end the playback rate is steered to keep the ring about 390 samples full. See `audio-hal.md`.
 
 #### Keyboard — `hal_keyboard.cpp`
 
@@ -357,7 +357,7 @@ The supervisor's coordinate system is the framebuffer (`DISPLAY_WIDTH` × `DISPL
 | SCANLINES_PER_FRAME | 262 | NTSC |
 | ACTIVE_SCANLINES | 192 | Visible display lines |
 | DISPLAY_WIDTH × HEIGHT | 640 × 200 | VGA framebuffer surface |
-| AUDIO_SAMPLE_RATE | 22050 | DAC ISR rate |
+| AUDIO_ISR_PERIOD_US | 45 | DAC ISR period (`hal_audio.cpp`) |
 | USE_PSRAM | 1 | RAM/ROM in PSRAM |
 
 ---
@@ -436,7 +436,7 @@ All files below are **required**. Missing any will trigger the boot validation h
 
 - CPU emulation: ~20-25 fps on CoCo 3 GIME hi-res content (sustained by emulation core, not display)
 - Display: FabGL DMA scans 640×200 @ 60 Hz continuously — no SPI push step on the critical path
-- Audio: Real-time via DAC1 timer ISR at 22050 Hz; pitch-corrected scanline buffer
+- Audio: Real-time via DAC1 timer ISR every 45 µs; rate-controlled scanline sample queue
 - Memory: ~160 KB SRAM free, ~3.5 MB PSRAM free after init
 
 ---

@@ -154,6 +154,26 @@ static void h_status() {
     j += ",\"int8_min\":" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     j += ",\"int8_largest\":" + String(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     j += ",\"fps\":" + String(hal_video_get_fps(), 1);
+    // Audio queue diagnostics; ?audio_reset=1 clears them after this read.
+    {
+        HalAudioStats a;
+        hal_audio_get_stats(&a);
+        float mhz = (float)getCpuFrequencyMhz();
+        j += ",\"audio\":{\"commits\":" + String(a.commits);
+        j += ",\"underruns\":" + String(a.underruns);
+        j += ",\"hold_ticks\":" + String(a.hold_ticks);
+        j += ",\"overruns\":" + String(a.overruns);
+        j += ",\"fill\":" + String(a.fill);
+        j += ",\"fill_min\":" + String(a.fill_min);
+        j += ",\"fill_max\":" + String(a.fill_max);
+        j += ",\"stride_adj\":" + String(a.stride_adj);
+        j += ",\"commit_us_min\":" + String(a.commit_us_min);
+        j += ",\"commit_us_max\":" + String(a.commit_us_max);
+        j += ",\"isr_us_max\":" + String(a.isr_cyc_max / mhz, 2);
+        j += ",\"isr_gap_us_min\":" + String(a.isr_gap_cyc_min / mhz, 2);
+        j += ",\"isr_gap_us_max\":" + String(a.isr_gap_cyc_max / mhz, 2) + "}";
+        if (s_server.arg("audio_reset") == "1") hal_audio_reset_stats();
+    }
     // Unused stack of this server task, lowest since boot (bytes).
     j += ",\"srv_stack_free\":" + String(uxTaskGetStackHighWaterMark(nullptr));
     // Emulator/OSD task (Arduino loopTask), lowest unused stack since boot.
