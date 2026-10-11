@@ -179,7 +179,7 @@ All MC6809 addressing modes are implemented:
 
 - **Branchless flag computation**: ALU helpers (`op_add8`, `op_sub8`, `op_add16`, `op_sub16`, `update_nz8`, `update_nz16`) use a compute-and-mask
 pattern — flags are accumulated into a local variable `f` and written to `cpu->cc` in a single masked OR. The `CC_PUT` macro uses a branchless ternary that compiles to Xtensa MOVNEZ. This optimization improved performance from ~23.5 to ~25–27 fps.
-- **Direct RAM access (OPT-M2)**: for addresses below `fast_limit`, `mem_read`/`mem_write` use the machine's 8 KB page tables (`rd_page`/`wr_page`) and skip the read/write callbacks.
+- **Direct RAM access (OPT-M2)**: for addresses below `fast_limit`, `mem_read`/`mem_write` use the machine's 8 KB page tables (`rd_page`/`wr_page`) and skip the read/write callbacks. The CoCo 3 tables belong to the GIME (`fast_limit` = $FE00); the CoCo 2 tables are built by `update_fast_pages_coco2()` in `machine.cpp` (`fast_limit` = $FF00: RAM below $8000, ROM pages read-only, everything RAM in SAM all-RAM mode).
 - **No PSRAM store workaround in the core**: both CPU files include `utils/no_psram_memw.h`; see `performance.md`.
 - **Inline memory helpers**: `mem_read`, `mem_write`, `fetch8`, `fetch16`, push/pull helpers are all `static inline` to eliminate function call overhead in the hot instruction loop.
 - **D register as single uint16_t**: A and B are stored as the high and low bytes of a single `uint16_t d`, accessed via `GET_A()` / `GET_B()` macros and `SET_A()` / `SET_B()`. This makes 16-bit D operations (ADDD, SUBD, LDD, STD) naturally efficient.

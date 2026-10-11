@@ -203,7 +203,9 @@ The ISR takes about 6 µs worst case. Its start time varies by roughly ±14 µs 
 | `commit_us_min`, `commit_us_max` | Shortest and longest time between frame ends |
 | `isr_us_max`, `isr_gap_us_min`, `isr_gap_us_max` | ISR run time and spacing |
 
-On a healthy build `underruns` and `overruns` stay at 0 while the emulator is running.
+On a healthy build `underruns` and `overruns` stay at 0 while the emulator is running at 60 FPS.
+
+**Below 60 FPS the ring runs dry.** The emulator then delivers fewer samples than the ISR consumes, and the 1 % rate limit cannot follow, so playback pauses and restarts several times a second. This is what made CoCo 2 sound bad in v0.15.3 (48–52 FPS at the BASIC prompt, 61 underruns per 10 s); v0.15.4 fixed the frame rate, not the queue. A program heavy enough to drop below 60 FPS will still break up.
 
 ---
 

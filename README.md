@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.15.3 — October 11, 2026** (LilyGo TTGO VGA32 port)
+**v0.15.4 — October 11, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -461,6 +461,27 @@ mode, with diagrams.
 - **CoCo SDC** emulation.
 
 ## Changelog
+
+### v0.15.4 — October 11, 2026
+
+**CoCo 2 runs at full speed, which fixes its sound.** CoCo 2 mode was not
+reaching 60 FPS: 56–58 FPS at the BASIC prompt in v0.15.2 and 48–52 FPS in
+v0.15.3. The v0.15.3 audio queue needs 60 FPS, so on the CoCo 2 it ran dry
+about six times a second and sounded worse than before.
+
+- CoCo 2 now uses the same direct RAM/ROM access in the CPU core that the
+  CoCo 3 has had since v0.12.2, instead of a callback for every memory access.
+- Measured on the board: 60 FPS at the BASIC prompt on both CPUs and with an
+  animated text screen, with no audio dropouts. One run on the 6809 right
+  after switching machines read 56 FPS with dropouts; not explained yet.
+- ROM stays read-only and the SAM all-RAM mode works through the new path
+  (checked with a test routine on the board).
+- Known limit: a program heavy enough to drop below 60 FPS still makes the
+  sound break up, on either machine.
+- Known issue: in one CoCo 2 session the audio interrupt was held off for up
+  to 0.5 ms at a time and lost about 1 % of its ticks; the audio queue then
+  stays full and drops about 16 samples a second. The FPS overlay (F5) is the
+  suspect, not confirmed.
 
 ### v0.15.3 — October 11, 2026
 
