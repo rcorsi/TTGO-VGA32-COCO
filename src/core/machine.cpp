@@ -827,6 +827,33 @@ static void pia1_irq_b_coco2(bool active) {
 }
 
 // ============================================================
+// Fast RAM/ROM page tables — CoCo 2
+// ============================================================
+
+// Same inline path the CoCo 3 gets from the GIME (OPT-M2): below $FF00 the
+// CPU core reads and writes through these 8 KB page pointers instead of the
+// callbacks. They mirror machine_read_coco2/machine_write_coco2 exactly: a
+// null entry falls back to the callback (unloaded ROM reads $FF, ROM writes
+// are ignored). Rebuilt when the SAM map type changes or ROMs are loaded.
+static uint8_t* coco2_rd_page[8];
+static uint8_t* coco2_wr_page[8];
+
+static void update_fast_pages_coco2(Machine* m) {
+    for (int i = 0; i < 8; i++) {
+        uint8_t* ram = m->ram + i * 0x2000;
+        if (i < 4 || m->sam.ty) {            // $0000-$7FFF, or all-RAM mode
+            coco2_rd_page[i] = ram;
+            coco2_wr_page[i] = ram;
+            continue;
+        }
+        coco2_wr_page[i] = nullptr;
+        if (i == 4)      coco2_rd_page[i] = m->rom_extbas_loaded ? m->rom_extbas : nullptr;
+        else if (i == 5) coco2_rd_page[i] = m->rom_basic_loaded  ? m->rom_basic  : nullptr;
+        else             coco2_rd_page[i] = m->rom_cart_loaded   ? m->rom_cart + (i - 6) * 0x2000 : nullptr;
+    }
+}
+
+// ============================================================
 // Memory read callback (called by CPU) — CoCo 2
 // ============================================================
 
@@ -1050,6 +1077,7 @@ void machine_write_coco2(uint16_t addr, uint8_t val) {
         // SAM: $FFC0-$FFDF (write-only bit set/clear pairs)
         if (addr <= 0xFFDF) {
             sam6883_write(&m->sam, addr - 0xFFC0);
+            update_fast_pages_coco2(m);     // map type (TY) may have changed
             // Update VDG display base address from SAM F0-F6
             m->vdg.vram_offset = sam6883_get_vdg_address(&m->sam);
             // SAM V0-V2 control VDG GM0-GM2 bits
@@ -1122,6 +1150,10 @@ void machine_init_coco2(Machine* m) {
     m->cpu.variant = g_cpu_variant;
     m->cpu.read = machine_read_coco2;
     m->cpu.write = machine_write_coco2;
+    // Plain RAM/ROM accesses below the I/O page bypass the callbacks.
+    m->cpu.rd_page = coco2_rd_page;
+    m->cpu.wr_page = coco2_wr_page;
+    m->cpu.fast_limit = 0xFF00;
 
     mc6821_init(&m->pia0);
     mc6821_init(&m->pia1);
@@ -1134,6 +1166,7 @@ void machine_init_coco2(Machine* m) {
 
     mc6847_init(&m->vdg);
     sam6883_init(&m->sam);
+    update_fast_pages_coco2(m);
 
     // --- Timing ---
     m->ntsc = true;
@@ -1189,6 +1222,7 @@ bool machine_load_roms_coco2(Machine* m, const char* rom_path) {
         DEBUG_PRINTF("  Reset vector in BASIC ROM: $%04X", reset_vec);
     }
 
+    update_fast_pages_coco2(m);     // ROM pages are now readable
     return m->rom_basic_loaded;
 }
 
@@ -1210,6 +1244,7 @@ void machine_reset_coco2(Machine* m) {
     sound_reset();
     mc6847_reset(&m->vdg);
     sam6883_reset(&m->sam);
+    update_fast_pages_coco2(m);
 
     // Re-wire IRQ callbacks (reset clears them)
     m->pia0.irq_a_callback = pia0_irq_a_coco2;
