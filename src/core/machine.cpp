@@ -581,11 +581,6 @@ void machine_run_scanline_coco3(Machine* m) {
         // Deluxe Pak routes its ACIA IRQ to CART → FIRQ.
         bool new_firq = pia1_irq || m->gime.FIRQ
                      || (rs232_pak_enabled() && mc6551_irq_active());
-        // Wake CPU from SYNC/CWAI when any interrupt signal goes active.
-        // Direct assignment bypasses mc6809_irq() which normally clears
-        // wait_for_interrupt — we must do it here to avoid SYNC deadlock.
-        if (new_irq || new_firq)
-            m->cpu.wait_for_interrupt = false;
         m->cpu.irq_pending  = new_irq;
         m->cpu.firq_pending = new_firq;
     }
@@ -1270,7 +1265,6 @@ void machine_run_scanline_coco2(Machine* m) {
         bool pia1_firq = pia_irq(m->pia1.ctrl_a) || pia_irq(m->pia1.ctrl_b);
         bool firq = pia1_firq || mc6551_irq_active();
         m->cpu.firq_pending = firq;
-        if (firq) m->cpu.wait_for_interrupt = false;
     }
 
     // --- VDG/SAM scanline processing ---

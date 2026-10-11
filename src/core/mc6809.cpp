@@ -24,17 +24,14 @@ void mc6809_nmi(MC6809* cpu, bool active) {
     if (active && !cpu->nmi_line) {
         // Edge-triggered: latch on inactive→active transition only
         cpu->nmi_pending = true;
-        cpu->wait_for_interrupt = false;
     }
     cpu->nmi_line = active;
 }
 
 void mc6809_firq(MC6809* cpu, bool active) {
     cpu->firq_pending = active;
-    if (active) cpu->wait_for_interrupt = false;
 }
 
 void mc6809_irq(MC6809* cpu, bool active) {
     cpu->irq_pending = active;
-    if (active) cpu->wait_for_interrupt = false;
 }
