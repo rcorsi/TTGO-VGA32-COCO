@@ -449,12 +449,15 @@ complementary mitigation on the CoCo side.
 See [docs/drivewire.md](docs/drivewire.md) for how a sector travels in each
 mode, with diagrams.
 
-## Planned
+## TODO
 
-- **Complete HD6309 testing on the board** with the [6809/6309 functional test suite](https://github.com/reyco2000/6809_6309_functional_tests). So far the 6309 core is only checked on the host against XRoar.
 - **Run NitrOS-9 testing** — boot and exercise NitrOS-9 Level 2, including the 6309 build, on both CPUs and at each CoCo 3 memory size.
 - Testing and adjustment of RS-232 Pak support
-- Migrate to an MQTT-based MCP Bridge gateway (replacing the current WiFi API)
+- **Load cartridge ROMs from the Supervisor** — a menu option to pick a cartridge ROM image from the SD card.
+- **Friendlier failure screens** — rework the "no SD card" and "no ROMs found" messages into a clearer interface.
+- **CPU speed test** — a test that confirms the emulated CPU runs at 0.89 MHz on the CoCo 2 and 1.78 MHz on the CoCo 3.
+- **Speech synthesizer cartridge** support.
+- **CoCo SDC** emulation.
 
 ## Changelog
 
