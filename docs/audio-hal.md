@@ -176,6 +176,8 @@ Playback is locked to emulated time, so the pitch heard is the pitch the emulate
 
 Both measurements are 0.80 % below the loop's own frequency, which is 120 cycles per 60 Hz interrupt in each case (CoCo 3, Disk BASIC). Do not add a trim constant to "fix" these readings.
 
+The measurements were taken with `tools/frequency_meter.py`: connect the board's audio jack to a PC audio input, pick the capture device with `--list-devices`, and read the frequency while the note plays.
+
 #### Bandwidth
 
 Scanline-rate sampling gives an effective sample rate of 262 × 60 = 15 720 Hz (Nyquist ≈ 7.8 kHz). Only the last level written during a scanline is kept.

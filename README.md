@@ -375,7 +375,8 @@ tools/
 ├── gime_render_test/       Host test for the GIME scanline renderers
 ├── gime_ram_test/          Host test for GIME address translation at each CoCo 3 RAM size
 ├── perf/                   Benchmark and measurement scripts
-└── dw_test_server.py, dw_proxy.py   DriveWire test server and proxy
+├── dw_test_server.py, dw_proxy.py   DriveWire test server and proxy
+└── frequency_meter.py    Audio test: measures the pitch of the board's sound output from a PC audio input
 mcp-bridge/                 Host-side MCP server that fronts the WiFi debug API
 docs/                       Technical documentation (see below)
 ```
