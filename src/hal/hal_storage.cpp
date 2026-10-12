@@ -29,6 +29,26 @@ static SPIClass sd_spi(HSPI);
 static bool storage_ready = false;
 
 bool hal_storage_init(void) {
+    DEBUG_PRINT("Storage: Detecting ESP32 chip...");
+
+    // detect if board is LILYGO FabGL VGA32 or OLIMEX ESP32-SBC-FABGL
+    esp_chip_info_t chip_info {};
+    esp_chip_info(&chip_info);
+    DEBUG_PRINTF("Chip model:    %d", chip_info.model);
+    DEBUG_PRINTF("Chip revision: %d", chip_info.revision);
+    DEBUG_PRINTF("Chip cores:    %d", chip_info.cores);
+    DEBUG_PRINTF("Chip features: %x", chip_info.features);
+
+    // set MISO Pin based on specific board (LILYGO or OLIMEX)
+    int8_t PIN_SD_MISO = 0;
+    if (chip_info.revision < 3) {
+        DEBUG_PRINT("LILYGO FabGL VGA32 detected");
+        PIN_SD_MISO = PIN_SD_MISO_LILYGO;
+    } else {
+        DEBUG_PRINT("OLIMEX ESP32-SBC-FABGL detected");
+        PIN_SD_MISO = PIN_SD_MISO_OLIMEX;
+    }
+
     DEBUG_PRINT("Storage: Initializing SD card...");
     DEBUG_PRINTF("  SPI pins: SCLK=%d MOSI=%d MISO=%d CS=%d",
                  PIN_SD_SCLK, PIN_SD_MOSI, PIN_SD_MISO, PIN_SD_CS);

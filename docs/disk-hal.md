@@ -387,12 +387,12 @@ SD.begin(PIN_SD_CS, sd_spi, 4000000);
 
 **Pin assignments (board-specific):**
 
-| Function | TTGO VGA32 |
-|----------|:---:|
-| SD SCLK | GPIO14 |
-| SD MOSI | GPIO12 |
-| SD MISO | GPIO2 *(strapping pin — must float/high at boot)* |
-| SD CS | GPIO13 |
+| Function | TTGO VGA32 | OLIMEX ESP32-SBC-FABGL | Notes |
+|----------|:---:|:---:|:----|
+| SD SCLK | GPIO14 | GPIO14 | |
+| SD MOSI | GPIO12 | GPIO12 | |
+| SD MISO | GPIO2 | **GPIO35** | *TTGO (strapping pin — must float/high at boot)* |
+| SD CS | GPIO13 | GPIO13 | |
 
 There is no SPI display bus on the VGA32, so HSPI is dedicated entirely to the SD card. The dedicated bus is required by the board's fixed wiring.
 
