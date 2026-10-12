@@ -304,4 +304,7 @@ bool hal_storage_load_file(const char* path, uint8_t* buffer, size_t size);
 // Check if a file exists
 bool hal_storage_file_exists(const char* path);
 
+// Size of a file in bytes, 0 if it is missing or storage is not ready
+size_t hal_storage_file_size(const char* path);
+
 #endif // HAL_H

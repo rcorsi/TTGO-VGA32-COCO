@@ -4,13 +4,14 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.15.4 — October 11, 2026** (LilyGo TTGO VGA32 port)
+**v0.16.0 — October 12, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
 - **One firmware, two CoCos** — CoCo 2 and CoCo 3 live in the same binary. Pick your machine at boot from NVS or flip it live in the supervisor menu.
 - **Cycle-accurate to the chip** — full MC6809 CPU emulation with accurate cycle counts, faithful enough to run the software that matters.
 - **MC6809 or HD6309** — switch the CPU from Setup → Machine → CPU. The Hitachi 6309 adds its extra registers and instructions, native mode and traps (new in v0.15.0, not yet tested on hardware).
+- **Program cartridges** — load a `.ccc` or `.rom` cartridge ROM from the SD card with the supervisor's **Cart** menu: up to 16 KB on the CoCo 2, and bank-switched ROMs up to 128 KB on the CoCo 3 (new in v0.16.0).
 - **Orchestra-90/CC** — the stereo music cartridge's two DACs, mixed to mono on the audio jack, with its ROM in the cartridge slot.
 - **Authentic video, both eras** — MC6847 VDG for CoCo 2 (text plus every semigraphics and graphics mode) and the TCC1014 GIME for CoCo 3 (128 KB to 2 MB RAM with MMU, 16-color palette, native graphics up to 640 px), output over crisp VGA at 640×200 @ 60 Hz via FabGL in 64-color direct mode.
 - **Real-time speed** — CoCo 3 text and graphics modes run at a paced 60 FPS, the speed of the real machine (v0.12.0 rewrote the GIME video path; it used to manage ~39 FPS at the BASIC prompt and ~20 FPS in graphics).
@@ -24,7 +25,7 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 - **Remap on a picture of the keyboard** — the supervisor Key Mapper draws the running machine's keyboard (CoCo 2 or CoCo 3); move over it with the arrow keys and bind a physical key to the CoCo symbol keys, the arrows and the CoCo 3-only ALT, CTRL, CLEAR, F1 and F2.
 - **Joystick via PS/2 mouse** — with live, on-screen sensitivity tuning persisted in NVS.
 - **Real audio out** — ESP32 internal 8-bit DAC on GPIO25, straight to a 3.5 mm jack.
-- **Supervisor OSD** — an icon menu in the CoCo's own green, black and dark blue: mount disks, reset the machine, change settings, and check status without ever leaving your seat.
+- **Supervisor OSD** — an icon menu in the CoCo's own green, black and dark blue: mount disks, load cartridges, reset the machine, change settings, and check status without ever leaving your seat.
 - **Online debugging via WiFi + MCP (experimental)** — a WiFi debug server exposes a small HTTP/JSON API to inspect and control the running 6809 (registers, memory, pause/resume, code injection, reset, machine switch, screenshot). A host-side **MCP bridge** lets Claude / LLM agents drive it live. Join your network from the supervisor's **WiFi / Debug** screen (pick it from a list and type the password, or load it from `cocowifi.cfg` on the SD card); see [docs/wifi-debug.md](docs/wifi-debug.md) and [`mcp-bridge/`](mcp-bridge/).
 - **Experimental RS-232 Pak support** — for the serial tinkerers.
 
@@ -107,6 +108,25 @@ below. Get them from [toolshed](https://github.com/n6il/toolshed)'s `hdbdos` bui
 
 These replace `disk11.rom` only while the DriveWire bus is enabled; with the
 bus Off, `disk11.rom` loads as usual and floppy support is unaffected.
+
+### Cartridge ROMs (optional)
+
+Program cartridges are `.ccc` or `.rom` files. The supervisor's **Cart** menu
+opens in a `/carts` folder if the card has one (the card root otherwise) and
+can browse to any other folder:
+
+```
+/carts/
+├── game.ccc           # up to 16 KB on the CoCo 2
+└── biggame.ccc        # up to 128 KB (bank-switched) on the CoCo 3
+```
+
+### If the Emulator Does Not Start
+
+With no SD card, or a card that is not formatted FAT, the screen shows a
+warning and asks for a FAT-formatted card. With a required ROM missing, it
+names the missing files and the `/roms` folder they belong in. Fix the card
+and restart.
 
 ### Supported Disk Formats
 
@@ -263,9 +283,10 @@ The remappable keys are the symbol keys, the arrows and, on a CoCo 3, ALT, CTRL,
 
 ![CoCo Supervisor main menu](pictures/cocosupervisor.jpg)
 
-Press **F3** to open the supervisor: a box in the CoCo's green, black and dark blue over the paused emulator picture. The main menu is a grid of six icon tiles — all four arrows move, **ENTER** opens a tile, **ESC** goes back one level and **F3** closes the menu from anywhere. Questions and confirmations appear as small white popups and always start on **No**.
+Press **F3** to open the supervisor: a box in the CoCo's green, black and dark blue over the paused emulator picture. The main menu is a grid of eight icon tiles — all four arrows move, **ENTER** opens a tile, **ESC** goes back one level and **F3** closes the menu from anywhere. Questions and confirmations appear as small white popups and always start on **No**.
 
 - **Disks** — Disk Manager. A button per drive (0–3) shows what is mounted; the SD card browser sits below. **TAB** switches between drives and files. ENTER on a `.DSK`/`.VDK` image asks which drive takes it (the first empty one is preselected) and confirms before replacing a disk or mounting the same image twice; ENTER on a mounted drive asks to unmount it. **F** flushes cached writes to the SD card.
+- **Cart** — Load Cart. Browse the SD card for a `.ccc` or `.rom` cartridge ROM and press ENTER on it; **Unload cartridge** removes it. The cartridge takes effect at a restart, so a popup asks whether to restart now or keep the choice for the next restart. The cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded.
 - **Setup**
   - **Machine** — switch between CoCo 2 and CoCo 3 (restarts after a confirmation; persisted to NVS)
   - **RS-232 Pak** — on/off
@@ -273,6 +294,7 @@ Press **F3** to open the supervisor: a box in the CoCo's green, black and dark b
   - **Joy - Mouse Sensitivity** — joystick 1 / PS/2 mouse, with a live cursor pad
   - **WiFi / Debug** — *Config WiFi* scans for networks and takes the password from the keyboard; *Read WiFi from SD Card* loads it from `cocowifi.cfg`; plus connect, disconnect, forget, and the debug server switch (see [docs/wifi-debug.md](docs/wifi-debug.md))
   - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (experimental FujiNet support — see below)
+- **WiFi** — the same WiFi / Debug screen as in Setup, one step from the main menu
 - **Reset** — reset the machine, with confirmation
 - **Debug** — CPU / GIME status, memory hex dump, RS-232 Pak status, Dump RAM to SD, and the **Echo Log** toggle (debug output on the serial port; it shares the port with the RS-232 Pak, so turning one on turns the other off)
 - **About** — version info and free memory
@@ -348,6 +370,7 @@ src/
 │   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard and Debug lists; machine, CPU and Orchestra-90 popups
 │   ├── sv_disk.h/cpp         WD1793 FDC emulation and PSRAM cache
 │   ├── sv_filebrowser.h/cpp  Disk Manager — drive buttons, SD card browser, mount popups
+│   ├── sv_cart.h/cpp         Load Cart — cartridge ROM browser, unload, restart popup
 │   ├── sv_render.h/cpp       OSD rendering — green frame, list rows, popups
 │   ├── sv_debug.h/cpp        Debug overlay — CPU status, GIME state, memory dump
 │   ├── sv_joystick.h/cpp     Joy - Mouse Sensitivity popup — live cursor + adjust
@@ -409,6 +432,8 @@ All technical documentation is in the `docs/` directory:
 - HD6309 support is new and has not been tested on the board yet; it is checked on the host against XRoar's CPU core
 - CoCo 3 memory sizes other than 512K are new and have not been tested on the board yet
 - Orchestra-90 plays in mono (one DAC pin), and Disk BASIC is unavailable while it is on
+- Disk BASIC is unavailable while a program cartridge is loaded (there is no Multi-Pak)
+- Bank-switched cartridges (over 16 KB) are CoCo 3 only and new in v0.16.0, not yet confirmed with a real 128 KB game; an unbanked 32 KB ROM that sits at `$8000-$FEFF` does not work
 - Max 128 file entries in the SD card browser
 - Joystick 2 (left port) is a stub — returns centered, button released; only Joystick 1 is active via PS/2 mouse
 - NTSC composite simulation covers RG6 (PMODE 4) artifact colour only — there is no
@@ -454,13 +479,39 @@ mode, with diagrams.
 
 - **Run NitrOS-9 testing** — boot and exercise NitrOS-9 Level 2, including the 6309 build, on both CPUs and at each CoCo 3 memory size.
 - Testing and adjustment of RS-232 Pak support
-- **Load cartridge ROMs from the Supervisor** — a menu option to pick a cartridge ROM image from the SD card.
-- **Friendlier failure screens** — rework the "no SD card" and "no ROMs found" messages into a clearer interface.
+- **Test bank-switched cartridges** — confirm the 128 KB CoCo 3 games (RoboCop, Predator) on the board.
 - **CPU speed test** — a test that confirms the emulated CPU runs at 0.89 MHz on the CoCo 2 and 1.78 MHz on the CoCo 3.
 - **Speech synthesizer cartridge** support.
 - **CoCo SDC** emulation.
 
 ## Changelog
+
+### v0.16.0 — October 12, 2026
+
+**Load cartridges from the supervisor.** The main menu grows from six tiles to
+eight (a 4x2 grid) and gains a **Cart** tile, drawn as a game cartridge.
+
+- **Load Cart** browses the SD card for `.ccc` and `.rom` cartridge ROMs,
+  starting in `/carts`. ENTER on a file stores it as the cartridge; **Unload
+  cartridge** removes it. A popup then asks whether to restart now: *No* keeps
+  the choice for the next restart, *Yes* restarts, ESC cancels.
+- The cartridge loader reads ROMs of up to 16 KB (it was 8 KB) from any folder.
+  Program cartridges start on their own, as on the real machine.
+- **Bank-switched cartridges on the CoCo 3.** A ROM of more than 16 KB, up to
+  128 KB, is split into 16 KB banks selected by writing `$FF40`. Written from
+  the MAME and XRoar implementations; not yet confirmed with a 128 KB game on
+  the board.
+- A cartridge takes the place of Disk BASIC, and loading one turns the
+  Orchestra-90 setting off.
+- A **WiFi** tile opens the WiFi / Debug screen straight from the main menu.
+
+**Clearer start-up errors.** The "no SD card" and "missing ROMs" screens are
+redrawn centred, with a red warning sign and an SD card or ROM chip icon. The
+first asks for a FAT-formatted card; the second names the missing files and the
+`/roms` folder. Both point to the project page.
+
+**Fix.** The Disk Manager showed an empty list when the folder it remembered
+was no longer on the SD card. It now goes back to the card root.
 
 ### v0.15.4 — October 11, 2026
 

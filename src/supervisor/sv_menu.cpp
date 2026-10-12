@@ -24,6 +24,7 @@
 #include "sv_joystick.h"
 #include "sv_wifi.h"
 #include "sv_fujinet.h"
+#include "sv_cart.h"
 #include "../core/orch90.h"
 #include "../net/dw_bus.h"
 #include "../net/wifi_mgr.h"
@@ -43,20 +44,20 @@ extern OSDCanvas* hal_video_get_canvas(void);
 #define HID_F1    0x3A
 
 // ============================================================
-// Main menu — 3x2 grid of icon tiles
+// Main menu — 4x2 grid of icon tiles
 // ============================================================
 //
 // Drawn in the wide green frame (sv_render_wide_frame). 640x200 pixels are
 // ~2.4x taller than wide, so tiles and icons are stretched horizontally to
 // look square.
 
-#define TILE_W       168
+#define TILE_W       128
 #define TILE_H       58
-#define TILE_PITCH_X 180
+#define TILE_PITCH_X 136
 #define TILE_PITCH_Y 66
-#define TILE_X0      (SVW_BOX_X + (SVW_BOX_W - (2 * TILE_PITCH_X + TILE_W)) / 2)
+#define TILE_COLS    4
+#define TILE_X0      (SVW_BOX_X + (SVW_BOX_W - ((TILE_COLS - 1) * TILE_PITCH_X + TILE_W)) / 2)
 #define TILE_Y0      (SVW_BOX_Y + 36)
-#define TILE_COLS    3
 #define ICON_W       64      // 32 units, each 2 pixels wide
 #define ICON_H       28
 
@@ -67,7 +68,9 @@ struct SV_Tile {
 
 static const SV_Tile tiles[] = {
     { "Disks",  SV_ACT_MOUNT_DISK },
+    { "Cart",   SV_ACT_LOAD_CART  },
     { "Setup",  SV_ACT_SETTINGS   },
+    { "WiFi",   SV_ACT_WIFI       },
     { "Reset",  SV_ACT_RESET      },
     { "Debug",  SV_ACT_DEBUG      },
     { "About",  SV_ACT_ABOUT      },
@@ -105,8 +108,26 @@ static void restore_main_menu(Supervisor_t* sv) {
     sv->needs_redraw = true;
 }
 
+void sv_menu_return(Supervisor_t* sv) {
+    restore_main_menu(sv);
+}
+
 static void execute_action(Supervisor_t* sv, SV_MenuAction action) {
     switch (action) {
+        case SV_ACT_LOAD_CART:
+            saved_main_menu_cursor = sv->menu_cursor;
+            saved_main_menu_count  = sv->menu_item_count;
+            sv->prev_state = sv->state;
+            sv_cart_open(sv);
+            break;
+
+        case SV_ACT_WIFI:
+            saved_main_menu_cursor = sv->menu_cursor;
+            saved_main_menu_count  = sv->menu_item_count;
+            sv->prev_state = sv->state;
+            sv_wifi_open(sv, true);
+            break;
+
         case SV_ACT_MOUNT_DISK:
             sv->target_drive = 0;
             sv->prev_state = sv->state;
@@ -215,6 +236,24 @@ static void draw_icon(OSDCanvas* tft, SV_MenuAction action, int x, int y,
             tft->fillEllipse(x + 32, y + 14, 22, 10, SVW_GRAY);
             tft->fillEllipse(x + 32, y + 14, 10, 4, SVW_BLACK);
             icon_box(tft, x, y, 15, 20, 16, 24, SVW_BLACK);
+            break;
+
+        case SV_ACT_LOAD_CART:    // game cartridge: shell, grip ridges, label, edge connector
+            icon_box(tft, x, y, 5, 1, 26, 21, SVW_DKGRAY);
+            icon_box(tft, x, y, 8, 3, 23, 3, SVW_GRAY);
+            icon_box(tft, x, y, 8, 5, 23, 5, SVW_GRAY);
+            icon_box(tft, x, y, 8, 8, 23, 18, SVW_WHITE);
+            icon_box(tft, x, y, 8, 8, 23, 10, SVW_RED);
+            icon_box(tft, x, y, 10, 13, 21, 13, SVW_DKGRAY);
+            icon_box(tft, x, y, 10, 15, 17, 15, SVW_DKGRAY);
+            icon_box(tft, x, y, 9, 22, 22, 26, SVW_ORANGE);
+            for (int c = 0; c < 4; c++) icon_box(tft, x, y, 11 + c * 3, 23, 11 + c * 3, 26, SVW_BLACK);
+            break;
+
+        case SV_ACT_WIFI:         // signal bars, rising left to right
+            for (int b = 0; b < 4; b++) {
+                icon_box(tft, x, y, 5 + b * 6, 21 - b * 6, 8 + b * 6, 26, fg);
+            }
             break;
 
         case SV_ACT_SETTINGS: {   // three sliders
@@ -544,6 +583,19 @@ static void draw_row_icon(OSDCanvas* tft, int icon, int x, int y, uint16_t bg, u
             row_icon_box(tft, x, y, 3, 0, 12, 11, SVW_ORANGE);
             row_icon_box(tft, x, y, 11, 0, 12, 1, bg);
             for (int c = 0; c < 3; c++) row_icon_box(tft, x, y, 4 + c * 2, 1, 4 + c * 2, 4, SVW_WHITE);
+            break;
+
+        case ROW_ICON_CART:         // cartridge: shell, label, edge connector
+            row_icon_box(tft, x, y, 2, 0, 13, 8, SVW_DKGRAY);
+            row_icon_box(tft, x, y, 4, 2, 11, 6, SVW_WHITE);
+            row_icon_box(tft, x, y, 4, 2, 11, 3, SVW_RED);
+            row_icon_box(tft, x, y, 4, 9, 11, 11, SVW_ORANGE);
+            break;
+
+        case ROW_ICON_FOLDER:       // folder: tab and body
+            row_icon_box(tft, x, y, 1, 1, 6, 2, SVW_ORANGE);
+            row_icon_box(tft, x, y, 1, 3, 14, 10, SVW_ORANGE);
+            row_icon_box(tft, x, y, 1, 4, 14, 4, SVW_BLACK);
             break;
 
         case ROW_ICON_NOTE:         // beamed pair of eighth notes
@@ -949,7 +1001,7 @@ static void settings_activate(Supervisor_t* sv, int row) {
             break;
 
         case SV_SET_JOYSTICK:  sv_joystick_open(sv); break;
-        case SV_SET_WIFI:      sv_wifi_open(sv);     break;
+        case SV_SET_WIFI:      sv_wifi_open(sv, false); break;
         case SV_SET_DRIVEWIRE: sv_fujinet_open(sv);  break;
         case SV_SET_ORCH90:    orch90_toggle_open(sv); break;
     }

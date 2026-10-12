@@ -27,6 +27,7 @@
 #include "sv_joystick.h"
 #include "sv_wifi.h"
 #include "sv_fujinet.h"
+#include "sv_cart.h"
 #include "../core/orch90.h"
 #include "../net/dw_bus.h"
 #include "sv_render.h"
@@ -86,6 +87,7 @@ static bool uses_wide_frame(SV_State st) {
         case SV_KEYMAP_TEST:
         case SV_WIFI:
         case SV_FUJINET:
+        case SV_CART:
             return true;
         default:
             return false;
@@ -359,6 +361,10 @@ void supervisor_on_key(uint8_t hid_usage, bool pressed) {
             sv_fujinet_on_key(&sv, hid_usage, pressed);
             break;
 
+        case SV_CART:
+            sv_cart_on_key(&sv, hid_usage, pressed);
+            break;
+
         case SV_ORCH90_POPUP:
             sv_orch90_popup_on_key(&sv, hid_usage, pressed);
             break;
@@ -423,6 +429,7 @@ bool supervisor_update_and_render(void) {
                 case SV_KEYMAP_TEST:   sv_keymap_invalidate();     break;
                 case SV_WIFI:          sv_wifi_invalidate();       break;
                 case SV_FUJINET:       sv_fujinet_invalidate();    break;
+                case SV_CART:          sv_cart_invalidate();       break;
                 default:              sv_debug_invalidate();       break;
             }
         }
@@ -497,6 +504,10 @@ bool supervisor_update_and_render(void) {
 
         case SV_FUJINET:
             sv_fujinet_render(&sv);
+            break;
+
+        case SV_CART:
+            sv_cart_render(&sv);
             break;
 
         case SV_ORCH90_POPUP:
@@ -694,7 +705,8 @@ void supervisor_load_joystick(void) {
     hal_joystick_set_invert_y(invert);
 }
 
-static char s_cart_rom[48] = "";
+static char s_cart_rom[256] = "";         // requested at boot
+static char s_cart_rom_saved[256] = "";   // stored in NVS for the next restart
 
 void supervisor_load_cart_config(void) {
     Preferences prefs;
@@ -705,6 +717,7 @@ void supervisor_load_cart_config(void) {
 
     strncpy(s_cart_rom, rom.c_str(), sizeof(s_cart_rom) - 1);
     s_cart_rom[sizeof(s_cart_rom) - 1] = '\0';
+    strcpy(s_cart_rom_saved, s_cart_rom);
     if (s_cart_rom[0]) {
         g_cart_rom_request[0] = s_cart_rom;
         g_cart_rom_request[1] = s_cart_rom;
@@ -726,7 +739,12 @@ void supervisor_save_cart_rom(const char* name) {
     if (name && name[0]) prefs.putString("cart_rom", name);
     else                 prefs.remove("cart_rom");
     prefs.end();
+    strncpy(s_cart_rom_saved, name ? name : "", sizeof(s_cart_rom_saved) - 1);
+    s_cart_rom_saved[sizeof(s_cart_rom_saved) - 1] = '\0';
 }
+
+const char* supervisor_cart_rom_boot(void)  { return s_cart_rom; }
+const char* supervisor_cart_rom_saved(void) { return s_cart_rom_saved; }
 
 void supervisor_save_and_restart(void) {
     // Flush dirty disk caches to SD before the restart — esp_restart() below

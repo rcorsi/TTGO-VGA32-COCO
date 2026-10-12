@@ -31,6 +31,8 @@ enum SV_MenuAction : uint8_t {
     SV_ACT_ABOUT,
     SV_ACT_DEBUG,
     SV_ACT_RESUME,
+    SV_ACT_LOAD_CART,
+    SV_ACT_WIFI,
 };
 
 void sv_menu_init(Supervisor_t* sv);
@@ -40,6 +42,10 @@ void sv_menu_render(Supervisor_t* sv);
 // Force the next render to repaint the whole main menu; otherwise only the
 // two tiles whose selection changed are redrawn.
 void sv_menu_invalidate(void);
+
+// Go back to the main menu with the cursor on the tile that opened the
+// current screen (Load Cart, and WiFi when opened from its tile).
+void sv_menu_return(Supervisor_t* sv);
 
 // Machine select (SV_MACHINE_SELECT state): a popup over the Machine submenu,
 // opened from its "Machine" row. Picking the other machine asks to confirm
@@ -112,6 +118,7 @@ enum SV_RowIcon : uint8_t {
     ROW_ICON_WIFI, ROW_ICON_DRIVEWIRE, ROW_ICON_LANGUAGE, ROW_ICON_KEYCAP,
     ROW_ICON_CHIP, ROW_ICON_PAGE, ROW_ICON_SD, ROW_ICON_SPIDER,
     ROW_ICON_CHECK, ROW_ICON_STOP, ROW_ICON_CROSS, ROW_ICON_NOTE,
+    ROW_ICON_CART, ROW_ICON_FOLDER,
 };
 void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg);
 
