@@ -196,7 +196,8 @@
 
 #define PIN_SD_CS               13
 #define PIN_SD_MOSI             12
-#define PIN_SD_MISO             2
+#define PIN_SD_MISO_LILYGO      2
+#define PIN_SD_MISO_OLIMEX      35
 #define PIN_SD_SCLK             14
 
 // ============================================================
