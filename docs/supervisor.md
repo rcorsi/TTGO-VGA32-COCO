@@ -21,6 +21,7 @@ The OSD is rendered into the FabGL VGA framebuffer through the **OSD canvas** (`
 | `supervisor.h/.cpp` | Core lifecycle, state machine, public API, state persistence |
 | `sv_menu.h/.cpp` | Main menu definition, actions, and key handling |
 | `sv_filebrowser.h/.cpp` | SD card directory browser for mounting .DSK/.VDK images |
+| `sv_cart.h/.cpp` | Load Cart screen: picks a .ccc/.rom cartridge ROM from the SD card, or unloads it |
 | `sv_disk.h/.cpp` | WD1793 FDC emulation, PSRAM disk caching, mount/eject/flush |
 | `sv_render.h/.cpp` | Rendering primitives (frame, menu items, file entries, dialogs). Paints through `osd_canvas` into the FabGL framebuffer. |
 | `sv_debug.h/.cpp` | Debug screens (CPU/GIME status, hex dump, RS-232) + "Dump RAM to SD" full-memory dump to hex-text files |
@@ -51,7 +52,7 @@ States are defined in `supervisor.h` as `SV_State` enum:
 | State | Description |
 |---|---|
 | `SV_INACTIVE` | OSD hidden, emulation running |
-| `SV_MAIN_MENU` | Top-level menu with 6 items |
+| `SV_MAIN_MENU` | Top-level menu with 8 tiles |
 | `SV_FILE_BROWSER` | **Disk Manager**: 2-row drive strip (all 4 drives) + file browser below. Left/Right selects active drive; Enter mounts; U ejects; F flushes. Also used as the stand-alone file browser. |
 | `SV_MACHINE_SELECT` | Machine select: popup over the Settings list (CoCo 2 / CoCo 3, `(current)` on the active one); picking the other asks to confirm the restart in the same window, defaulting to No |
 | `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, RS-232 Pak toggle (shares UART0 with the Debug submenu's Echo Log; turning one on turns the other off), Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire |
@@ -65,6 +66,7 @@ States are defined in `supervisor.h` as `SV_State` enum:
 | `SV_KEYMAP_LIST` | Key Mapper: a picture of the running machine's keyboard (CoCo 2 or CoCo 3 layout). Arrows move over it, ENTER remaps the selected key (a popup asks which character on two-character keys), T opens the test screen, C clears all mappings after a confirmation. Key style and the CoCo 2 geometry follow the CoCo2Keyboard on-screen keyboard from the CoCo2-CYD project (silver case, shadowed caps, red BREAK, triangle arrow glyphs, shifted character above the main one). The CoCo 3 layout was measured from a photo of the real keyboard (staggered rows, BREAK top right, arrow diamond down the right edge, F1/F2 beside the space bar). White keys are remappable, orange ones have a custom binding, cream ones are fixed; a legend is black when that character can be remapped and grey when it cannot |
 | `SV_KEYMAP_CAPTURE` | Key Mapper: popup over the keyboard that waits for the next raw keypress, then asks to confirm the binding (DEL clears the binding, ESC cancels) |
 | `SV_KEYMAP_TEST` | Key Mapper: shows what each pressed key would type, without injecting into the CoCo |
+| `SV_CART` | Load Cart: folder browser for `.ccc` / `.rom` cartridge ROMs with an "Unload cartridge" row; a popup asks whether to restart now |
 
 **Transitions** are driven by `sv.state` assignment. `sv.prev_state` tracks where to return on ESC/cancel.
 
@@ -120,16 +122,18 @@ The OSD uses a **dirty-flag** redraw approach:
 
 ### sv_menu.cpp — Main Menu
 
-**Tiles** (static array `tiles[]`, 3x2 grid, each with a 64x28 icon drawn in code):
+**Tiles** (static array `tiles[]`, 4x2 grid of 128 px tiles, each with a 64x28 icon drawn in code):
 
 | Index | Label | Action |
 |---|---|---|
 | 0 | Disks | Opens unified Disk Manager (drive strip + file browser) |
-| 1 | Setup | Opens settings submenu (first row "Machine" opens machine-select) |
-| 2 | Reset | Confirm dialog → `sv_disk_flush_all()` → `machine_reset()` |
-| 3 | Debug | Opens debug submenu (CPU/GIME Status, Hex Dump, RS-232 Pak, Dump RAM to SD, Echo Log toggle) |
-| 4 | About | Info screen in the wide green frame, untitled: logo in the title row, credits, version, free heap |
-| 5 | Resume | Closes the supervisor |
+| 1 | Cart | Opens the Load Cart screen (`sv_cart.cpp`, see "Cartridge ROM — Load Cart") |
+| 2 | Setup | Opens settings submenu (first row "Machine" opens machine-select) |
+| 3 | WiFi | Opens the WiFi / Debug screen directly; ESC returns to the main menu (to Settings when it was opened from the Settings row) |
+| 4 | Reset | Confirm dialog → `sv_disk_flush_all()` → `machine_reset()` |
+| 5 | Debug | Opens debug submenu (CPU/GIME Status, Hex Dump, RS-232 Pak, Dump RAM to SD, Echo Log toggle) |
+| 6 | About | Info screen in the wide green frame, untitled: logo in the title row, credits, version, free heap |
+| 7 | Resume | Closes the supervisor |
 
 **Key handling:** all four arrows move through the grid, Enter executes the action, ESC/F1/F3 close.
 
@@ -364,6 +368,18 @@ The Settings row **Machine** opens a submenu (`SV_MACHINE_MENU` state, an icon l
 
 `supervisor_load_cpu_variant()` and `supervisor_load_coco3_ram()` seed `g_cpu_variant` and `g_coco3_ram_kb` in `setup()` before `machine_init()`. The memory size is used by the CoCo 3 only; it can be set while the CoCo 2 is running and applies the next time the CoCo 3 is selected.
 
+### Cartridge ROM — Load Cart
+
+The main-menu **Cart** tile opens the Load Cart screen (`SV_CART` state, `sv_cart.cpp`), a list in the wide green frame:
+
+- Two status lines: the stored cartridge (`none` when empty, `(after restart)` while the change has not been applied, `(file missing)` when the boot fell back to Disk BASIC) and the folder on screen.
+- An **Unload cartridge** row, present while a cartridge is loaded or waiting for a restart.
+- The folders and the `.ccc` / `.rom` files of the current folder. The screen opens in `/carts` (the SD root if that folder does not exist) and remembers the folder until power-off.
+
+The ROM is read once at boot, so ENTER on a file or on Unload opens a popup: **No** stores the choice for the next restart, **Yes** stores it and calls `supervisor_save_and_restart()`, ESC cancels. Choosing what this boot already loaded just stores it, with no popup. Files of more than 16 KB (`CART_ROM_MAX_SIZE`) are refused with a message; 32 KB and bank-switched cartridges are not supported.
+
+The choice is stored in `cart_rom` as a full SD path. `load_cart_rom()` in `machine.cpp` reads up to 16 KB into the cartridge buffer: the CoCo 2 maps it at `$C000-$FEFF`, and the CoCo 3 serves `$C000-$DFFF` for a ROM of up to 8 KB and `$C000-$FEFF` for a larger one (`rom_disk_end`). A cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded. Loading or unloading a cartridge here also turns the Orchestra-90 setting off.
+
 ### Cartridge ROM — Orchestra-90 toggle
 
 See `orchestra90.md` for the cartridge itself (DAC ports, audio mix, ROM autostart).
@@ -395,7 +411,7 @@ Namespace: `"sv"`. Stored in NVS flash.
 | `orch90` | Bool | Orchestra-90 DAC ports enabled (default false) |
 | `cpu_variant` | UChar | 0 = MC6809, 1 = HD6309 (default `CPU_VARIANT`) |
 | `coco3_ram` | UShort | CoCo 3 memory in KB: 128, 512, 1024 or 2048 (default `COCO3_RAM_KB`) |
-| `cart_rom` | String | Cartridge ROM file in `/roms/` loaded at `$C000`, set to `orch90.rom` by the Orchestra-90 toggle; absent = default (Disk BASIC) |
+| `cart_rom` | String | Cartridge ROM loaded at `$C000`: a full SD path set by the Load Cart screen, or a bare file name in `/roms/` (`orch90.rom`, set by the Orchestra-90 toggle); absent = default (Disk BASIC) |
 
 - `supervisor_save_state()` — writes current dir + all mounted disk paths
 - `supervisor_load_state()` — restores dir + auto-mounts disks on boot

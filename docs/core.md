@@ -569,7 +569,7 @@ typedef struct Machine {
     SV_DiskController fdc;
     uint8_t* ram_physical;          // 512KB in PSRAM
     uint8_t* rom_coco3;             // 32KB Super Extended Color BASIC
-    uint8_t* rom_disk;              // 8KB Disk BASIC
+    uint8_t* rom_disk;              // Disk BASIC (8KB) or cartridge ROM (up to 16KB)
     // ...
 } Machine;
 ```

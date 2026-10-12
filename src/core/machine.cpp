@@ -68,18 +68,24 @@ const char* g_cart_rom_request[2]  = { nullptr, nullptr };
 const char* g_cart_rom_loaded[2]   = { nullptr, nullptr };
 bool        g_cart_rom_fallback[2] = { false, false };
 
-// Load the 8 KB cartridge ROM for machine index `idx` (0 = CoCo 2, 1 = CoCo 3):
-// the requested ROM if any, else — or if it is missing — disk11.rom. A missing
-// HDB-DOS ROM must not halt boot, so the fallback keeps the machine usable.
-static bool load_cart_rom(int idx, const char* rom_path, uint8_t* dst) {
-    char path[64];
+// Load the cartridge ROM for machine index `idx` (0 = CoCo 2, 1 = CoCo 3) into
+// the 16 KB buffer `dst`: the requested ROM if any, else — or if it is missing
+// — disk11.rom. A missing HDB-DOS ROM must not halt boot, so the fallback keeps
+// the machine usable. *size gets the bytes loaded (capped at CART_ROM_MAX_SIZE).
+static bool load_cart_rom(int idx, const char* rom_path, uint8_t* dst, size_t* size) {
+    char path[320];
     const char* want = g_cart_rom_request[idx];
     g_cart_rom_loaded[idx]   = nullptr;
     g_cart_rom_fallback[idx] = false;
+    *size = 0;
     if (want) {
-        snprintf(path, sizeof(path), "%s/%s", rom_path, want);
-        if (hal_storage_load_file(path, dst, 8192)) {
-            g_cart_rom_loaded[idx] = want;
+        if (want[0] == '/') snprintf(path, sizeof(path), "%s", want);
+        else                snprintf(path, sizeof(path), "%s/%s", rom_path, want);
+        if (hal_storage_load_file(path, dst, CART_ROM_MAX_SIZE)) {
+            const char* base = strrchr(want, '/');
+            g_cart_rom_loaded[idx] = base ? base + 1 : want;
+            *size = hal_storage_file_size(path);
+            if (*size > CART_ROM_MAX_SIZE) *size = CART_ROM_MAX_SIZE;
             return true;
         }
         DEBUG_PRINTF("  MISSING: %s — falling back to %s", path, ROM_DISK_FILE);
@@ -88,6 +94,7 @@ static bool load_cart_rom(int idx, const char* rom_path, uint8_t* dst) {
     snprintf(path, sizeof(path), "%s/%s", rom_path, ROM_DISK_FILE);
     if (hal_storage_load_file(path, dst, 8192)) {
         g_cart_rom_loaded[idx] = ROM_DISK_FILE;
+        *size = 8192;
         return true;
     }
     return false;
@@ -240,8 +247,9 @@ uint8_t machine_read_coco3(uint16_t addr) {
         return 0xFF;
 
     case 1: // CTS (cartridge) — use CPU address, not GIME Z
-        // Disk BASIC ROM is 8KB mapped at $C000-$DFFF.
-        if (m->rom_disk_loaded && addr >= 0xC000 && addr < 0xE000) {
+        // Disk BASIC ROM is 8KB mapped at $C000-$DFFF; a 16KB cartridge
+        // runs to $FEFF (rom_disk_end).
+        if (m->rom_disk_loaded && addr >= 0xC000 && addr < m->rom_disk_end) {
             return m->rom_disk[addr - 0xC000];
         }
         // Fall back to internal ROM for other CTS ranges ($8000-$BFFF, $E000-$FEFF)
@@ -410,10 +418,11 @@ void machine_init_coco3(Machine* m) {
     if (!m->rom_coco3) return;
     memset(m->rom_coco3, 0xFF, COCO3_ROM_SIZE);
 
-    // Allocate 8KB Disk BASIC ROM buffer
-    m->rom_disk = machine_alloc(8192, "ROM-Disk");
+    // Allocate the Disk BASIC / cartridge ROM buffer (8KB Disk BASIC, 16KB cartridge)
+    m->rom_disk = machine_alloc(CART_ROM_MAX_SIZE, "ROM-Disk");
     if (!m->rom_disk) return;
-    memset(m->rom_disk, 0xFF, 8192);
+    memset(m->rom_disk, 0xFF, CART_ROM_MAX_SIZE);
+    m->rom_disk_end = 0xE000;
 
     // CoCo 2 ROM buffers (Step 5 of coco2and3.md: always allocate so
     // machine_load_roms can populate both ROM sets on boot).
@@ -484,10 +493,12 @@ bool machine_load_roms_coco3(Machine* m, const char* rom_path) {
 
     // Disk BASIC ROM (8KB) — external cartridge at $C000-$DFFF
     // The CoCo3 checks for 'DK' signature at $C000 to detect Disk BASIC
-    if (load_cart_rom(1, rom_path, m->rom_disk)) {
+    size_t cart_size;
+    if (load_cart_rom(1, rom_path, m->rom_disk, &cart_size)) {
         m->rom_disk_loaded = true;
+        m->rom_disk_end = (cart_size > 8192) ? 0xFF00 : 0xE000;
         m->cart_autostart = cart_rom_autostarts(m->rom_disk);
-        DEBUG_PRINTF("  Loaded %s (Disk BASIC 8KB)", g_cart_rom_loaded[1]);
+        DEBUG_PRINTF("  Loaded %s (%u bytes at $C000)", g_cart_rom_loaded[1], (unsigned)cart_size);
     } else {
         DEBUG_PRINTF("  Optional: %s not found (no Disk BASIC)", ROM_DISK_FILE);
     }
@@ -1135,15 +1146,16 @@ void machine_init_coco2(Machine* m) {
     // both sets on boot, matching the CoCo 3 init's allocation footprint).
     m->rom_coco3 = machine_alloc(COCO3_ROM_SIZE, "ROM-CoCo3");
     if (!m->rom_coco3) return;
-    m->rom_disk = machine_alloc(8192, "ROM-Disk");
+    m->rom_disk = machine_alloc(CART_ROM_MAX_SIZE, "ROM-Disk");
     if (!m->rom_disk) return;
+    m->rom_disk_end = 0xE000;
 
     // Fill ROM buffers with $FF (unloaded state)
     memset(m->rom_basic, 0xFF, 8192);
     memset(m->rom_extbas, 0xFF, 8192);
     memset(m->rom_cart, 0xFF, 16384);
     memset(m->rom_coco3, 0xFF, COCO3_ROM_SIZE);
-    memset(m->rom_disk, 0xFF, 8192);
+    memset(m->rom_disk, 0xFF, CART_ROM_MAX_SIZE);
 
     // --- Initialize core chips ---
     mc6809_init(&m->cpu);
@@ -1206,8 +1218,9 @@ bool machine_load_roms_coco2(Machine* m, const char* rom_path) {
         DEBUG_PRINTF("  MISSING: %s", path);
     }
 
-    // Disk BASIC / Cartridge ROM → $C000-$DFFF (8K, optional)
-    if (load_cart_rom(0, rom_path, m->rom_cart)) {
+    // Disk BASIC (8K) / Cartridge ROM (up to 16K) → $C000 (optional)
+    size_t cart_size;
+    if (load_cart_rom(0, rom_path, m->rom_cart, &cart_size)) {
         m->rom_cart_loaded = true;
         m->cart_inserted = true;
         m->cart_autostart = cart_rom_autostarts(m->rom_cart);

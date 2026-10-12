@@ -254,6 +254,13 @@ void sv_filebrowser_open(Supervisor_t* sv, const char* path, uint8_t target_driv
 
     // Scan directory (SD reads happen here, before any rendering)
     sv->file_count = sv_fb_scan_directory(sv->current_path, sv->file_entries, SV_FB_MAX_ENTRIES);
+    // Every folder but the root lists at least "..", so nothing at all means
+    // the remembered folder is gone from this SD card: start over at the root.
+    if (sv->file_count == 0 && strcmp(sv->current_path, "/") != 0) {
+        DEBUG_PRINTF("FileBrowser: %s not found, back to /", sv->current_path);
+        strcpy(sv->current_path, "/");
+        sv->file_count = sv_fb_scan_directory(sv->current_path, sv->file_entries, SV_FB_MAX_ENTRIES);
+    }
     sv_fb_sort_entries(sv->file_entries, sv->file_count);
     fb_in_drives = (sv->file_count == 0);
 
