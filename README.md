@@ -281,7 +281,7 @@ The remappable keys are the symbol keys, the arrows and, on a CoCo 3, ALT, CTRL,
 
 ## On-Screen Display (OSD)
 
-![CoCo Supervisor main menu](pictures/cocosupervisor.jpg)
+![CoCo Supervisor main menu](pictures/cocosupervisor1.jpg)
 
 Press **F3** to open the supervisor: a box in the CoCo's green, black and dark blue over the paused emulator picture. The main menu is a grid of eight icon tiles — all four arrows move, **ENTER** opens a tile, **ESC** goes back one level and **F3** closes the menu from anywhere. Questions and confirmations appear as small white popups and always start on **No**.
 
@@ -433,7 +433,7 @@ All technical documentation is in the `docs/` directory:
 - CoCo 3 memory sizes other than 512K are new and have not been tested on the board yet
 - Orchestra-90 plays in mono (one DAC pin), and Disk BASIC is unavailable while it is on
 - Disk BASIC is unavailable while a program cartridge is loaded (there is no Multi-Pak)
-- Bank-switched cartridges (over 16 KB) are CoCo 3 only and new in v0.16.0, not yet confirmed with a real 128 KB game; an unbanked 32 KB ROM that sits at `$8000-$FEFF` does not work
+- Bank-switched cartridges (over 16 KB) are CoCo 3 only; an unbanked 32 KB ROM that sits at `$8000-$FEFF` does not work
 - Max 128 file entries in the SD card browser
 - Joystick 2 (left port) is a stub — returns centered, button released; only Joystick 1 is active via PS/2 mouse
 - NTSC composite simulation covers RG6 (PMODE 4) artifact colour only — there is no
@@ -479,7 +479,6 @@ mode, with diagrams.
 
 - **Run NitrOS-9 testing** — boot and exercise NitrOS-9 Level 2, including the 6309 build, on both CPUs and at each CoCo 3 memory size.
 - Testing and adjustment of RS-232 Pak support
-- **Test bank-switched cartridges** — confirm the 128 KB CoCo 3 games (RoboCop, Predator) on the board.
 - **CPU speed test** — a test that confirms the emulated CPU runs at 0.89 MHz on the CoCo 2 and 1.78 MHz on the CoCo 3.
 - **Speech synthesizer cartridge** support.
 - **CoCo SDC** emulation.
@@ -498,9 +497,8 @@ eight (a 4x2 grid) and gains a **Cart** tile, drawn as a game cartridge.
 - The cartridge loader reads ROMs of up to 16 KB (it was 8 KB) from any folder.
   Program cartridges start on their own, as on the real machine.
 - **Bank-switched cartridges on the CoCo 3.** A ROM of more than 16 KB, up to
-  128 KB, is split into 16 KB banks selected by writing `$FF40`. Written from
-  the MAME and XRoar implementations; not yet confirmed with a 128 KB game on
-  the board.
+  128 KB, is split into 16 KB banks selected by writing `$FF40`. Tested on the
+  board with a 128 KB cartridge.
 - A cartridge takes the place of Disk BASIC, and loading one turns the
   Orchestra-90 setting off.
 - A **WiFi** tile opens the WiFi / Debug screen straight from the main menu.
