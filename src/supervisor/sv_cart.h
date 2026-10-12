@@ -10,8 +10,8 @@
  *  Module : Supervisor Load Cart screen
  * ============================================================
  *
- * Browses the SD card (starting in /carts) for cartridge ROMs (.ccc / .rom,
- * up to 16 KB) and stores the chosen one as the cartridge loaded at $C000 in
+ * Browses the SD card (starting in /carts) for cartridge ROMs (.ccc / .rom:
+ * up to 16 KB on the CoCo 2, up to 128 KB bank-switched on the CoCo 3) and stores the chosen one as the cartridge loaded at $C000 in
  * place of Disk BASIC; "Unload cartridge" clears it. The ROM is read at boot,
  * so each change asks whether to restart now: No keeps it for the next
  * restart, Yes restarts, ESC cancels the change.

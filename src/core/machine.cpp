@@ -69,10 +69,10 @@ const char* g_cart_rom_loaded[2]   = { nullptr, nullptr };
 bool        g_cart_rom_fallback[2] = { false, false };
 
 // Load the cartridge ROM for machine index `idx` (0 = CoCo 2, 1 = CoCo 3) into
-// the 16 KB buffer `dst`: the requested ROM if any, else — or if it is missing
-// — disk11.rom. A missing HDB-DOS ROM must not halt boot, so the fallback keeps
-// the machine usable. *size gets the bytes loaded (capped at CART_ROM_MAX_SIZE).
-static bool load_cart_rom(int idx, const char* rom_path, uint8_t* dst, size_t* size) {
+// the buffer `dst` of `max` bytes: the requested ROM if any, else — or if it is
+// missing — disk11.rom. A missing HDB-DOS ROM must not halt boot, so the
+// fallback keeps the machine usable. *size gets the bytes loaded (capped at max).
+static bool load_cart_rom(int idx, const char* rom_path, uint8_t* dst, size_t max, size_t* size) {
     char path[320];
     const char* want = g_cart_rom_request[idx];
     g_cart_rom_loaded[idx]   = nullptr;
@@ -81,11 +81,11 @@ static bool load_cart_rom(int idx, const char* rom_path, uint8_t* dst, size_t* s
     if (want) {
         if (want[0] == '/') snprintf(path, sizeof(path), "%s", want);
         else                snprintf(path, sizeof(path), "%s/%s", rom_path, want);
-        if (hal_storage_load_file(path, dst, CART_ROM_MAX_SIZE)) {
+        if (hal_storage_load_file(path, dst, max)) {
             const char* base = strrchr(want, '/');
             g_cart_rom_loaded[idx] = base ? base + 1 : want;
             *size = hal_storage_file_size(path);
-            if (*size > CART_ROM_MAX_SIZE) *size = CART_ROM_MAX_SIZE;
+            if (*size > max) *size = max;
             return true;
         }
         DEBUG_PRINTF("  MISSING: %s — falling back to %s", path, ROM_DISK_FILE);
@@ -247,6 +247,9 @@ uint8_t machine_read_coco3(uint16_t addr) {
         return 0xFF;
 
     case 1: // CTS (cartridge) — use CPU address, not GIME Z
+        // Bank-switched cartridge: the selected 16KB bank answers every CTS
+        // read (XRoar gmc.c).
+        if (m->cart_bank) return m->cart_bank[addr & (CART_BANK_SIZE - 1)];
         // Disk BASIC ROM is 8KB mapped at $C000-$DFFF; a 16KB cartridge
         // runs to $FEFF (rom_disk_end).
         if (m->rom_disk_loaded && addr >= 0xC000 && addr < m->rom_disk_end) {
@@ -382,6 +385,14 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
             if (addr == BECKER_DATA_ADDR) becker_write_data(val);
             break;  // $FF41/$FF42 no longer mirror DSKREG
         }
+        // A bank-switched cartridge has its bank register at $FF40 and no
+        // disk controller behind it (MAME coco_pak_banked).
+        if (m->cart_bank) {
+            if (addr == 0xFF40) {
+                m->cart_bank = m->rom_disk + (size_t)(val & m->cart_bank_mask) * CART_BANK_SIZE;
+            }
+            break;
+        }
         sv_disk_write(&m->fdc, addr, val);
         break;
     }
@@ -418,7 +429,8 @@ void machine_init_coco3(Machine* m) {
     if (!m->rom_coco3) return;
     memset(m->rom_coco3, 0xFF, COCO3_ROM_SIZE);
 
-    // Allocate the Disk BASIC / cartridge ROM buffer (8KB Disk BASIC, 16KB cartridge)
+    // Allocate the Disk BASIC / cartridge ROM buffer (8KB Disk BASIC, up to
+    // 128KB for a bank-switched cartridge)
     m->rom_disk = machine_alloc(CART_ROM_MAX_SIZE, "ROM-Disk");
     if (!m->rom_disk) return;
     memset(m->rom_disk, 0xFF, CART_ROM_MAX_SIZE);
@@ -494,9 +506,18 @@ bool machine_load_roms_coco3(Machine* m, const char* rom_path) {
     // Disk BASIC ROM (8KB) — external cartridge at $C000-$DFFF
     // The CoCo3 checks for 'DK' signature at $C000 to detect Disk BASIC
     size_t cart_size;
-    if (load_cart_rom(1, rom_path, m->rom_disk, &cart_size)) {
+    if (load_cart_rom(1, rom_path, m->rom_disk, CART_ROM_MAX_SIZE, &cart_size)) {
         m->rom_disk_loaded = true;
         m->rom_disk_end = (cart_size > 8192) ? 0xFF00 : 0xE000;
+        if (cart_size > CART_BANK_SIZE) {
+            // More than one bank: bank count rounded up to a power of two
+            // (the buffer is $FF-filled past the end of the file).
+            unsigned banks = 2;
+            while (banks * CART_BANK_SIZE < cart_size) banks *= 2;
+            m->cart_bank_mask = banks - 1;
+            m->cart_bank = m->rom_disk;
+            DEBUG_PRINTF("  Bank-switched cartridge: %u banks of 16KB", banks);
+        }
         m->cart_autostart = cart_rom_autostarts(m->rom_disk);
         DEBUG_PRINTF("  Loaded %s (%u bytes at $C000)", g_cart_rom_loaded[1], (unsigned)cart_size);
     } else {
@@ -515,6 +536,9 @@ void machine_reset_coco3(Machine* m) {
     if (!m->initialized) return;
 
     DEBUG_PRINT("Machine: CoCo 3 RESET");
+
+    // Bank-switched cartridge: back to bank 0
+    if (m->cart_bank) m->cart_bank = m->rom_disk;
 
     // Clear RAM (CoCo 3 clears to 0 on hard reset)
     memset(m->ram_physical, 0, m->ram_size);
@@ -1146,7 +1170,7 @@ void machine_init_coco2(Machine* m) {
     // both sets on boot, matching the CoCo 3 init's allocation footprint).
     m->rom_coco3 = machine_alloc(COCO3_ROM_SIZE, "ROM-CoCo3");
     if (!m->rom_coco3) return;
-    m->rom_disk = machine_alloc(CART_ROM_MAX_SIZE, "ROM-Disk");
+    m->rom_disk = machine_alloc(CART_BANK_SIZE, "ROM-Disk");
     if (!m->rom_disk) return;
     m->rom_disk_end = 0xE000;
 
@@ -1155,7 +1179,7 @@ void machine_init_coco2(Machine* m) {
     memset(m->rom_extbas, 0xFF, 8192);
     memset(m->rom_cart, 0xFF, 16384);
     memset(m->rom_coco3, 0xFF, COCO3_ROM_SIZE);
-    memset(m->rom_disk, 0xFF, CART_ROM_MAX_SIZE);
+    memset(m->rom_disk, 0xFF, CART_BANK_SIZE);
 
     // --- Initialize core chips ---
     mc6809_init(&m->cpu);
@@ -1220,7 +1244,7 @@ bool machine_load_roms_coco2(Machine* m, const char* rom_path) {
 
     // Disk BASIC (8K) / Cartridge ROM (up to 16K) → $C000 (optional)
     size_t cart_size;
-    if (load_cart_rom(0, rom_path, m->rom_cart, &cart_size)) {
+    if (load_cart_rom(0, rom_path, m->rom_cart, CART_BANK_SIZE, &cart_size)) {
         m->rom_cart_loaded = true;
         m->cart_inserted = true;
         m->cart_autostart = cart_rom_autostarts(m->rom_cart);

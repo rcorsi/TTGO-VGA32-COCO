@@ -376,9 +376,11 @@ The main-menu **Cart** tile opens the Load Cart screen (`SV_CART` state, `sv_car
 - An **Unload cartridge** row, present while a cartridge is loaded or waiting for a restart.
 - The folders and the `.ccc` / `.rom` files of the current folder. The screen opens in `/carts` (the SD root if that folder does not exist) and remembers the folder until power-off.
 
-The ROM is read once at boot, so ENTER on a file or on Unload opens a popup: **No** stores the choice for the next restart, **Yes** stores it and calls `supervisor_save_and_restart()`, ESC cancels. Choosing what this boot already loaded just stores it, with no popup. Files of more than 16 KB (`CART_ROM_MAX_SIZE`) are refused with a message; 32 KB and bank-switched cartridges are not supported.
+The ROM is read once at boot, so ENTER on a file or on Unload opens a popup: **No** stores the choice for the next restart, **Yes** stores it and calls `supervisor_save_and_restart()`, ESC cancels. Choosing what this boot already loaded just stores it, with no popup. On the CoCo 3 a file of up to 128 KB (`CART_ROM_MAX_SIZE`) is accepted, on the CoCo 2 up to 16 KB (`CART_BANK_SIZE`); a larger file is refused with a message.
 
-The choice is stored in `cart_rom` as a full SD path. `load_cart_rom()` in `machine.cpp` reads up to 16 KB into the cartridge buffer: the CoCo 2 maps it at `$C000-$FEFF`, and the CoCo 3 serves `$C000-$DFFF` for a ROM of up to 8 KB and `$C000-$FEFF` for a larger one (`rom_disk_end`). A cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded. Loading or unloading a cartridge here also turns the Orchestra-90 setting off.
+The choice is stored in `cart_rom` as a full SD path. `load_cart_rom()` in `machine.cpp` reads the file into the cartridge buffer: the CoCo 2 maps it at `$C000-$FEFF` (16 KB at most), and the CoCo 3 serves `$C000-$DFFF` for a ROM of up to 8 KB and `$C000-$FEFF` for a larger one (`rom_disk_end`). On the CoCo 3 a ROM of more than 16 KB is a **bank-switched cartridge** (RoboCop, Predator): it is split into 16 KB banks, the bank count rounded up to a power of two, and a write to `$FF40` selects the bank that answers every cartridge-ROM read (`cart_bank`); reset selects bank 0. While one is loaded, writes to `$FF40-$FF5F` do not reach the disk controller. Every ROM over 16 KB is treated this way, as in XRoar, so an unbanked 32 KB ROM that expects to sit at `$8000-$FEFF` does not work.
+
+A cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded. Loading or unloading a cartridge here also turns the Orchestra-90 setting off.
 
 ### Cartridge ROM — Orchestra-90 toggle
 

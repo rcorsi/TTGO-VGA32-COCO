@@ -67,6 +67,7 @@ static int8_t    s_pop_sel = 0;         // 0 = No, 1 = Yes
 static int8_t    s_pop_drawn = -1;      // row drawn selected; -1 = draw the window
 static char      s_target[256] = "";    // cartridge the popup is about; "" = unload
 static char      s_pop_name[SVP_MSG_COLS + 1] = "";
+static bool      s_pop_coco3_only = false;   // refused ROM would load on the CoCo 3
 
 void sv_cart_invalidate(void) {
     s_drawn_cursor = -1;
@@ -218,7 +219,9 @@ static void select_row(Supervisor_t* sv) {
         enter_folder(sv, e->name);
         return;
     }
-    if (e->size == 0 || e->size > CART_ROM_MAX_SIZE) {
+    // The CoCo 3 takes bank-switched ROMs; the CoCo 2 only a single 16K bank.
+    s_pop_coco3_only = (e->size > CART_BANK_SIZE && e->size <= CART_ROM_MAX_SIZE);
+    if (e->size == 0 || e->size > ((g_machine_type == 4) ? CART_ROM_MAX_SIZE : CART_BANK_SIZE)) {
         snprintf(s_pop_name, sizeof(s_pop_name), "%s", e->name);
         popup_open(sv, P_MSG);
         return;
@@ -357,7 +360,8 @@ static void draw_popup(void) {
     if (s_pop == P_MSG) {
         title = "Cartridge not supported";
         msg1  = s_pop_name;
-        msg2  = "Only ROMs of up to 16K can be loaded.";
+        msg2  = s_pop_coco3_only ? "ROMs over 16K need the CoCo 3 machine."
+                                 : "Only ROMs of up to 128K can be loaded.";
     } else if (s_target[0]) {
         title = "Load cartridge";
         msg1  = s_pop_name;

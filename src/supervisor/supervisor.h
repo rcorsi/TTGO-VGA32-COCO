@@ -159,7 +159,7 @@ uint16_t supervisor_load_coco3_ram(void);
 void     supervisor_save_coco3_ram(uint16_t kb);
 
 // Cartridge settings (NVS "sv" namespace): key "orch90" turns the
-// Orchestra-90 DAC ports on, key "cart_rom" names the ROM (up to 16 KB) to
+// Orchestra-90 DAC ports on, key "cart_rom" names the ROM (up to 128 KB) to
 // load at $C000 instead of Disk BASIC ("" = default): a bare name in
 // ROM_BASE_PATH, or a full SD path starting with '/' (Load Cart screen).
 // The Orchestra-90 toggle sets it to ROM_ORCH90_FILE.
