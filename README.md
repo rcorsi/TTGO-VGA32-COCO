@@ -505,6 +505,12 @@ dropped samples.
   animated screen and a debugger pause all show none.
 - By ear: Orchestra-90 holds 60 FPS on the CoCo 3 and the CoCo 2 with no
   audio issues, and CoCo 2 games that drop to 58 FPS show no audible problem.
+- `PLAY` pitch on the CoCo 3 is unchanged (`O2 A` 217.76 Hz, `O4 A`
+  867.70 Hz).
+- Known issue: on the CoCo 2, high `PLAY` notes come out flat (`O4 A` reads
+  836.99 Hz, 3.6 % low). The CoCo 2 drops to about 57.7 FPS while that note
+  plays, and sound now follows the emulator's speed. CoCo 2 needs more speed
+  margin; the audio code is doing what it should.
 
 ### v0.16.0 — October 12, 2026
 
