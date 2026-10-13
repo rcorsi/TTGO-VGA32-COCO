@@ -503,8 +503,8 @@ dropped samples.
 - Checked on the board: a test build slowed to 50 FPS settled with no
   dropouts after the first seconds; CoCo 3 and CoCo 2 (6809) at 60 FPS, an
   animated screen and a debugger pause all show none.
-- By ear: Orchestra-90 plays with no issues at 60 FPS, and CoCo 2 games that
-  drop to 58 FPS show no audible problem.
+- By ear: Orchestra-90 holds 60 FPS on the CoCo 3 and the CoCo 2 with no
+  audio issues, and CoCo 2 games that drop to 58 FPS show no audible problem.
 
 ### v0.16.0 — October 12, 2026
 
