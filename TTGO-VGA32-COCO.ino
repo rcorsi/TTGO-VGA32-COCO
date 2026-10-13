@@ -31,6 +31,20 @@
 #include "src/tests/integration_test.h"
 #endif
 
+// Boot halt screen types. Declared ahead of every function in this file:
+// arduino-cli inserts its generated prototypes before the first function, and
+// in the bootloader build that is bootloader_release_otadata() below, so types
+// declared later would not exist yet for boot_halt_screen()'s prototype.
+
+// One centred text line of a boot halt screen.
+struct HaltLine {
+    const char* text;
+    uint8_t     y;
+    uint16_t    color;
+};
+
+enum HaltIcon : uint8_t { HALT_ICON_SD, HALT_ICON_CHIP };
+
 #if BUILD_TARGET == BUILD_TARGET_BOOTLOADER
 #include "esp_partition.h"
 
@@ -57,15 +71,6 @@ Machine coco;
 
 // hal_video.cpp exposes the OSD canvas used by the boot halt screen and supervisor.
 extern OSDCanvas* hal_video_get_canvas(void);
-
-// One centred text line of a boot halt screen.
-struct HaltLine {
-    const char* text;
-    uint8_t     y;
-    uint16_t    color;
-};
-
-enum HaltIcon : uint8_t { HALT_ICON_SD, HALT_ICON_CHIP };
 
 // Paint a full-screen fatal message on the VGA display and never return.
 // Used at boot when the SD card or required ROMs are missing. Everything is
