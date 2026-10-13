@@ -162,6 +162,7 @@ static void h_status() {
         j += ",\"audio\":{\"commits\":" + String(a.commits);
         j += ",\"underruns\":" + String(a.underruns);
         j += ",\"hold_ticks\":" + String(a.hold_ticks);
+        j += ",\"catchup_ticks\":" + String(a.catchup_ticks);
         j += ",\"overruns\":" + String(a.overruns);
         j += ",\"fill\":" + String(a.fill);
         j += ",\"fill_min\":" + String(a.fill_min);
