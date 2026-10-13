@@ -145,6 +145,7 @@ struct HalAudioStats {
     uint32_t commits;          // frames queued
     uint32_t underruns;        // times the queue ran dry and playback paused
     uint32_t hold_ticks;       // ISR ticks spent paused on an empty queue
+    uint32_t catchup_ticks;    // ISR periods made up after the ISR was held off
     uint32_t overruns;         // samples dropped because the queue was full
     uint32_t fill;             // queued samples at the last frame end
     uint32_t fill_min;         // lowest / highest fill seen at a frame end

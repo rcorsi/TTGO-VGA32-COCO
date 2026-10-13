@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.16.0 — October 12, 2026** (LilyGo TTGO VGA32 port)
+**v0.16.1 — October 13, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -484,6 +484,27 @@ mode, with diagrams.
 - **CoCo SDC** emulation.
 
 ## Changelog
+
+### v0.16.1 — October 13, 2026
+
+**Sound no longer breaks up when the emulator runs slow.** Until now the
+audio queue needed a steady 60 FPS: below that it ran dry several times a
+second, and if the audio interrupt was delayed the queue stayed full and
+dropped samples.
+
+- When the emulator cannot hold 60 FPS, playback now slows down with it and
+  stays continuous. Sound is slower and lower by the same amount the emulator
+  is slow (7 % at 55.6 FPS, about 1.3 semitones).
+- The audio interrupt now advances by the time that really passed, so a
+  delayed interrupt skips ahead instead of falling behind.
+- At 60 FPS nothing changes audibly: the rate correction stays within about
+  0.03 % on a static screen and 0.2 % on an animated one.
+- `/api/status` adds `catchup_ticks` to the `audio` counters.
+- Checked on the board: a test build slowed to 50 FPS settled with no
+  dropouts after the first seconds; CoCo 3 and CoCo 2 (6809) at 60 FPS, an
+  animated screen and a debugger pause all show none. **Not yet judged by
+  ear**, and the Orchestra-90 case that first showed the problem was not
+  re-run.
 
 ### v0.16.0 — October 12, 2026
 

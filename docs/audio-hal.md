@@ -143,8 +143,10 @@ Sample in emulated time, play back in real time, with a queue in between:
 
 1. **Capture**: after each emulated scanline, `hal_audio_capture_scanline()` pushes `audio_current_level` into a 1024-byte ring buffer. That is 262 samples per frame, 15 720 per second.
 2. **Playback**: the timer ISR takes samples from the ring with a Q16 fractional stride and writes them to the DAC. The nominal stride is one frame of samples per frame period: `262 × 65536 × 45 / 16666`.
-3. **Rate control**: at each frame end `hal_audio_commit_frame()` looks at how many samples are queued and nudges the stride to hold about 390 (`AUDIO_FILL_TARGET`: one frame plus a margin for the idle part of the frame and for late frames). The error is averaged over ~16 frames and the correction is limited to 1 %; measured corrections stay below 0.06 %, so pitch is not audibly bent.
-4. **Empty queue**: when emulation stops (OSD open, debugger pause, long SD access) the ring runs dry. The ISR then leaves the DAC at its last level and waits; playback restarts once a whole frame is queued again.
+3. **Rate control**: at each frame end `hal_audio_commit_frame()` looks at how many samples are queued and nudges the stride to hold about 390 (`AUDIO_FILL_TARGET`: one frame plus a margin for the idle part of the frame and for late frames). It is a PI controller: the error is averaged over ~16 frames for the proportional term, and an integral term carries any lasting speed difference so the fill returns to the target. The correction is limited to +2 % / −40 %. At 60 FPS it stays within about 0.03 % on a static screen and 0.2 % on an animated one, so pitch is not audibly bent.
+4. **Slow emulation**: when the emulator cannot hold 60 FPS it delivers fewer samples per second, and playback slows down with it instead of breaking up (at 50 FPS the stride settles 17 % low: sound is slower and lower, but continuous). A second underrun within 120 frames of a restart steps the rate down 1 % at once, so the rate is found in a second or two; a single underrun, as after a pause, does not.
+5. **Held-off interrupt**: each ISR run measures the time since the previous one with the CPU cycle counter and advances one stride per 45 µs elapsed. If another interrupt or a critical section delayed it, it skips ahead rather than falling behind (`catchup_ticks`).
+6. **Empty queue**: when emulation stops (OSD open, debugger pause, long SD access) the ring runs dry. The ISR then leaves the DAC at its last level and waits; playback restarts once a whole frame is queued again.
 
 ```
 machine_run_frame():
@@ -197,15 +199,16 @@ The ISR takes about 6 µs worst case. Its start time varies by roughly ±14 µs 
 | Field | Meaning |
 |---|---|
 | `underruns`, `hold_ticks` | Times the ring ran dry, and ISR ticks spent waiting |
+| `catchup_ticks` | ISR periods made up after the ISR was held off |
 | `overruns` | Samples dropped because the ring was full |
 | `fill`, `fill_min`, `fill_max` | Queued samples at frame end (target 390) |
 | `stride_adj` | Current rate correction in Q16 stride units (nominal stride is 46 362) |
 | `commit_us_min`, `commit_us_max` | Shortest and longest time between frame ends |
 | `isr_us_max`, `isr_gap_us_min`, `isr_gap_us_max` | ISR run time and spacing |
 
-On a healthy build `underruns` and `overruns` stay at 0 while the emulator is running at 60 FPS.
+`underruns` and `overruns` should stay at 0 while the emulator is running, apart from one underrun per pause and a few while the rate control finds a new speed.
 
-**Below 60 FPS the ring runs dry.** The emulator then delivers fewer samples than the ISR consumes, and the 1 % rate limit cannot follow, so playback pauses and restarts several times a second. This is what made CoCo 2 sound bad in v0.15.3 (48–52 FPS at the BASIC prompt, 61 underruns per 10 s); v0.15.4 fixed the frame rate, not the queue. A program heavy enough to drop below 60 FPS will still break up.
+History: up to v0.16.0 the rate control was proportional only and limited to 1 %, so below 60 FPS the ring ran dry several times a second (this is what made CoCo 2 sound bad in v0.15.3), and an ISR that lost ticks left the ring pinned full. Checked for v0.16.1 with a test build slowed to 50 FPS: 14 underruns while the rate settled at −17 %, then none.
 
 ---
 
