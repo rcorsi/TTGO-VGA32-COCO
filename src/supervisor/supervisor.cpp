@@ -29,6 +29,7 @@
 #include "sv_fujinet.h"
 #include "sv_cart.h"
 #include "../core/orch90.h"
+#include "../core/ssc/ssc.h"
 #include "../net/dw_bus.h"
 #include "sv_render.h"
 #include "../hal/hal.h"
@@ -712,6 +713,7 @@ void supervisor_load_cart_config(void) {
     Preferences prefs;
     prefs.begin("sv", true);
     g_orch90_enabled = prefs.getBool("orch90", false);
+    g_ssc_enabled    = prefs.getBool("ssc", false);
     String rom = prefs.getString("cart_rom", "");
     prefs.end();
 
@@ -722,14 +724,22 @@ void supervisor_load_cart_config(void) {
         g_cart_rom_request[0] = s_cart_rom;
         g_cart_rom_request[1] = s_cart_rom;
     }
-    DEBUG_PRINTF("Cartridge: Orchestra-90 %s, cart ROM %s",
-                 g_orch90_enabled ? "on" : "off", s_cart_rom[0] ? s_cart_rom : "(default)");
+    DEBUG_PRINTF("Cartridge: Orchestra-90 %s, Speech/Sound %s, cart ROM %s",
+                 g_orch90_enabled ? "on" : "off", g_ssc_enabled ? "on" : "off",
+                 s_cart_rom[0] ? s_cart_rom : "(default)");
 }
 
 void supervisor_save_orch90(bool enabled) {
     Preferences prefs;
     prefs.begin("sv", false);
     prefs.putBool("orch90", enabled);
+    prefs.end();
+}
+
+void supervisor_save_ssc(bool enabled) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putBool("ssc", enabled);
     prefs.end();
 }
 

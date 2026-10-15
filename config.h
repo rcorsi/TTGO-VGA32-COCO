@@ -223,6 +223,9 @@
 // Orchestra-90/CC cartridge ROM (8 KB). Optional: without it the DAC ports
 // still work for software loaded from disk.
 #define ROM_ORCH90_FILE         "orch90.rom"
+// Speech/Sound Cartridge: TMS7040 firmware and SP0256-AL2 mask ROM (MAME names).
+#define ROM_SSC_PIC_FILE        "pic-7040-510.bin"
+#define ROM_SSC_SPEECH_FILE     "sp0256-al2.bin"
 #define COCO3_ROM_SIZE          (32 * 1024)
 #define COCO3_PHYSICAL_RAM      (512 * 1024)
 

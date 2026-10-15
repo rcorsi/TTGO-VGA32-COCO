@@ -159,15 +159,16 @@ uint16_t supervisor_load_coco3_ram(void);
 void     supervisor_save_coco3_ram(uint16_t kb);
 
 // Cartridge settings (NVS "sv" namespace): key "orch90" turns the
-// Orchestra-90 DAC ports on, key "cart_rom" names the ROM (up to 128 KB) to
-// load at $C000 instead of Disk BASIC ("" = default): a bare name in
-// ROM_BASE_PATH, or a full SD path starting with '/' (Load Cart screen).
-// The Orchestra-90 toggle sets it to ROM_ORCH90_FILE.
-// load applies both (g_orch90_enabled, g_cart_rom_request); called from
-// setup() after dw_bus_load_config() and before machine_init(). The saves
+// Orchestra-90 DAC ports on, key "ssc" the Speech/Sound Cartridge, key
+// "cart_rom" names the ROM (up to 128 KB) to load at $C000 instead of Disk
+// BASIC ("" = default): a bare name in ROM_BASE_PATH, or a full SD path
+// starting with '/' (Load Cart screen). The Orchestra-90 toggle sets it to
+// ROM_ORCH90_FILE. load applies them (g_orch90_enabled, g_ssc_enabled,
+// g_cart_rom_request); called from setup() after dw_bus_load_config() and before machine_init(). The saves
 // only persist: the caller restarts the emulator to apply them.
 void        supervisor_load_cart_config(void);
 void        supervisor_save_orch90(bool enabled);
+void        supervisor_save_ssc(bool enabled);
 void        supervisor_save_cart_rom(const char* name);
 // The cartridge this boot asked for, and the one stored for the next restart
 // ("" = none). They differ while a Load Cart change is waiting for a restart.
