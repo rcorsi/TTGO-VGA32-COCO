@@ -48,4 +48,9 @@ void sound_set_mux_source(uint8_t source);
 // sound_set_external_left/right. Not cleared by sound_reset().
 void sound_set_external(uint8_t left, uint8_t right);
 
+// Speech/Sound Cartridge output, -127..127 (bipolar). The first call turns on
+// a fixed bias so the signal fits the unipolar output; it is added at half
+// scale, like the external level. Only called while the SSC is enabled.
+void sound_set_ssc(int8_t level);
+
 #endif // SOUND_H
