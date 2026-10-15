@@ -797,7 +797,10 @@ void machine_run_frame_coco3(Machine* m) {
     for (int line = 0; line < SCANLINES_PER_FRAME; line++) {
         machine_run_scanline_coco3(m);
         becker_scanline_tick();
-        if (ssc_enabled()) ssc_scanline_tick();
+        if (ssc_enabled()) {
+            PERF_PROBE_SCOPE(PROBE_SSC);
+            ssc_scanline_tick();
+        }
         {
             PERF_PROBE_SCOPE(PROBE_AUDIO_SCANLINE);
             hal_audio_capture_scanline();
@@ -1426,7 +1429,10 @@ void machine_run_frame_coco2(Machine* m) {
     for (int line = 0; line < SCANLINES_PER_FRAME; line++) {
         machine_run_scanline_coco2(m);
         becker_scanline_tick();
-        if (ssc_enabled()) ssc_scanline_tick();
+        if (ssc_enabled()) {
+            PERF_PROBE_SCOPE(PROBE_SSC);
+            ssc_scanline_tick();
+        }
         // Capture audio level after each scanline for pitch-correct playback
         hal_audio_capture_scanline();
     }
