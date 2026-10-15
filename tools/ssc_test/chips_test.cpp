@@ -10,6 +10,12 @@
 #include <math.h>
 #include <vector>
 
+#ifdef HAVE_VCC_SSC
+#define ssc vcc_ssc
+#include "tms7000.h"
+#undef ssc
+#endif
+
 using namespace ssc;
 
 static int s_fail = 0;
@@ -133,8 +139,51 @@ static void test_ay8913(void) {
     }
 }
 
+#ifdef HAVE_VCC_SSC
+// Random programs on the port and on VCC's original TMS7000, in slices of one
+// scanline's cycles with the interrupt lines toggled now and then: PC, the
+// register file, the cycles used and the illegal-opcode count must match.
+static void test_cpu_vs_vcc(void) {
+    int checked = 0, first_bad = -1;
+    for (unsigned seed = 1; seed <= 200 && first_bad < 0; seed++) {
+        std::vector<uint8_t> rom(4096);
+        unsigned x = seed;
+        for (size_t i = 0; i < rom.size(); i++) { x = x * 1103515245u + 12345u; rom[i] = (uint8_t)(x >> 16); }
+        rom[0xffe] = 0xf0; rom[0xfff] = 0x00;
+
+        static Tms7000 a;
+        static vcc_ssc::Tms7000 b;
+        b.InPortA = []() { return (uint8_t)0xff; };
+        b.InPortC = []() { return (uint8_t)0xff; };
+        b.InPortD = []() { return (uint8_t)0xff; };
+        b.OutPortB = b.OutPortC = b.OutPortD = [](uint8_t) {};
+        a.LoadRom(rom.data(), rom.size()); a.Reset();
+        b.LoadRom(rom.data(), rom.size()); b.Reset();
+        for (int slice = 0; slice < 2000; slice++) {
+            if (slice % 97 == 5)  { a.SetIrqLine(Tms7000Irq::Int3, true);  b.SetIrqLine(vcc_ssc::Tms7000Irq::Int3, true); }
+            if (slice % 97 == 40) { a.SetIrqLine(Tms7000Irq::Int3, false); b.SetIrqLine(vcc_ssc::Tms7000Irq::Int3, false); }
+            if (slice % 61 == 7)  { a.SetIrqLine(Tms7000Irq::Int1, (slice & 1) != 0); b.SetIrqLine(vcc_ssc::Tms7000Irq::Int1, (slice & 1) != 0); }
+            int ua = a.Execute(57), ub = b.Execute(57);
+            bool same = ua == ub && a.PC() == b.PC() && a.IllegalCount() == b.IllegalCount();
+            for (int r = 0; r < 128 && same; r++) same = a.PeekReg((uint8_t)r) == b.PeekReg((uint8_t)r);
+            checked++;
+            if (!same) {
+                printf("FAIL: TMS7000 differs from VCC: seed %u slice %d PC $%04X/$%04X cycles %d/%d\n",
+                       seed, slice, a.PC(), b.PC(), ua, ub);
+                s_fail++; first_bad = slice;
+                break;
+            }
+        }
+    }
+    printf("TMS7000 vs VCC: %d slices of random code compared\n", checked);
+}
+#endif
+
 int main(void) {
     test_cpu();
+#ifdef HAVE_VCC_SSC
+    test_cpu_vs_vcc();
+#endif
     test_sp0256();
     test_ay8913();
     printf(s_fail ? "chips: FAIL (%d)\n" : "chips: PASS\n", s_fail);

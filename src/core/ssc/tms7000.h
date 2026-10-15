@@ -22,6 +22,11 @@
 #include <string.h>
 #include <stddef.h>
 
+// Forces the small helpers and the opcode handlers into the dispatch switch:
+// on the Xtensa each real call costs a register-window rotation and, a few
+// levels deep, a spill, which made one emulated instruction ~220 cycles.
+#define SSC_TMS_INLINE inline __attribute__((always_inline))
+
 namespace ssc {
 
 // External interrupt line identifiers (INT2/4/5 are internally generated
@@ -94,21 +99,26 @@ private:
     // ---- memory access ----
     uint8_t  Read8(uint16_t address);
     void     Write8(uint16_t address, uint8_t data);
-    uint8_t  ReadR8(uint8_t r) { return Read8(r); }
-    void     WriteR8(uint8_t r, uint8_t v) { Write8(r, v); }
-    uint16_t ReadR16(uint8_t r) { return (uint16_t(Read8((r - 1) & 0xff)) << 8) | Read8(r); }
-    void     WriteR16(uint8_t r, uint16_t v) { Write8((r - 1) & 0xff, v >> 8); Write8(r, v & 0xff); }
+    // Register-file access (addresses $00-$FF): $00-$7F is RAM, $80-$FF is
+    // unmapped on the TMS7040 (reads 0, writes ignored) -- what Read8/Write8
+    // do for those addresses, without the call. Same for the stack (m_sp is
+    // 8 bits) and for opcode/operand fetches from the internal ROM.
+    SSC_TMS_INLINE uint8_t ReadR8(uint8_t r) { return (r < 0x80) ? m_rf[r] : 0; }
+    SSC_TMS_INLINE void    WriteR8(uint8_t r, uint8_t v) { if (r < 0x80) m_rf[r] = v; }
+    uint16_t ReadR16(uint8_t r) { return (uint16_t(ReadR8(uint8_t(r - 1))) << 8) | ReadR8(r); }
+    void     WriteR16(uint8_t r, uint16_t v) { WriteR8(uint8_t(r - 1), uint8_t(v >> 8)); WriteR8(r, uint8_t(v & 0xff)); }
 
     uint8_t  ReadP(uint8_t offset);
     void     WriteP(uint8_t offset, uint8_t data);
 
-    uint8_t  Imm8() { return Read8(m_pc++); }
-    uint16_t Imm16() { uint16_t hi = Read8(m_pc++); return (hi << 8) | Read8(m_pc++); }
+    SSC_TMS_INLINE uint8_t Fetch8(uint16_t a) { return (a >= 0xf000) ? m_rom[a - 0xf000] : Read8(a); }
+    SSC_TMS_INLINE uint8_t Imm8() { return Fetch8(m_pc++); }
+    uint16_t Imm16() { uint16_t hi = Imm8(); return (hi << 8) | Imm8(); }
 
-    uint8_t  Pull8() { return Read8(m_sp--); }
-    void     Push8(uint8_t data) { Write8(++m_sp, data); }
-    uint16_t Pull16() { uint16_t lo = Read8(m_sp--); return lo | (uint16_t(Read8(m_sp--)) << 8); }
-    void     Push16(uint16_t data) { Write8(++m_sp, data >> 8 & 0xff); Write8(++m_sp, data & 0xff); }
+    uint8_t  Pull8() { return ReadR8(m_sp--); }
+    void     Push8(uint8_t data) { WriteR8(++m_sp, data); }
+    uint16_t Pull16() { uint16_t lo = ReadR8(m_sp--); return lo | (uint16_t(ReadR8(m_sp--)) << 8); }
+    void     Push16(uint16_t data) { WriteR8(++m_sp, data >> 8 & 0xff); WriteR8(++m_sp, data & 0xff); }
 
     // ---- status flags ----
     enum { SR_C = 0x80, SR_N = 0x40, SR_Z = 0x20, SR_I = 0x10 };

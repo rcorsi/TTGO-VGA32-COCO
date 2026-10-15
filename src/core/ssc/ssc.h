@@ -53,9 +53,10 @@ void ssc_reset(void);
 uint8_t ssc_read(uint16_t addr);
 void    ssc_write(uint16_t addr, uint8_t val);
 
-// One CoCo scanline (1/15720 s): runs the TMS7040 (~57 cycles), the AY
-// (~14 steps) and the SP0256 (~0.64 samples), then pushes the mixed level
-// to the sound core.
+// One CoCo scanline (1/15720 s) of the TMS7040 (~57 cycles), the AY (~14
+// steps) and the SP0256 (~0.64 samples), mixed and pushed to the sound core.
+// The chips run in batches of SSC_BATCH scanlines (ssc.cpp), so the
+// cartridge lags the CoCo by up to that many scanlines.
 void    ssc_scanline_tick(void);
 
 // Introspection for /api/status and the host tests.

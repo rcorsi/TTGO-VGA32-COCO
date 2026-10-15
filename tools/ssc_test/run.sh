@@ -17,9 +17,6 @@ mkdir -p "$OUT"
 FLAGS="-std=gnu++11 -O2 -Wall -Wextra -I$D/stub"
 PORT="$SSC/tms7000.cpp $SSC/sp0256.cpp $SSC/ay8913.cpp"
 
-g++ $FLAGS -o "$OUT/chips_test" "$D/chips_test.cpp" $PORT
-"$OUT/chips_test"
-
 DEFS=""
 OBJS=""
 if [ -f "$VCC_SSC/ssc_core.cpp" ]; then
@@ -31,9 +28,16 @@ if [ -f "$VCC_SSC/ssc_core.cpp" ]; then
 else
     echo "VCC sources not found at $VCC_SSC: comparison skipped"
 fi
-# The VCC headers need C++17; our files are built as C++11 above.
-g++ ${FLAGS/gnu++11/gnu++17} $DEFS -o "$OUT/glue_test" "$D/glue_test.cpp" "$SSC/ssc.cpp" $PORT $OBJS
+
+# The VCC headers need C++17; our files are built as C++11 where VCC is not involved.
+g++ ${FLAGS/gnu++11/gnu++17} $DEFS -o "$OUT/chips_test" "$D/chips_test.cpp" $PORT ${OBJS:+$OUT/vcc_tms7000.o}
+"$OUT/chips_test"
+# SSC_BATCH=1 runs the chips one scanline at a time, so the port can be
+# compared with VCC tick for tick; the second build is the firmware's batching.
+g++ ${FLAGS/gnu++11/gnu++17} $DEFS -DSSC_BATCH=1 -o "$OUT/glue_test" "$D/glue_test.cpp" "$SSC/ssc.cpp" $PORT $OBJS
+g++ ${FLAGS/gnu++11/gnu++17} -o "$OUT/glue_test_batch" "$D/glue_test.cpp" "$SSC/ssc.cpp" $PORT
 "$OUT/glue_test"
-"$OUT/glue_test" random
+"$OUT/glue_test_batch"
+"$OUT/glue_test_batch" random
 (cd "$OUT" && "$OUT/glue_test" "$SSC_ROMS/pic-7040-510.bin" "$SSC_ROMS/sp0256-al2.bin")
 echo "ssc_test: all passed"

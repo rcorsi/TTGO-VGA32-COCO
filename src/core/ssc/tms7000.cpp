@@ -308,7 +308,7 @@ int Tms7000::Execute(int cycles)
     do
     {
         int before = m_icount;
-        m_op = Read8(m_pc++);
+        m_op = Fetch8(m_pc++);
         ExecuteOne(m_op);
         TickTimers(before - m_icount);
     } while (m_icount > 0);
@@ -331,47 +331,47 @@ int Tms7000::Execute(int cycles)
     int result = (this->*op)(param1, param2); \
     if (result > WB_NO) write_func(address, uint8_t(result))
 
-void Tms7000::AmA(OpFunc op)   { m_icount -= 5;  AM_WB(WriteR8, 0, ReadR8(0), 0); }
-void Tms7000::AmB(OpFunc op)   { m_icount -= 5;  AM_WB(WriteR8, 1, ReadR8(1), 0); }
-void Tms7000::AmR(OpFunc op)   { m_icount -= 7;  uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), 0); }
-void Tms7000::AmA2a(OpFunc op) { m_icount -= 6;  AM_WB(WriteR8, 0, ReadR8(0), ReadR8(0)); }
-void Tms7000::AmA2b(OpFunc op) { m_icount -= 6;  AM_WB(WriteR8, 1, ReadR8(1), ReadR8(0)); }
-void Tms7000::AmA2p(OpFunc op) { m_icount -= 10; uint8_t r = Imm8(); AM_WB(WriteP, r, ReadP(r), ReadR8(0)); }
-void Tms7000::AmA2r(OpFunc op) { m_icount -= 8;  uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), ReadR8(0)); }
-void Tms7000::AmB2a(OpFunc op) { m_icount -= 5;  AM_WB(WriteR8, 0, ReadR8(0), ReadR8(1)); }
-void Tms7000::AmB2b(OpFunc op) { m_icount -= 6;  AM_WB(WriteR8, 1, ReadR8(1), ReadR8(1)); }
-void Tms7000::AmB2r(OpFunc op) { m_icount -= 7;  uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), ReadR8(1)); }
-void Tms7000::AmB2p(OpFunc op) { m_icount -= 9;  uint8_t r = Imm8(); AM_WB(WriteP, r, ReadP(r), ReadR8(1)); }
-void Tms7000::AmR2a(OpFunc op) { m_icount -= 8;  AM_WB(WriteR8, 0, ReadR8(0), ReadR8(Imm8())); }
-void Tms7000::AmR2b(OpFunc op) { m_icount -= 8;  AM_WB(WriteR8, 1, ReadR8(1), ReadR8(Imm8())); }
-void Tms7000::AmR2r(OpFunc op) { m_icount -= 10; uint8_t param2 = ReadR8(Imm8()); uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), param2); }
-void Tms7000::AmI2a(OpFunc op) { m_icount -= 7;  AM_WB(WriteR8, 0, ReadR8(0), Imm8()); }
-void Tms7000::AmI2b(OpFunc op) { m_icount -= 7;  AM_WB(WriteR8, 1, ReadR8(1), Imm8()); }
-void Tms7000::AmI2r(OpFunc op) { m_icount -= 9;  uint8_t param2 = Imm8(); uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), param2); }
-void Tms7000::AmI2p(OpFunc op) { m_icount -= 11; uint8_t param2 = Imm8(); uint8_t r = Imm8(); AM_WB(WriteP, r, ReadP(r), param2); }
-void Tms7000::AmP2a(OpFunc op) { m_icount -= 9;  AM_WB(WriteR8, 0, ReadR8(0), ReadP(Imm8())); }
-void Tms7000::AmP2b(OpFunc op) { m_icount -= 8;  AM_WB(WriteR8, 1, ReadR8(1), ReadP(Imm8())); }
+SSC_TMS_INLINE void Tms7000::AmA(OpFunc op)   { m_icount -= 5;  AM_WB(WriteR8, 0, ReadR8(0), 0); }
+SSC_TMS_INLINE void Tms7000::AmB(OpFunc op)   { m_icount -= 5;  AM_WB(WriteR8, 1, ReadR8(1), 0); }
+SSC_TMS_INLINE void Tms7000::AmR(OpFunc op)   { m_icount -= 7;  uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), 0); }
+SSC_TMS_INLINE void Tms7000::AmA2a(OpFunc op) { m_icount -= 6;  AM_WB(WriteR8, 0, ReadR8(0), ReadR8(0)); }
+SSC_TMS_INLINE void Tms7000::AmA2b(OpFunc op) { m_icount -= 6;  AM_WB(WriteR8, 1, ReadR8(1), ReadR8(0)); }
+SSC_TMS_INLINE void Tms7000::AmA2p(OpFunc op) { m_icount -= 10; uint8_t r = Imm8(); AM_WB(WriteP, r, ReadP(r), ReadR8(0)); }
+SSC_TMS_INLINE void Tms7000::AmA2r(OpFunc op) { m_icount -= 8;  uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), ReadR8(0)); }
+SSC_TMS_INLINE void Tms7000::AmB2a(OpFunc op) { m_icount -= 5;  AM_WB(WriteR8, 0, ReadR8(0), ReadR8(1)); }
+SSC_TMS_INLINE void Tms7000::AmB2b(OpFunc op) { m_icount -= 6;  AM_WB(WriteR8, 1, ReadR8(1), ReadR8(1)); }
+SSC_TMS_INLINE void Tms7000::AmB2r(OpFunc op) { m_icount -= 7;  uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), ReadR8(1)); }
+SSC_TMS_INLINE void Tms7000::AmB2p(OpFunc op) { m_icount -= 9;  uint8_t r = Imm8(); AM_WB(WriteP, r, ReadP(r), ReadR8(1)); }
+SSC_TMS_INLINE void Tms7000::AmR2a(OpFunc op) { m_icount -= 8;  AM_WB(WriteR8, 0, ReadR8(0), ReadR8(Imm8())); }
+SSC_TMS_INLINE void Tms7000::AmR2b(OpFunc op) { m_icount -= 8;  AM_WB(WriteR8, 1, ReadR8(1), ReadR8(Imm8())); }
+SSC_TMS_INLINE void Tms7000::AmR2r(OpFunc op) { m_icount -= 10; uint8_t param2 = ReadR8(Imm8()); uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), param2); }
+SSC_TMS_INLINE void Tms7000::AmI2a(OpFunc op) { m_icount -= 7;  AM_WB(WriteR8, 0, ReadR8(0), Imm8()); }
+SSC_TMS_INLINE void Tms7000::AmI2b(OpFunc op) { m_icount -= 7;  AM_WB(WriteR8, 1, ReadR8(1), Imm8()); }
+SSC_TMS_INLINE void Tms7000::AmI2r(OpFunc op) { m_icount -= 9;  uint8_t param2 = Imm8(); uint8_t r = Imm8(); AM_WB(WriteR8, r, ReadR8(r), param2); }
+SSC_TMS_INLINE void Tms7000::AmI2p(OpFunc op) { m_icount -= 11; uint8_t param2 = Imm8(); uint8_t r = Imm8(); AM_WB(WriteP, r, ReadP(r), param2); }
+SSC_TMS_INLINE void Tms7000::AmP2a(OpFunc op) { m_icount -= 9;  AM_WB(WriteR8, 0, ReadR8(0), ReadP(Imm8())); }
+SSC_TMS_INLINE void Tms7000::AmP2b(OpFunc op) { m_icount -= 8;  AM_WB(WriteR8, 1, ReadR8(1), ReadP(Imm8())); }
 
 #undef AM_WB
 
 // common opcodes -- 1 param
-int Tms7000::OpClr(uint8_t, uint8_t) { uint8_t t = 0; SET_CNZ(t); return t; }
-int Tms7000::OpDec(uint8_t p1, uint8_t) { uint16_t t = p1 - 1; SET_NZ(t); SET_C(~t); return t; }
-int Tms7000::OpInc(uint8_t p1, uint8_t) { uint16_t t = p1 + 1; SET_CNZ(t); return t; }
-int Tms7000::OpInv(uint8_t p1, uint8_t) { uint8_t t = ~p1; SET_CNZ(t); return t; }
-int Tms7000::OpRl(uint8_t p1, uint8_t)  { uint16_t t = (p1 << 1) | (p1 >> 7); SET_CNZ(t); return t; }
-int Tms7000::OpRlc(uint8_t p1, uint8_t) { uint16_t t = (p1 << 1) | GET_C(); SET_CNZ(t); return t; }
-int Tms7000::OpRr(uint8_t p1, uint8_t)  { uint16_t t = (p1 >> 1) | (p1 << 8) | (p1 << 7 & 0x80); SET_CNZ(t); return t; }
-int Tms7000::OpRrc(uint8_t p1, uint8_t) { uint16_t t = (p1 >> 1) | (p1 << 8) | (GET_C() << 7); SET_CNZ(t); return t; }
-int Tms7000::OpSwap(uint8_t p1, uint8_t) { m_icount -= 3; uint16_t t = (p1 >> 4) | (p1 << 4); SET_CNZ(t); return t; }
-int Tms7000::OpXchb(uint8_t p1, uint8_t) { m_icount -= 1; uint8_t t = ReadR8(1); SET_CNZ(t); WriteR8(1, p1); return t; }
+SSC_TMS_INLINE int Tms7000::OpClr(uint8_t, uint8_t) { uint8_t t = 0; SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpDec(uint8_t p1, uint8_t) { uint16_t t = p1 - 1; SET_NZ(t); SET_C(~t); return t; }
+SSC_TMS_INLINE int Tms7000::OpInc(uint8_t p1, uint8_t) { uint16_t t = p1 + 1; SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpInv(uint8_t p1, uint8_t) { uint8_t t = ~p1; SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpRl(uint8_t p1, uint8_t)  { uint16_t t = (p1 << 1) | (p1 >> 7); SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpRlc(uint8_t p1, uint8_t) { uint16_t t = (p1 << 1) | GET_C(); SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpRr(uint8_t p1, uint8_t)  { uint16_t t = (p1 >> 1) | (p1 << 8) | (p1 << 7 & 0x80); SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpRrc(uint8_t p1, uint8_t) { uint16_t t = (p1 >> 1) | (p1 << 8) | (GET_C() << 7); SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpSwap(uint8_t p1, uint8_t) { m_icount -= 3; uint16_t t = (p1 >> 4) | (p1 << 4); SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpXchb(uint8_t p1, uint8_t) { m_icount -= 1; uint8_t t = ReadR8(1); SET_CNZ(t); WriteR8(1, p1); return t; }
 
 // 2 params
-int Tms7000::OpAdc(uint8_t p1, uint8_t p2) { uint16_t t = p1 + p2 + GET_C(); SET_CNZ(t); return t; }
-int Tms7000::OpAdd(uint8_t p1, uint8_t p2) { uint16_t t = p1 + p2; SET_CNZ(t); return t; }
-int Tms7000::OpAnd(uint8_t p1, uint8_t p2) { uint8_t t = p1 & p2; SET_CNZ(t); return t; }
-int Tms7000::OpCmp(uint8_t p1, uint8_t p2) { uint16_t t = p1 - p2; SET_NZ(t); SET_C(~t); return WB_NO; }
-int Tms7000::OpMpy(uint8_t p1, uint8_t p2)
+SSC_TMS_INLINE int Tms7000::OpAdc(uint8_t p1, uint8_t p2) { uint16_t t = p1 + p2 + GET_C(); SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpAdd(uint8_t p1, uint8_t p2) { uint16_t t = p1 + p2; SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpAnd(uint8_t p1, uint8_t p2) { uint8_t t = p1 & p2; SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpCmp(uint8_t p1, uint8_t p2) { uint16_t t = p1 - p2; SET_NZ(t); SET_C(~t); return WB_NO; }
+SSC_TMS_INLINE int Tms7000::OpMpy(uint8_t p1, uint8_t p2)
 {
     m_icount -= 39;
     uint16_t t = uint16_t(p1) * uint16_t(p2);
@@ -382,15 +382,15 @@ int Tms7000::OpMpy(uint8_t p1, uint8_t p2)
     WriteR16(1, t);
     return WB_NO;
 }
-int Tms7000::OpMov(uint8_t, uint8_t p2) { uint8_t t = p2; SET_CNZ(t); return t; }
-int Tms7000::OpOr(uint8_t p1, uint8_t p2) { uint8_t t = p1 | p2; SET_CNZ(t); return t; }
-int Tms7000::OpSbb(uint8_t p1, uint8_t p2) { uint16_t t = p1 - p2 - (!GET_C()); SET_NZ(t); SET_C(~t); return t; }
-int Tms7000::OpSub(uint8_t p1, uint8_t p2) { uint16_t t = p1 - p2; SET_NZ(t); SET_C(~t); return t; }
-int Tms7000::OpXor(uint8_t p1, uint8_t p2) { uint8_t t = p1 ^ p2; SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpMov(uint8_t, uint8_t p2) { uint8_t t = p2; SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpOr(uint8_t p1, uint8_t p2) { uint8_t t = p1 | p2; SET_CNZ(t); return t; }
+SSC_TMS_INLINE int Tms7000::OpSbb(uint8_t p1, uint8_t p2) { uint16_t t = p1 - p2 - (!GET_C()); SET_NZ(t); SET_C(~t); return t; }
+SSC_TMS_INLINE int Tms7000::OpSub(uint8_t p1, uint8_t p2) { uint16_t t = p1 - p2; SET_NZ(t); SET_C(~t); return t; }
+SSC_TMS_INLINE int Tms7000::OpXor(uint8_t p1, uint8_t p2) { uint8_t t = p1 ^ p2; SET_CNZ(t); return t; }
 
 static const uint8_t lut_bcd_out[6] = { 0x00, 0x06, 0x00, 0x66, 0x60, 0x66 };
 
-int Tms7000::OpDac(uint8_t p1, uint8_t p2)
+SSC_TMS_INLINE int Tms7000::OpDac(uint8_t p1, uint8_t p2)
 {
     m_icount -= 2;
     int c = GET_C();
@@ -404,7 +404,7 @@ int Tms7000::OpDac(uint8_t p1, uint8_t p2)
     return t;
 }
 
-int Tms7000::OpDsb(uint8_t p1, uint8_t p2)
+SSC_TMS_INLINE int Tms7000::OpDsb(uint8_t p1, uint8_t p2)
 {
     m_icount -= 2;
     int c = !GET_C();
@@ -418,48 +418,48 @@ int Tms7000::OpDsb(uint8_t p1, uint8_t p2)
     return t;
 }
 
-void Tms7000::ShortBranch(bool check)
+SSC_TMS_INLINE void Tms7000::ShortBranch(bool check)
 {
     m_icount -= 2;
     int8_t d = int8_t(Imm8());
     if (check) { m_pc += d; m_icount -= 2; }
 }
 
-void Tms7000::Jmp(bool check) { m_icount -= 3; ShortBranch(check); }
+SSC_TMS_INLINE void Tms7000::Jmp(bool check) { m_icount -= 3; ShortBranch(check); }
 
-int Tms7000::OpDjnz(uint8_t p1, uint8_t) { uint16_t t = p1 - 1; ShortBranch(t != 0); return t; }
-int Tms7000::OpBtjo(uint8_t p1, uint8_t p2) { uint8_t t = p1 & p2; SET_CNZ(t); ShortBranch(t != 0); return WB_NO; }
-int Tms7000::OpBtjz(uint8_t p1, uint8_t p2) { uint8_t t = uint8_t(~p1) & p2; SET_CNZ(t); ShortBranch(t != 0); return WB_NO; }
+SSC_TMS_INLINE int Tms7000::OpDjnz(uint8_t p1, uint8_t) { uint16_t t = p1 - 1; ShortBranch(t != 0); return t; }
+SSC_TMS_INLINE int Tms7000::OpBtjo(uint8_t p1, uint8_t p2) { uint8_t t = p1 & p2; SET_CNZ(t); ShortBranch(t != 0); return WB_NO; }
+SSC_TMS_INLINE int Tms7000::OpBtjz(uint8_t p1, uint8_t p2) { uint8_t t = uint8_t(~p1) & p2; SET_CNZ(t); ShortBranch(t != 0); return WB_NO; }
 
-void Tms7000::DecdA() { m_icount -= 9; uint32_t t = ReadR16(0) - 1; WriteR16(0, uint16_t(t)); SET_NZ(t >> 8); SET_C(~(t >> 8)); }
-void Tms7000::DecdB() { m_icount -= 9; uint32_t t = ReadR16(1) - 1; WriteR16(1, uint16_t(t)); SET_NZ(t >> 8); SET_C(~(t >> 8)); }
-void Tms7000::DecdR() { m_icount -= 11; uint8_t r = Imm8(); uint32_t t = ReadR16(r) - 1; WriteR16(r, uint16_t(t)); SET_NZ(t >> 8); SET_C(~(t >> 8)); }
+SSC_TMS_INLINE void Tms7000::DecdA() { m_icount -= 9; uint32_t t = ReadR16(0) - 1; WriteR16(0, uint16_t(t)); SET_NZ(t >> 8); SET_C(~(t >> 8)); }
+SSC_TMS_INLINE void Tms7000::DecdB() { m_icount -= 9; uint32_t t = ReadR16(1) - 1; WriteR16(1, uint16_t(t)); SET_NZ(t >> 8); SET_C(~(t >> 8)); }
+SSC_TMS_INLINE void Tms7000::DecdR() { m_icount -= 11; uint8_t r = Imm8(); uint32_t t = ReadR16(r) - 1; WriteR16(r, uint16_t(t)); SET_NZ(t >> 8); SET_C(~(t >> 8)); }
 
-void Tms7000::CmpaDir() { m_icount -= 12; uint16_t t = ReadR8(0) - Read8(Imm16()); SET_NZ(t); SET_C(~t); }
-void Tms7000::CmpaInx() { m_icount -= 14; uint16_t t = ReadR8(0) - Read8(Imm16() + ReadR8(1)); SET_NZ(t); SET_C(~t); }
-void Tms7000::CmpaInd() { m_icount -= 11; uint16_t t = ReadR8(0) - Read8(ReadR16(Imm8())); SET_NZ(t); SET_C(~t); }
+SSC_TMS_INLINE void Tms7000::CmpaDir() { m_icount -= 12; uint16_t t = ReadR8(0) - Fetch8(Imm16()); SET_NZ(t); SET_C(~t); }
+SSC_TMS_INLINE void Tms7000::CmpaInx() { m_icount -= 14; uint16_t t = ReadR8(0) - Fetch8(Imm16() + ReadR8(1)); SET_NZ(t); SET_C(~t); }
+SSC_TMS_INLINE void Tms7000::CmpaInd() { m_icount -= 11; uint16_t t = ReadR8(0) - Fetch8(ReadR16(Imm8())); SET_NZ(t); SET_C(~t); }
 
-void Tms7000::LdaDir() { m_icount -= 11; uint8_t t = Read8(Imm16()); WriteR8(0, t); SET_CNZ(t); }
-void Tms7000::LdaInx() { m_icount -= 13; uint8_t t = Read8(Imm16() + ReadR8(1)); WriteR8(0, t); SET_CNZ(t); }
-void Tms7000::LdaInd() { m_icount -= 10; uint8_t t = Read8(ReadR16(Imm8())); WriteR8(0, t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::LdaDir() { m_icount -= 11; uint8_t t = Fetch8(Imm16()); WriteR8(0, t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::LdaInx() { m_icount -= 13; uint8_t t = Fetch8(Imm16() + ReadR8(1)); WriteR8(0, t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::LdaInd() { m_icount -= 10; uint8_t t = Fetch8(ReadR16(Imm8())); WriteR8(0, t); SET_CNZ(t); }
 
-void Tms7000::StaDir() { m_icount -= 11; uint8_t t = ReadR8(0); Write8(Imm16(), t); SET_CNZ(t); }
-void Tms7000::StaInx() { m_icount -= 13; uint8_t t = ReadR8(0); Write8(Imm16() + ReadR8(1), t); SET_CNZ(t); }
-void Tms7000::StaInd() { m_icount -= 10; uint8_t t = ReadR8(0); Write8(ReadR16(Imm8()), t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::StaDir() { m_icount -= 11; uint8_t t = ReadR8(0); Write8(Imm16(), t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::StaInx() { m_icount -= 13; uint8_t t = ReadR8(0); Write8(Imm16() + ReadR8(1), t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::StaInd() { m_icount -= 10; uint8_t t = ReadR8(0); Write8(ReadR16(Imm8()), t); SET_CNZ(t); }
 
-void Tms7000::MovdDir() { m_icount -= 15; uint16_t t = Imm16(); WriteR16(Imm8(), t); SET_CNZ(t >> 8); }
-void Tms7000::MovdInx() { m_icount -= 17; uint16_t t = Imm16() + ReadR8(1); WriteR16(Imm8(), t); SET_CNZ(t >> 8); }
-void Tms7000::MovdInd() { m_icount -= 14; uint16_t t = ReadR16(Imm8()); WriteR16(Imm8(), t); SET_CNZ(t >> 8); }
+SSC_TMS_INLINE void Tms7000::MovdDir() { m_icount -= 15; uint16_t t = Imm16(); WriteR16(Imm8(), t); SET_CNZ(t >> 8); }
+SSC_TMS_INLINE void Tms7000::MovdInx() { m_icount -= 17; uint16_t t = Imm16() + ReadR8(1); WriteR16(Imm8(), t); SET_CNZ(t >> 8); }
+SSC_TMS_INLINE void Tms7000::MovdInd() { m_icount -= 14; uint16_t t = ReadR16(Imm8()); WriteR16(Imm8(), t); SET_CNZ(t >> 8); }
 
-void Tms7000::BrDir() { m_icount -= 10; m_pc = Imm16(); }
-void Tms7000::BrInx() { m_icount -= 12; m_pc = Imm16() + ReadR8(1); }
-void Tms7000::BrInd() { m_icount -= 9; m_pc = ReadR16(Imm8()); }
+SSC_TMS_INLINE void Tms7000::BrDir() { m_icount -= 10; m_pc = Imm16(); }
+SSC_TMS_INLINE void Tms7000::BrInx() { m_icount -= 12; m_pc = Imm16() + ReadR8(1); }
+SSC_TMS_INLINE void Tms7000::BrInd() { m_icount -= 9; m_pc = ReadR16(Imm8()); }
 
-void Tms7000::CallDir() { m_icount -= 14; uint16_t t = Imm16(); Push16(m_pc); m_pc = t; }
-void Tms7000::CallInx() { m_icount -= 16; uint16_t t = Imm16() + ReadR8(1); Push16(m_pc); m_pc = t; }
-void Tms7000::CallInd() { m_icount -= 13; uint16_t t = ReadR16(Imm8()); Push16(m_pc); m_pc = t; }
+SSC_TMS_INLINE void Tms7000::CallDir() { m_icount -= 14; uint16_t t = Imm16(); Push16(m_pc); m_pc = t; }
+SSC_TMS_INLINE void Tms7000::CallInx() { m_icount -= 16; uint16_t t = Imm16() + ReadR8(1); Push16(m_pc); m_pc = t; }
+SSC_TMS_INLINE void Tms7000::CallInd() { m_icount -= 13; uint16_t t = ReadR16(Imm8()); Push16(m_pc); m_pc = t; }
 
-void Tms7000::Trap(uint8_t address)
+SSC_TMS_INLINE void Tms7000::Trap(uint8_t address)
 {
     m_icount -= 14;
     Push16(m_pc);
@@ -467,28 +467,28 @@ void Tms7000::Trap(uint8_t address)
     m_pc = (uint16_t(Read8(vec)) << 8) | Read8(uint16_t(vec + 1));
 }
 
-void Tms7000::Reti() { m_icount -= 9; m_pc = Pull16(); m_sr = Pull8() & 0xf0; CheckInterrupts(); }
-void Tms7000::Rets() { m_icount -= 7; m_pc = Pull16(); }
+SSC_TMS_INLINE void Tms7000::Reti() { m_icount -= 9; m_pc = Pull16(); m_sr = Pull8() & 0xf0; CheckInterrupts(); }
+SSC_TMS_INLINE void Tms7000::Rets() { m_icount -= 7; m_pc = Pull16(); }
 
-void Tms7000::PopA()  { m_icount -= 6; uint8_t t = Pull8(); WriteR8(0, t); SET_CNZ(t); }
-void Tms7000::PopB()  { m_icount -= 6; uint8_t t = Pull8(); WriteR8(1, t); SET_CNZ(t); }
-void Tms7000::PopR()  { m_icount -= 8; uint8_t t = Pull8(); WriteR8(Imm8(), t); SET_CNZ(t); }
-void Tms7000::PopSt() { m_icount -= 6; m_sr = Pull8() & 0xf0; CheckInterrupts(); }
+SSC_TMS_INLINE void Tms7000::PopA()  { m_icount -= 6; uint8_t t = Pull8(); WriteR8(0, t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::PopB()  { m_icount -= 6; uint8_t t = Pull8(); WriteR8(1, t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::PopR()  { m_icount -= 8; uint8_t t = Pull8(); WriteR8(Imm8(), t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::PopSt() { m_icount -= 6; m_sr = Pull8() & 0xf0; CheckInterrupts(); }
 
-void Tms7000::PushA() { m_icount -= 6; uint8_t t = ReadR8(0); Push8(t); SET_CNZ(t); }
-void Tms7000::PushB() { m_icount -= 6; uint8_t t = ReadR8(1); Push8(t); SET_CNZ(t); }
-void Tms7000::PushR() { m_icount -= 8; uint8_t t = ReadR8(Imm8()); Push8(t); SET_CNZ(t); }
-void Tms7000::PushSt(){ m_icount -= 6; Push8(m_sr); }
+SSC_TMS_INLINE void Tms7000::PushA() { m_icount -= 6; uint8_t t = ReadR8(0); Push8(t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::PushB() { m_icount -= 6; uint8_t t = ReadR8(1); Push8(t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::PushR() { m_icount -= 8; uint8_t t = ReadR8(Imm8()); Push8(t); SET_CNZ(t); }
+SSC_TMS_INLINE void Tms7000::PushSt(){ m_icount -= 6; Push8(m_sr); }
 
-void Tms7000::Nop()  { m_icount -= 5; }
-void Tms7000::Idle() { m_icount -= 6; m_pc--; m_idle_state = true; }
-void Tms7000::Dint() { m_icount -= 5; m_sr &= ~(SR_N | SR_Z | SR_C | SR_I); }
-void Tms7000::Eint() { m_icount -= 5; m_sr |= (SR_N | SR_Z | SR_C | SR_I); CheckInterrupts(); }
-void Tms7000::Ldsp() { m_icount -= 5; m_sp = ReadR8(1); }
-void Tms7000::Stsp() { m_icount -= 6; WriteR8(1, m_sp); }
-void Tms7000::Setc() { m_icount -= 5; m_sr = (m_sr & ~SR_N) | SR_C | SR_Z; }
+SSC_TMS_INLINE void Tms7000::Nop()  { m_icount -= 5; }
+SSC_TMS_INLINE void Tms7000::Idle() { m_icount -= 6; m_pc--; m_idle_state = true; }
+SSC_TMS_INLINE void Tms7000::Dint() { m_icount -= 5; m_sr &= ~(SR_N | SR_Z | SR_C | SR_I); }
+SSC_TMS_INLINE void Tms7000::Eint() { m_icount -= 5; m_sr |= (SR_N | SR_Z | SR_C | SR_I); CheckInterrupts(); }
+SSC_TMS_INLINE void Tms7000::Ldsp() { m_icount -= 5; m_sp = ReadR8(1); }
+SSC_TMS_INLINE void Tms7000::Stsp() { m_icount -= 6; WriteR8(1, m_sp); }
+SSC_TMS_INLINE void Tms7000::Setc() { m_icount -= 5; m_sr = (m_sr & ~SR_N) | SR_C | SR_Z; }
 
-void Tms7000::Illegal(uint8_t) { m_icount -= 5; m_illegal_count++; }
+SSC_TMS_INLINE void Tms7000::Illegal(uint8_t) { m_icount -= 5; m_illegal_count++; }
 
 #undef GET_C
 #undef SET_C

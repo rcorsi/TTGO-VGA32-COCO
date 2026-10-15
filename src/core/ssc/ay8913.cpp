@@ -141,31 +141,35 @@ int Ay8913::CurrentEnvelopeLevel() const
     return level >> 1; // 0..31 -> 0..15
 }
 
+// Advances a divide-by-period counter by `steps` internal steps, exactly as
+// `steps` single steps of "if (++c >= p) { c = 0; event; }" would, and
+// returns the number of events. Only the state after the last step is
+// sampled, so the generators can jump instead of looping step by step.
+static inline __attribute__((always_inline)) int AdvanceCounter(int& c, int p, int steps)
+{
+    if (steps <= 0) return 0;
+    int events = 0;
+    if (c >= p) { c = 0; events = 1; steps--; }   // period shrank below the count
+    int total = c + steps;
+    if (total < p) { c = total; return events; }
+    c = total % p;
+    return events + total / p;
+}
+
 int16_t Ay8913::Render(int steps)
 {
-    for (int i = 0; i < steps; i++)
-    {
-        for (int ch = 0; ch < 3; ch++)
-        {
-            if (++m_tone_counter[ch] >= TonePeriod(ch)) {
-                m_tone_counter[ch] = 0;
-                m_tone_output[ch] ^= 1;
-            }
-        }
+    for (int ch = 0; ch < 3; ch++)
+        m_tone_output[ch] ^= AdvanceCounter(m_tone_counter[ch], TonePeriod(ch), steps) & 1;
 
-        if (++m_noise_counter >= NoisePeriod()) {
-            m_noise_counter = 0;
-            // 17-bit LFSR, taps at bit0 and bit3 (standard AY polynomial)
-            uint32_t bit = ((m_noise_lfsr ^ (m_noise_lfsr >> 3)) & 1);
-            m_noise_lfsr = (m_noise_lfsr >> 1) | (bit << 16);
-            m_noise_output = int(m_noise_lfsr & 1);
-        }
-
-        if (++m_env_counter >= EnvPeriod()) {
-            m_env_counter = 0;
-            TickOneEnvelopeStep();
-        }
+    for (int n = AdvanceCounter(m_noise_counter, NoisePeriod(), steps); n > 0; n--) {
+        // 17-bit LFSR, taps at bit0 and bit3 (standard AY polynomial)
+        uint32_t bit = ((m_noise_lfsr ^ (m_noise_lfsr >> 3)) & 1);
+        m_noise_lfsr = (m_noise_lfsr >> 1) | (bit << 16);
+        m_noise_output = int(m_noise_lfsr & 1);
     }
+
+    for (int n = AdvanceCounter(m_env_counter, EnvPeriod(), steps); n > 0; n--)
+        TickOneEnvelopeStep();
 
     uint8_t mixer = m_regs[7];
     int32_t mix = 0;

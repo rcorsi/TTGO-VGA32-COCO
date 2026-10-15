@@ -81,6 +81,17 @@ static const int32_t SAC_DECAY     = 5033;      // 0.0003
 static const int32_t SAC_THRESH_ON = 838861;    // 0.05
 static const int32_t SAC_THRESH_OFF= 167772;    // 0.01
 
+// Scanlines run per batch. Between two scanlines the emulator's own loop
+// evicts the chips' code from the flash cache; running them for several
+// scanlines back to back cut their cost by ~30% on the device. A batch runs the chips for SSC_BATCH scanlines back to
+// back into s_batch[], and each scanline then only plays one sample. The
+// cartridge sees the CoCo's writes, and the CoCo sees BUSY drop, up to
+// SSC_BATCH scanlines later (8 = 0.5 ms). Host tests build with 1 to compare
+// tick for tick with VCC.
+#ifndef SSC_BATCH
+#define SSC_BATCH 8
+#endif
+
 // Output gains (VCC: AY x2.0, SP0256 x1.75, full scale 127), applied as
 // sample * gain / 32768.
 static const int32_t MIX_AY_GAIN  = 254;
@@ -111,7 +122,9 @@ static int32_t  s_cpu_debt = 0;      // cycles already run into this scanline
 static uint32_t s_ay_acc   = 0;
 static uint32_t s_spo_acc  = 0;
 static int16_t  s_spo_sample = 0;
-static int8_t   s_level      = 0;
+static int8_t   s_level      = 0;      // last sample played
+static int8_t   s_batch[SSC_BATCH];
+static int      s_batch_pos  = 0;      // next sample of s_batch to play; 0 = run a batch
 
 static uint32_t s_ay_write_count   = 0;
 static uint32_t s_ald_speech_count = 0;
@@ -192,6 +205,7 @@ void ssc_reset(void) {
     s_spo_acc = 0;
     s_spo_sample = 0;
     s_level = 0;
+    s_batch_pos = 0;
     s_sac_prev_in = s_sac_prev_out = s_sac_env = 0;
     s_sac_active = false;
     memset(s_ram, 0, 2048);
@@ -318,9 +332,8 @@ static void sound_activity(int32_t x) {
     else if (s_sac_env > SAC_THRESH_ON)             s_sac_active = true;
 }
 
-void ssc_scanline_tick(void) {
-    if (!s_cpu) return;
-
+// One scanline of the three chips; returns the mixed sample.
+static int8_t run_scanline(void) {
     // TMS7040: whole cycles owed this scanline, minus what the last
     // instruction of the previous scanline already ran past its end.
     s_cpu_acc += TMS_HZ;
@@ -349,9 +362,19 @@ void ssc_scanline_tick(void) {
     mix = (mix + 16384) >> 15;
     if (mix >  127) mix =  127;
     if (mix < -127) mix = -127;
-    if (mix != s_level) {
-        s_level = (int8_t)mix;
-        sound_set_ssc(s_level);
+    return (int8_t)mix;
+}
+
+void ssc_scanline_tick(void) {
+    if (!s_cpu) return;
+    if (s_batch_pos == 0) {
+        for (int i = 0; i < SSC_BATCH; i++) s_batch[i] = run_scanline();
+    }
+    int8_t v = s_batch[s_batch_pos];
+    if (++s_batch_pos == SSC_BATCH) s_batch_pos = 0;
+    if (v != s_level) {
+        s_level = v;
+        sound_set_ssc(v);
     }
 }
 

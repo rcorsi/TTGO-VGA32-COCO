@@ -18,6 +18,10 @@
 #undef ssc
 #endif
 
+#ifndef SSC_BATCH
+#define SSC_BATCH 8     // as ssc.cpp
+#endif
+
 static int s_fail = 0;
 #define CHECK(c, ...) do { if (!(c)) { printf("FAIL: " __VA_ARGS__); printf("\n"); s_fail++; } } while (0)
 
@@ -192,7 +196,7 @@ static void test_synthetic(void) {
     int n = 0;
     while (!(ssc_read(SSC_DATA_ADDR) & SSC_ST_READY) && n < 100) { ssc_scanline_tick(); n++; }
     printf("synthetic: command serviced in %d scanline(s)\n", n);
-    CHECK(n > 0 && n <= 4, "BUSY lasted %d scanlines", n);
+    CHECK(n > 0 && n <= SSC_BATCH + 4, "BUSY lasted %d scanlines", n);
     CHECK(ssc_command_count() == 1, "command count %u", ssc_command_count());
     CHECK(ssc_ay_write_count() - ay_boot == 1, "AY write count %u", ssc_ay_write_count() - ay_boot);
     CHECK(ssc_ald_speech_count() == 1, "allophone count %u", ssc_ald_speech_count());
