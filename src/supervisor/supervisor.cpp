@@ -29,6 +29,7 @@
 #include "sv_fujinet.h"
 #include "sv_cart.h"
 #include "../core/orch90.h"
+#include "../core/ssc/ssc.h"
 #include "../net/dw_bus.h"
 #include "sv_render.h"
 #include "../hal/hal.h"
@@ -79,6 +80,7 @@ static bool uses_wide_frame(SV_State st) {
         case SV_SETTINGS:
         case SV_KEYBOARD_MENU:
         case SV_MACHINE_MENU:
+        case SV_SOUND_MENU:
         case SV_ABOUT:
         case SV_DEBUG_MENU:
         case SV_DEBUG_DUMP:
@@ -365,8 +367,12 @@ void supervisor_on_key(uint8_t hid_usage, bool pressed) {
             sv_cart_on_key(&sv, hid_usage, pressed);
             break;
 
-        case SV_ORCH90_POPUP:
-            sv_orch90_popup_on_key(&sv, hid_usage, pressed);
+        case SV_CART_POPUP:
+            sv_cart_popup_on_key(&sv, hid_usage, pressed);
+            break;
+
+        case SV_SOUND_MENU:
+            sv_sound_menu_on_key(&sv, hid_usage, pressed);
             break;
 
         case SV_CPU_POPUP:
@@ -424,6 +430,7 @@ bool supervisor_update_and_render(void) {
                 case SV_ABOUT:        break;    // always repaints in full
                 case SV_SETTINGS:
                 case SV_MACHINE_MENU:
+                case SV_SOUND_MENU:
                 case SV_KEYBOARD_MENU: sv_settings_invalidate();   break;
                 case SV_KEYMAP_LIST:
                 case SV_KEYMAP_TEST:   sv_keymap_invalidate();     break;
@@ -438,10 +445,10 @@ bool supervisor_update_and_render(void) {
         // Popup over the Settings list: leave the wide frame in place.
         if (s_last_rendered != sv.state) sv_machine_select_invalidate();
     } else if (sv.state == SV_KEYMAP_CAPTURE || sv.state == SV_JOY_SENSE ||
-               sv.state == SV_ORCH90_POPUP || sv.state == SV_CPU_POPUP ||
+               sv.state == SV_CART_POPUP || sv.state == SV_CPU_POPUP ||
                sv.state == SV_RAM_SELECT) {
-        // Popups over the Key Mapper keyboard / the Settings and Machine
-        // lists: leave the wide frame in place.
+        // Popups over the Key Mapper keyboard / the Settings, Machine and
+        // Sound Carts lists: leave the wide frame in place.
     } else if (s_main_box_on_screen && sv.state != SV_CONFIRM_DIALOG) {
         // The confirm dialog is left floating over the main menu.
         sv_render_wide_clear();
@@ -510,8 +517,12 @@ bool supervisor_update_and_render(void) {
             sv_cart_render(&sv);
             break;
 
-        case SV_ORCH90_POPUP:
-            sv_orch90_popup_render(&sv);
+        case SV_CART_POPUP:
+            sv_cart_popup_render(&sv);
+            break;
+
+        case SV_SOUND_MENU:
+            sv_sound_menu_render(&sv);
             break;
 
         case SV_CPU_POPUP:
@@ -712,6 +723,7 @@ void supervisor_load_cart_config(void) {
     Preferences prefs;
     prefs.begin("sv", true);
     g_orch90_enabled = prefs.getBool("orch90", false);
+    g_ssc_enabled    = prefs.getBool("ssc", false);
     String rom = prefs.getString("cart_rom", "");
     prefs.end();
 
@@ -722,14 +734,22 @@ void supervisor_load_cart_config(void) {
         g_cart_rom_request[0] = s_cart_rom;
         g_cart_rom_request[1] = s_cart_rom;
     }
-    DEBUG_PRINTF("Cartridge: Orchestra-90 %s, cart ROM %s",
-                 g_orch90_enabled ? "on" : "off", s_cart_rom[0] ? s_cart_rom : "(default)");
+    DEBUG_PRINTF("Cartridge: Orchestra-90 %s, Speech/Sound %s, cart ROM %s",
+                 g_orch90_enabled ? "on" : "off", g_ssc_enabled ? "on" : "off",
+                 s_cart_rom[0] ? s_cart_rom : "(default)");
 }
 
 void supervisor_save_orch90(bool enabled) {
     Preferences prefs;
     prefs.begin("sv", false);
     prefs.putBool("orch90", enabled);
+    prefs.end();
+}
+
+void supervisor_save_ssc(bool enabled) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putBool("ssc", enabled);
     prefs.end();
 }
 

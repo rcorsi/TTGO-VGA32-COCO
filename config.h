@@ -25,7 +25,7 @@
 // Firmware version (reported by the WiFi debug API /api/status and shown on
 // the supervisor About screen). Bump both of these together on a release —
 // they are the single source of truth; nothing else should hardcode a version.
-#define FIRMWARE_VERSION        "0.16.1"
+#define FIRMWARE_VERSION        "0.17.0"
 #define FIRMWARE_BUILD_DATE     "10.10.2026"
 
 // ------------------------------------------------------------
@@ -223,6 +223,9 @@
 // Orchestra-90/CC cartridge ROM (8 KB). Optional: without it the DAC ports
 // still work for software loaded from disk.
 #define ROM_ORCH90_FILE         "orch90.rom"
+// Speech/Sound Cartridge: TMS7040 firmware and SP0256-AL2 mask ROM (MAME names).
+#define ROM_SSC_PIC_FILE        "pic-7040-510.bin"
+#define ROM_SSC_SPEECH_FILE     "sp0256-al2.bin"
 #define COCO3_ROM_SIZE          (32 * 1024)
 #define COCO3_PHYSICAL_RAM      (512 * 1024)
 

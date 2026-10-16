@@ -34,6 +34,7 @@
 #include "../core/machine.h"        // g_machine_type, machine types
 #include "../supervisor/supervisor.h" // supervisor_set_machine_type
 #include "../supervisor/sv_disk.h"
+#include "../core/ssc/ssc.h"
 #include "../utils/debug.h"
 #include "../../config.h"           // MACHINE_NAME_COCO2/3, FW version
 
@@ -175,6 +176,18 @@ static void h_status() {
         j += ",\"isr_gap_us_max\":" + String(a.isr_gap_cyc_max / mhz, 2) + "}";
         if (s_server.arg("audio_reset") == "1") hal_audio_reset_stats();
     }
+    // Speech/Sound Cartridge: off, or its counters (see docs/ssc.md).
+    j += ",\"ssc\":{\"enabled\":" + String(ssc_enabled() ? "true" : "false");
+    if (ssc_enabled()) {
+        j += ",\"busy\":" + String(ssc_busy() ? "true" : "false");
+        j += ",\"commands\":" + String(ssc_command_count());
+        j += ",\"allophones\":" + String(ssc_ald_speech_count());
+        j += ",\"ay_writes\":" + String(ssc_ay_write_count());
+        j += ",\"underruns\":" + String(ssc_underruns());
+        j += ",\"queued\":" + String(ssc_queued());
+        j += ",\"stack_free\":" + String(ssc_stack_free());
+    }
+    j += "}";
     // Unused stack of this server task, lowest since boot (bytes).
     j += ",\"srv_stack_free\":" + String(uxTaskGetStackHighWaterMark(nullptr));
     // Emulator/OSD task (Arduino loopTask), lowest unused stack since boot.

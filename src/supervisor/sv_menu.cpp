@@ -26,6 +26,7 @@
 #include "sv_fujinet.h"
 #include "sv_cart.h"
 #include "../core/orch90.h"
+#include "../core/ssc/ssc.h"
 #include "../net/dw_bus.h"
 #include "../net/wifi_mgr.h"
 #include "../hal/hal.h"
@@ -598,6 +599,15 @@ static void draw_row_icon(OSDCanvas* tft, int icon, int x, int y, uint16_t bg, u
             row_icon_box(tft, x, y, 1, 4, 14, 4, SVW_BLACK);
             break;
 
+        case ROW_ICON_SPEECH:       // speech bubble: body, two lines of text, tail
+            row_icon_box(tft, x, y, 1, 0, 14, 7, SVW_WHITE);
+            row_icon_box(tft, x, y, 3, 2, 12, 2, SVW_BLACK);
+            row_icon_box(tft, x, y, 3, 5, 9, 5, SVW_BLACK);
+            row_icon_box(tft, x, y, 3, 8, 5, 8, SVW_WHITE);
+            row_icon_box(tft, x, y, 3, 9, 4, 9, SVW_WHITE);
+            row_icon_box(tft, x, y, 3, 10, 3, 10, SVW_WHITE);
+            break;
+
         case ROW_ICON_NOTE:         // beamed pair of eighth notes
             row_icon_box(tft, x, y, 5, 1, 12, 2, fg);
             row_icon_box(tft, x, y, 5, 1, 5, 9, fg);
@@ -631,7 +641,7 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 }
 
 // ============================================================
-// Settings submenu and its Keyboard submenu
+// Settings submenu and its Keyboard, Machine and Sound Carts submenus
 // ============================================================
 //
 // All are icon lists in the wide green frame.
@@ -644,11 +654,16 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //                The Echo Log toggle that shares the port is in the Debug submenu.
 //   Keyboard     opens the Keyboard submenu
 //   Joy - Mouse Sensitivity, WiFi / Debug, DriveWire   open their own screens
-//   Orchestra-90 toggle; the DAC ports and the cartridge ROM are set up at
-//                boot, so it asks to confirm and restarts:
-//                  ON  -> ports on, orch90.rom as the cartridge. Refused
-//                         with a popup if the ROM is not on the SD card.
-//                  OFF -> ports off, cartridge back to Disk BASIC
+//   Sound Carts  opens the Sound Carts submenu
+//
+// Sound Carts rows (SV_SoundRow) — set up at boot, so each toggle asks to
+// confirm and restarts (CART_TOGGLES, popup refused with the missing file
+// names if a ROM is not on the SD card):
+//   Orchestra-90  ON  -> DAC ports on, orch90.rom as the cartridge
+//                 OFF -> ports off, cartridge back to Disk BASIC
+//   Speech/Sound  ON  -> $FF7D/$FF7E decoded beside the FDC (needs
+//                        pic-7040-510.bin and sp0256-al2.bin); Disk BASIC stays
+//                 OFF -> ports off
 //
 // Machine rows (SV_MachineRow) — all fixed at boot, so each asks to confirm
 // and restarts:
@@ -673,7 +688,12 @@ static const SV_ListRow SETTINGS_ROWS[SV_SET_COUNT] = {
     { "Joy - Mouse Sensitivity", ROW_ICON_JOYSTICK  },
     { "WiFi / Debug",            ROW_ICON_WIFI      },
     { "DriveWire",               ROW_ICON_DRIVEWIRE },
-    { "Orchestra-90",            ROW_ICON_NOTE      },
+    { "Sound Carts",             ROW_ICON_NOTE      },
+};
+
+static const SV_ListRow SOUND_ROWS[SV_SND_COUNT] = {
+    { "Orchestra-90",  ROW_ICON_NOTE   },
+    { "Speech/Sound",  ROW_ICON_SPEECH },
 };
 
 static const SV_ListRow MACHINE_ROWS[SV_MACH_COUNT] = {
@@ -695,48 +715,93 @@ void sv_settings_invalidate(void) {
     s_settings_drawn = -1;
 }
 
-// Orchestra-90 toggle: a popup over the Settings list, wider than the usual
-// one for its two-line explanation. Turning it on needs orch90.rom on the SD
-// card: without it the popup only says so and nothing changes.
-#define ORCH90_POPUP_W   480
+// Sound cartridge toggle: a popup over the Sound Carts list, wider than the
+// usual one for its two-line explanation. Turning a cartridge on needs its
+// ROM file(s) on the SD card: without them the popup names what is missing
+// and nothing changes.
+#define CART_POPUP_W   480
 
-static bool   s_orch90_target = false;     // state the toggle is asking for
-static bool   s_orch90_no_rom = false;     // message-only popup, single OK row
-static int8_t s_orch90_sel    = 0;         // 0 = No, 1 = Yes
-static int8_t s_orch90_drawn  = -1;        // row drawn selected; -1 = draw the window
+struct CartToggle {
+    const char* name;               // popup titles: "Enable <name>?"
+    bool        (*enabled)(void);
+    void        (*save)(bool on);   // persists; the popup then restarts
+    const char* files[2];           // ROM_BASE_PATH files needed to turn it on
+    size_t      sizes[2];           // their exact sizes, 0 = any
+    const char* on_msg[2];
+    const char* off_msg[2];
+};
 
-static void orch90_toggle_open(Supervisor_t* sv) {
-    s_orch90_target = !orch90_enabled();
-    s_orch90_no_rom = s_orch90_target &&
-                      !hal_storage_file_exists(ROM_BASE_PATH "/" ROM_ORCH90_FILE);
-    s_orch90_sel   = 0;
-    s_orch90_drawn = -1;
+static void orch90_save(bool on) {
+    supervisor_save_orch90(on);
+    supervisor_save_cart_rom(on ? ROM_ORCH90_FILE : "");
+}
+
+static const CartToggle CART_TOGGLES[SV_SND_COUNT] = {
+    {   "Orchestra 90", orch90_enabled, orch90_save,
+        { ROM_ORCH90_FILE, NULL }, { 0, 0 },
+        { "CoCo will restart with the Orchestra 90 ROM.",
+          "Disable Orchestra 90 to return to Disk BASIC." },
+        { "Disabling Orchestra 90 will restart the CoCo",
+          "with the Disk BASIC ROM." } },
+    {   "Speech/Sound", ssc_enabled, supervisor_save_ssc,
+        { ROM_SSC_PIC_FILE, ROM_SSC_SPEECH_FILE }, { 4096, 2048 },
+        { "CoCo will restart with the Speech/Sound",
+          "Cartridge at $FF7D/$FF7E. Disk BASIC stays." },
+        { "Disabling Speech/Sound will restart",
+          "the CoCo without the cartridge." } },
+};
+
+static const CartToggle* s_cart     = NULL;   // toggle the popup is asking about
+static bool   s_cart_target  = false;         // state the toggle is asking for
+static char   s_cart_missing[64];             // "" = ROMs present; else the names
+static int8_t s_cart_sel     = 0;             // 0 = No, 1 = Yes
+static int8_t s_cart_drawn   = -1;            // row drawn selected; -1 = draw the window
+
+static bool rom_file_ok(const char* name, size_t size) {
+    char path[64];
+    snprintf(path, sizeof(path), "%s/%s", ROM_BASE_PATH, name);
+    return size ? hal_storage_file_size(path) == size : hal_storage_file_exists(path);
+}
+
+static void cart_toggle_open(Supervisor_t* sv, int row) {
+    s_cart = &CART_TOGGLES[row];
+    s_cart_target = !s_cart->enabled();
+    s_cart_missing[0] = '\0';
+    if (s_cart_target) {
+        for (int i = 0; i < 2 && s_cart->files[i]; i++) {
+            if (rom_file_ok(s_cart->files[i], s_cart->sizes[i])) continue;
+            if (s_cart_missing[0]) strncat(s_cart_missing, ", ", sizeof(s_cart_missing) - strlen(s_cart_missing) - 1);
+            strncat(s_cart_missing, s_cart->files[i], sizeof(s_cart_missing) - strlen(s_cart_missing) - 1);
+        }
+    }
+    s_cart_sel   = 0;
+    s_cart_drawn = -1;
     sv->prev_state = sv->state;
-    sv->state = SV_ORCH90_POPUP;
+    sv->state = SV_CART_POPUP;
     sv->needs_redraw = true;
 }
 
-void sv_orch90_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
-    if (!pressed) return;
+void sv_cart_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
+    if (!pressed || !s_cart) return;
+    bool no_rom = s_cart_missing[0] != '\0';
 
     switch (hid_usage) {
         case HID_UP:
         case HID_DOWN:
-            if (!s_orch90_no_rom) {
-                s_orch90_sel = (hid_usage == HID_DOWN) ? 1 : 0;
+            if (!no_rom) {
+                s_cart_sel = (hid_usage == HID_DOWN) ? 1 : 0;
                 sv->needs_redraw = true;
             }
             break;
 
         case HID_ENTER:
-            if (!s_orch90_no_rom && s_orch90_sel == 1) {
-                supervisor_save_orch90(s_orch90_target);
-                supervisor_save_cart_rom(s_orch90_target ? ROM_ORCH90_FILE : "");
+            if (!no_rom && s_cart_sel == 1) {
+                s_cart->save(s_cart_target);
                 supervisor_save_and_restart();   // never returns
             }
             // fall through: No / OK
         case HID_ESC:
-            sv->state = SV_SETTINGS;
+            sv->state = SV_SOUND_MENU;
             sv->needs_redraw = true;
             break;
 
@@ -746,35 +811,39 @@ void sv_orch90_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
     }
 }
 
-void sv_orch90_popup_render(Supervisor_t* sv) {
+void sv_cart_popup_render(Supervisor_t* sv) {
     (void)sv;
-    const char* title;
+    if (!s_cart) return;
+    char title[40];
+    char line[64];
     const char* msg1;
     const char* msg2;
-    if (s_orch90_no_rom) {
-        title = "Orchestra 90 ROM missing";
-        msg1  = ROM_ORCH90_FILE " was not found.";
-        msg2  = "Copy it to " ROM_BASE_PATH "/ on the SD card.";
-    } else if (s_orch90_target) {
-        title = "Enable Orchestra 90?";
-        msg1  = "CoCo will restart with the Orchestra 90 ROM.";
-        msg2  = "Disable Orchestra 90 to return to Disk BASIC.";
+    bool no_rom = s_cart_missing[0] != '\0';
+    if (no_rom) {
+        snprintf(title, sizeof(title), "%s ROM missing", s_cart->name);
+        snprintf(line, sizeof(line), "Not found: %s", s_cart_missing);
+        msg1 = line;
+        msg2 = "Copy to " ROM_BASE_PATH "/ on the SD card.";
+    } else if (s_cart_target) {
+        snprintf(title, sizeof(title), "Enable %s?", s_cart->name);
+        msg1 = s_cart->on_msg[0];
+        msg2 = s_cart->on_msg[1];
     } else {
-        title = "Disable Orchestra 90?";
-        msg1  = "Disabling Orchestra 90 will restart the CoCo";
-        msg2  = "with the Disk BASIC ROM.";
+        snprintf(title, sizeof(title), "Disable %s?", s_cart->name);
+        msg1 = s_cart->off_msg[0];
+        msg2 = s_cart->off_msg[1];
     }
 
-    int count = s_orch90_no_rom ? 1 : 2;
-    bool all = (s_orch90_drawn < 0);
-    int ry = sv_render_popup_w(ORCH90_POPUP_W, title, msg1, msg2, count, all);
+    int count = no_rom ? 1 : 2;
+    bool all = (s_cart_drawn < 0);
+    int ry = sv_render_popup_w(CART_POPUP_W, title, msg1, msg2, count, all);
     if (all) DEBUG_PRINTF("popup: %s: %s %s", title, msg1, msg2);
     for (int i = 0; i < count; i++) {
-        if (!all && i != s_orch90_sel && i != s_orch90_drawn) continue;
-        const char* label = s_orch90_no_rom ? "OK" : (i == 0) ? "No" : "Yes";
-        sv_render_popup_row_w(ORCH90_POPUP_W, ry + i * SVP_ROW_H, label, NULL, i == s_orch90_sel);
+        if (!all && i != s_cart_sel && i != s_cart_drawn) continue;
+        const char* label = no_rom ? "OK" : (i == 0) ? "No" : "Yes";
+        sv_render_popup_row_w(CART_POPUP_W, ry + i * SVP_ROW_H, label, NULL, i == s_cart_sel);
     }
-    s_orch90_drawn = s_orch90_sel;
+    s_cart_drawn = s_cart_sel;
 }
 
 // CPU switch: the same kind of popup. The other CPU is always the target.
@@ -1003,7 +1072,12 @@ static void settings_activate(Supervisor_t* sv, int row) {
         case SV_SET_JOYSTICK:  sv_joystick_open(sv); break;
         case SV_SET_WIFI:      sv_wifi_open(sv, false); break;
         case SV_SET_DRIVEWIRE: sv_fujinet_open(sv);  break;
-        case SV_SET_ORCH90:    orch90_toggle_open(sv); break;
+        case SV_SET_SOUND:
+            sv->prev_state = sv->state;
+            sv->state = SV_SOUND_MENU;
+            sv->menu_cursor = 0;
+            sv->needs_redraw = true;
+            break;
     }
 }
 
@@ -1059,6 +1133,22 @@ void sv_machine_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
     }
 }
 
+void sv_sound_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
+    if (!pressed) return;
+
+    switch (hid_usage) {
+        case HID_UP:
+        case HID_DOWN:  list_move_cursor(sv, hid_usage, SV_SND_COUNT); break;
+        case HID_ENTER: cart_toggle_open(sv, sv->menu_cursor); break;
+        case HID_ESC:
+            sv->state = SV_SETTINGS;
+            sv->menu_cursor = SV_SET_SOUND;
+            sv->needs_redraw = true;
+            break;
+        case HID_F1:    supervisor_toggle(); break;
+    }
+}
+
 void sv_keyboard_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
     if (!pressed) return;
 
@@ -1086,7 +1176,6 @@ static const char* settings_value(int row, char* buf, size_t size) {
             return buf;
         case SV_SET_WIFI:      return wifi_mgr_state_str();
         case SV_SET_DRIVEWIRE: return dw_bus_mode_str(dw_bus_mode());
-        case SV_SET_ORCH90:    return orch90_enabled() ? "ON" : "OFF";
         default:               return NULL;
     }
 }
@@ -1104,7 +1193,7 @@ static const char* machine_value(int row, char* buf, size_t size) {
 }
 
 // Which of the icon lists render_icon_list() is drawing.
-enum { LIST_SETTINGS, LIST_KEYBOARD, LIST_MACHINE };
+enum { LIST_SETTINGS, LIST_KEYBOARD, LIST_MACHINE, LIST_SOUND };
 
 // Shared renderer: first pass draws everything; afterwards the row left
 // behind and the selected row (whose value may have just been toggled).
@@ -1126,6 +1215,7 @@ static void render_icon_list(Supervisor_t* sv, const char* title, const SV_ListR
         char buf[12];
         const char* value = (list == LIST_SETTINGS) ? settings_value(i, buf, sizeof(buf))
                           : (list == LIST_MACHINE)  ? machine_value(i, buf, sizeof(buf))
+                          : (list == LIST_SOUND)    ? (CART_TOGGLES[i].enabled() ? "ON" : "OFF")
                           : (i == SV_KBD_LANGUAGE)  ? hal_keyboard_layout_name(g_kbd_layout)
                                                     : NULL;
         sv_render_wide_row(y, rows[i].label, value, hl);
@@ -1138,6 +1228,10 @@ static void render_icon_list(Supervisor_t* sv, const char* title, const SV_ListR
 
 void sv_settings_render(Supervisor_t* sv) {
     render_icon_list(sv, "Settings", SETTINGS_ROWS, SV_SET_COUNT, LIST_SETTINGS);
+}
+
+void sv_sound_menu_render(Supervisor_t* sv) {
+    render_icon_list(sv, "Sound Carts", SOUND_ROWS, SV_SND_COUNT, LIST_SOUND);
 }
 
 void sv_keyboard_menu_render(Supervisor_t* sv) {

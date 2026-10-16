@@ -55,7 +55,9 @@ States are defined in `supervisor.h` as `SV_State` enum:
 | `SV_MAIN_MENU` | Top-level menu with 8 tiles |
 | `SV_FILE_BROWSER` | **Disk Manager**: 2-row drive strip (all 4 drives) + file browser below. Left/Right selects active drive; Enter mounts; U ejects; F flushes. Also used as the stand-alone file browser. |
 | `SV_MACHINE_SELECT` | Machine select: popup over the Settings list (CoCo 2 / CoCo 3, `(current)` on the active one); picking the other asks to confirm the restart in the same window, defaulting to No |
-| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, RS-232 Pak toggle (shares UART0 with the Debug submenu's Echo Log; turning one on turns the other off), Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire |
+| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, RS-232 Pak toggle (shares UART0 with the Debug submenu's Echo Log; turning one on turns the other off), Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire, Sound Carts (submenu) |
+| `SV_SOUND_MENU` | Settings -> Sound Carts submenu: Orchestra-90 and Speech/Sound toggles (ON / OFF) |
+| `SV_CART_POPUP` | Popup over the Sound Carts list: confirm a cartridge toggle and restart, or name its missing ROM file(s) |
 | `SV_KEYBOARD_MENU` | Settings -> Keyboard submenu: Keyboard Language (US English / Spanish Latam, cycles on ENTER) and Key Mapper |
 | `SV_JOY_SENSE` | Joy - Mouse Sensitivity: popup over the Settings list in the theme colours, with a live cursor pad tracking the PS/2 mouse, sensitivity bar (1-10), Invert-Y toggle |
 | `SV_ABOUT` | Info screen (version, free heap) |
@@ -382,14 +384,15 @@ The choice is stored in `cart_rom` as a full SD path. `load_cart_rom()` in `mach
 
 A cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded. Loading or unloading a cartridge here also turns the Orchestra-90 setting off.
 
-### Cartridge ROM — Orchestra-90 toggle
+### Sound Carts — Orchestra-90 and Speech/Sound toggles
 
-See `orchestra90.md` for the cartridge itself (DAC ports, audio mix, ROM autostart).
+See `orchestra90.md` and `ssc.md` for the cartridges themselves.
 
-The Settings row **Orchestra-90** (ON/OFF) turns the `$FF7A`/`$FF7B` DAC ports on and puts `orch90.rom` in the cartridge slot at `$C000` in place of Disk BASIC. The ROM is read once at boot (`load_cart_rom()` in `machine.cpp`), so the row opens a popup (`SV_ORCH90_POPUP` state, 480 px wide, drawn with `sv_render_popup_w()` in the theme colours) that explains the ROM change and asks No / Yes before calling `supervisor_save_and_restart()`.
+The Settings row **Sound Carts** opens a submenu (`SV_SOUND_MENU`, an icon list like the Keyboard submenu; the Settings list holds seven rows and is full) with two ON/OFF rows. Both cartridges are set up at boot, so a row opens a popup (`SV_CART_POPUP` state, 480 px wide, drawn with `sv_render_popup_w()` in the theme colours) that explains the change and asks No / Yes before calling `supervisor_save_and_restart()`. The two rows share the popup code; each is an entry in `CART_TOGGLES` (`sv_menu.cpp`: name, enable flag, save function, ROM files and sizes, messages).
 
-- **Turning it on** first checks for `/roms/orch90.rom`. If the file is missing, the popup only says it must be copied to the SD card and nothing changes.
-- **Turning it off** clears the stored cartridge, so Disk BASIC is back after the restart.
+- **Orchestra-90** turns the `$FF7A`/`$FF7B` DAC ports on and puts `orch90.rom` in the cartridge slot at `$C000` in place of Disk BASIC (read once at boot by `load_cart_rom()` in `machine.cpp`). Turning it off clears the stored cartridge, so Disk BASIC is back after the restart.
+- **Speech/Sound** turns the `$FF7D`/`$FF7E` ports on. It has no CoCo-side ROM, so Disk BASIC stays. It needs `pic-7040-510.bin` (4096 bytes) and `sp0256-al2.bin` (2048 bytes).
+- **Turning either on** first checks its ROM file(s) (exact size where known). If one is missing, the popup names it and nothing changes.
 
 `supervisor_load_cart_config()` runs in `setup()` after `dw_bus_load_config()`, so the Orchestra-90 ROM replaces DriveWire's HDB-DOS ROM. While it is on there is no Disk BASIC.
 
@@ -411,6 +414,7 @@ Namespace: `"sv"`. Stored in NVS flash.
 | `joyLevel` | UChar | Mouse-as-joystick sensitivity level, 1..10 (default 7) |
 | `joyInv` | Bool | Mouse-as-joystick Invert-Y flag (default false) |
 | `orch90` | Bool | Orchestra-90 DAC ports enabled (default false) |
+| `ssc` | Bool | Speech/Sound Cartridge enabled (default false) |
 | `cpu_variant` | UChar | 0 = MC6809, 1 = HD6309 (default `CPU_VARIANT`) |
 | `coco3_ram` | UShort | CoCo 3 memory in KB: 128, 512, 1024 or 2048 (default `COCO3_RAM_KB`) |
 | `cart_rom` | String | Cartridge ROM loaded at `$C000`: a full SD path set by the Load Cart screen, or a bare file name in `/roms/` (`orch90.rom`, set by the Orchestra-90 toggle); absent = default (Disk BASIC) |

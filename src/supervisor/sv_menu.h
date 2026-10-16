@@ -66,8 +66,15 @@ enum SV_SettingsRow : uint8_t {
     SV_SET_JOYSTICK,    // Joy - Mouse Sensitivity screen
     SV_SET_WIFI,        // WiFi / Debug screen
     SV_SET_DRIVEWIRE,   // DriveWire screen
-    SV_SET_ORCH90,      // Orchestra-90 toggle (asks to restart)
+    SV_SET_SOUND,       // opens the Sound Carts submenu
     SV_SET_COUNT
+};
+// Sound Carts submenu (SV_SOUND_MENU state): the sound cartridges, each an
+// on/off toggle that asks to confirm and restarts the emulator.
+enum SV_SoundRow : uint8_t {
+    SV_SND_ORCH90,      // Orchestra-90 (also swaps the cartridge ROM)
+    SV_SND_SSC,         // Speech/Sound Cartridge
+    SV_SND_COUNT
 };
 // Machine submenu (SV_MACHINE_MENU state). Everything here is fixed at boot,
 // so each row asks to confirm and restarts the emulator.
@@ -88,15 +95,17 @@ void sv_keyboard_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_keyboard_menu_render(Supervisor_t* sv);
 void sv_machine_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_machine_menu_render(Supervisor_t* sv);
+void sv_sound_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
+void sv_sound_menu_render(Supervisor_t* sv);
 // Force the next render to repaint the whole Settings / Keyboard list.
 void sv_settings_invalidate(void);
 
-// SV_ORCH90_POPUP state: popup over the Settings list, opened from the
-// Orchestra-90 row. Asks to confirm the restart (No / Yes, defaults to No),
-// or, when turning it on without orch90.rom on the SD card, says the ROM
-// must be copied and changes nothing.
-void sv_orch90_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
-void sv_orch90_popup_render(Supervisor_t* sv);
+// SV_CART_POPUP state: popup over the Sound Carts list, opened from one of
+// its rows. Asks to confirm the restart (No / Yes, defaults to No), or, when
+// turning a cartridge on without its ROM file(s) on the SD card, names the
+// missing file(s) and changes nothing.
+void sv_cart_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
+void sv_cart_popup_render(Supervisor_t* sv);
 
 // SV_CPU_POPUP state: popup over the Machine submenu, opened from its CPU row.
 // Asks to confirm switching to the other CPU (No / Yes, defaults to No); Yes
@@ -118,7 +127,7 @@ enum SV_RowIcon : uint8_t {
     ROW_ICON_WIFI, ROW_ICON_DRIVEWIRE, ROW_ICON_LANGUAGE, ROW_ICON_KEYCAP,
     ROW_ICON_CHIP, ROW_ICON_PAGE, ROW_ICON_SD, ROW_ICON_SPIDER,
     ROW_ICON_CHECK, ROW_ICON_STOP, ROW_ICON_CROSS, ROW_ICON_NOTE,
-    ROW_ICON_CART, ROW_ICON_FOLDER,
+    ROW_ICON_CART, ROW_ICON_FOLDER, ROW_ICON_SPEECH,
 };
 void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg);
 

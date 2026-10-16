@@ -20,6 +20,7 @@
 #include "becker.h"   // Becker port (DriveWire) at $FF41/$FF42
 #include "sound.h"    // Sound mixing core (mux/DAC/single-bit)
 #include "orch90.h"   // Orchestra-90/CC DAC latches at $FF7A/$FF7B
+#include "ssc/ssc.h"  // Speech/Sound Cartridge at $FF7D/$FF7E
 
 // Global machine pointer for CPU memory callbacks
 static Machine* g_machine = nullptr;
@@ -221,6 +222,10 @@ uint8_t machine_read_coco3(uint16_t addr) {
     if (rs232_pak_enabled() && (addr & 0xFFFC) == 0xFF68)
         return mc6551_read(addr & 0x03);
 
+    // Speech/Sound Cartridge ($FF7D/$FF7E). No-op unless the cartridge is on.
+    if (ssc_enabled() && (uint16_t)(addr - SSC_CTRL_ADDR) < 2)
+        return ssc_read(addr);
+
     // Slow path: GIME address decode for I/O, ROM, registers
     uint8_t reg_data = 0xFF;
     bool is_reg = false;
@@ -349,6 +354,12 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
     // Orchestra-90 DAC latches ($FF7A/$FF7B). No-op unless the cartridge is on.
     if (orch90_enabled() && (addr & 0xFFFE) == ORCH90_LEFT_ADDR) {
         orch90_write(addr, val);
+        return;
+    }
+
+    // Speech/Sound Cartridge ($FF7D/$FF7E). No-op unless the cartridge is on.
+    if (ssc_enabled() && (uint16_t)(addr - SSC_CTRL_ADDR) < 2) {
+        ssc_write(addr, val);
         return;
     }
 
@@ -786,6 +797,10 @@ void machine_run_frame_coco3(Machine* m) {
     for (int line = 0; line < SCANLINES_PER_FRAME; line++) {
         machine_run_scanline_coco3(m);
         becker_scanline_tick();
+        if (ssc_enabled()) {
+            PERF_PROBE_SCOPE(PROBE_SSC);
+            ssc_scanline_tick();
+        }
         {
             PERF_PROBE_SCOPE(PROBE_AUDIO_SCANLINE);
             hal_audio_capture_scanline();
@@ -975,6 +990,11 @@ uint8_t machine_read_coco2(uint16_t addr) {
             return mc6551_read(addr & 0x03);
         }
 
+        // Speech/Sound Cartridge ($FF7D/$FF7E). No-op unless the cartridge is on.
+        if (ssc_enabled() && (uint16_t)(addr - SSC_CTRL_ADDR) < 2) {
+            return ssc_read(addr);
+        }
+
         // Reserved: $FF60-$FFBF
         if (addr < 0xFFC0) {
             return 0xFF;
@@ -1101,6 +1121,12 @@ void machine_write_coco2(uint16_t addr, uint8_t val) {
         // Orchestra-90 DAC latches ($FF7A/$FF7B). No-op unless the cartridge is on.
         if (orch90_enabled() && (addr & 0xFFFE) == ORCH90_LEFT_ADDR) {
             orch90_write(addr, val);
+            return;
+        }
+
+        // Speech/Sound Cartridge ($FF7D/$FF7E). No-op unless the cartridge is on.
+        if (ssc_enabled() && (uint16_t)(addr - SSC_CTRL_ADDR) < 2) {
+            ssc_write(addr, val);
             return;
         }
 
@@ -1403,6 +1429,10 @@ void machine_run_frame_coco2(Machine* m) {
     for (int line = 0; line < SCANLINES_PER_FRAME; line++) {
         machine_run_scanline_coco2(m);
         becker_scanline_tick();
+        if (ssc_enabled()) {
+            PERF_PROBE_SCOPE(PROBE_SSC);
+            ssc_scanline_tick();
+        }
         // Capture audio level after each scanline for pitch-correct playback
         hal_audio_capture_scanline();
     }
@@ -1460,6 +1490,13 @@ bool machine_load_roms(Machine* m, const char* rom_path) {
     // boot allocation/load footprint invariant across machine types.
     bool ok_coco2 = machine_load_roms_coco2(m, rom_path);
     bool ok_coco3 = machine_load_roms_coco3(m, rom_path);
+    // Speech/Sound Cartridge: one load for both machines. Missing ROMs leave
+    // it off for this boot (the NVS setting is kept).
+    if (ssc_enabled() && !ssc_load_roms()) {
+        DEBUG_PRINTF("Machine: SSC ROMs missing (%s, %s): cartridge off",
+                     ROM_SSC_PIC_FILE, ROM_SSC_SPEECH_FILE);
+        g_ssc_enabled = false;
+    }
     return (g_machine_type == 4) ? ok_coco3 : ok_coco2;
 }
 
@@ -1471,6 +1508,7 @@ void machine_reset(Machine* m) {
     // corrupt an active host link.
     mc6551_reset();
     becker_reset();
+    ssc_reset();
 }
 
 void machine_run_scanline(Machine* m) {

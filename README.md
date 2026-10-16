@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.16.1 — October 13, 2026** (LilyGo TTGO VGA32 port)
+**v0.17.0 — October 15, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -13,6 +13,7 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 - **MC6809 or HD6309** — switch the CPU from Setup → Machine → CPU. The Hitachi 6309 adds its extra registers and instructions, native mode and traps (new in v0.15.0, not yet tested on hardware).
 - **Program cartridges** — load a `.ccc` or `.rom` cartridge ROM from the SD card with the supervisor's **Cart** menu: up to 16 KB on the CoCo 2, and bank-switched ROMs up to 128 KB on the CoCo 3 (new in v0.16.0).
 - **Orchestra-90/CC** — the stereo music cartridge's two DACs, mixed to mono on the audio jack, with its ROM in the cartridge slot.
+- **Speech/Sound Cartridge** — Tandy's talking cartridge, fully emulated (TMS7040 firmware, SP0256-AL2 speech, AY-3-8913 sound) on the ESP32's second core, alongside Disk BASIC. Needs two ROM dumps (new in v0.17.0).
 - **Authentic video, both eras** — MC6847 VDG for CoCo 2 (text plus every semigraphics and graphics mode) and the TCC1014 GIME for CoCo 3 (128 KB to 2 MB RAM with MMU, 16-color palette, native graphics up to 640 px), output over crisp VGA at 640×200 @ 60 Hz via FabGL in 64-color direct mode.
 - **Real-time speed** — CoCo 3 text and graphics modes run at a paced 60 FPS, the speed of the real machine (v0.12.0 rewrote the GIME video path; it used to manage ~39 FPS at the BASIC prompt and ~20 FPS in graphics).
 - **Real disk drives** — WD1793 floppy controller with `.DSK` and `.VDK` support, and entire disk images cached in PSRAM for zero-latency access.
@@ -120,6 +121,10 @@ can browse to any other folder:
 ├── game.ccc           # up to 16 KB on the CoCo 2
 └── biggame.ccc        # up to 128 KB (bank-switched) on the CoCo 3
 ```
+
+The Speech/Sound Cartridge (Setup → Sound Carts → Speech/Sound) needs two ROM
+dumps in `/roms/`, with the MAME names: `pic-7040-510.bin` (4096 bytes) and
+`sp0256-al2.bin` (2048 bytes). See [docs/ssc.md](docs/ssc.md).
 
 ### If the Emulator Does Not Start
 
@@ -354,6 +359,7 @@ src/
 │   ├── sam6883.h/cpp         SAM — address multiplexing and clock control
 │   ├── sound.h/cpp           Sound mixing core — mux/DAC/single-bit, XRoar gain model
 │   ├── orch90.h/cpp          Orchestra-90/CC cartridge — two DAC latches ($FF7A/$FF7B)
+│   ├── ssc/                  Speech/Sound Cartridge ($FF7D/$FF7E) — TMS7040, SP0256-AL2, AY-3-8913, glue; runs on core 0
 │   ├── becker.h/cpp          Becker port ($FF41/$FF42) — DriveWire byte channel
 │   └── font_gime.h           GIME font ROM — 128 chars × 12 rows (PROGMEM)
 ├── hal/                    Hardware Abstraction Layer
@@ -367,7 +373,7 @@ src/
 │   └── osd_canvas.h/cpp      OSD drawing API backed by FabGL Canvas (supervisor OSD)
 ├── supervisor/             On-Screen Display system (HAL-agnostic via osd_canvas)
 │   ├── supervisor.h/cpp      OSD lifecycle and state machine
-│   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard and Debug lists; machine, CPU and Orchestra-90 popups
+│   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard, Sound Carts and Debug lists; machine, CPU and cartridge popups
 │   ├── sv_disk.h/cpp         WD1793 FDC emulation and PSRAM cache
 │   ├── sv_filebrowser.h/cpp  Disk Manager — drive buttons, SD card browser, mount popups
 │   ├── sv_cart.h/cpp         Load Cart — cartridge ROM browser, unload, restart popup
@@ -414,6 +420,7 @@ All technical documentation is in the `docs/` directory:
 | [core.md](docs/core.md) | MC6821 PIA, MC6847 VDG, SAM6883, GIME and machine integration |
 | [cpu.md](docs/cpu.md) | MC6809 and HD6309 CPUs — registers, interrupts, native mode, traps, host tests |
 | [orchestra90.md](docs/orchestra90.md) | Orchestra-90/CC cartridge — DAC ports, audio mix, ROM and autostart |
+| [ssc.md](docs/ssc.md) | Speech/Sound Cartridge — ports, status bits, chips, core-0 task, audio mix, host tests |
 | [coco3-gime.md](docs/coco3-gime.md) | CoCo 3 GIME porting guide, register map, MMU |
 | [disk-hal.md](docs/disk-hal.md) | WD1793 FDC emulation, HALT/NMI flow, PSRAM disk cache |
 | [drivewire.md](docs/drivewire.md) | DriveWire modes, Becker port, built-in server; diagrams of the floppy vs DriveWire sector path |
@@ -432,6 +439,7 @@ All technical documentation is in the `docs/` directory:
 - HD6309 support is new and has not been tested on the board yet; it is checked on the host against XRoar's CPU core
 - CoCo 3 memory sizes other than 512K are new and have not been tested on the board yet
 - Orchestra-90 plays in mono (one DAC pin), and Disk BASIC is unavailable while it is on
+- The Speech/Sound Cartridge plays in mono, and its sound holds briefly while core 0 is busy (screenshots, heavy WiFi traffic); PSG music programs are not tested yet
 - Disk BASIC is unavailable while a program cartridge is loaded (there is no Multi-Pak)
 - Bank-switched cartridges (over 16 KB) are CoCo 3 only; an unbanked 32 KB ROM that sits at `$8000-$FEFF` does not work
 - Max 128 file entries in the SD card browser
@@ -484,6 +492,29 @@ mode, with diagrams.
 - **CoCo SDC** emulation.
 
 ## Changelog
+
+### v0.17.0 — October 15, 2026
+
+**Speech/Sound Cartridge.** Tandy's 26-3144 talking cartridge, ported from
+VCC's SSC module (itself from MAME). All four parts are emulated: the TMS7040
+microcontroller running the cartridge's own text-to-speech firmware, the
+SP0256-AL2 speech chip, the AY-3-8913 sound generator and the glue with its
+2 KB of RAM. Programs write text to `$FF7E` and the cartridge speaks it.
+
+- **Setup → Sound Carts** is a new submenu with the Orchestra-90 and
+  Speech/Sound toggles (the Setup list was full). Turning the cartridge on
+  restarts the emulator; if a ROM is missing the popup names it.
+- Needs `pic-7040-510.bin` and `sp0256-al2.bin` in `/roms/`. Works on the
+  CoCo 2 and the CoCo 3, alongside Disk BASIC and Orchestra-90.
+- **Runs on the second core.** On the emulator's core it cost ~2.6 ms per
+  frame and `WIDTH 80` / `HSCREEN 2` fell to ~49 FPS; on core 0 everything
+  holds 60 FPS. It uses about 4 KB of internal RAM while on, nothing while
+  off.
+- `/api/status` has an `ssc` block (busy, commands, allophones, underruns...).
+- Host tests in `tools/ssc_test/` compare the port with VCC's original code.
+- Checked on the board: the test sentence is spoken on the CoCo 3 and the
+  CoCo 2 with the real ROMs, at 59-60 FPS.
+- Details: [docs/ssc.md](docs/ssc.md).
 
 ### v0.16.1 — October 13, 2026
 
