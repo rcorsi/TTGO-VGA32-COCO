@@ -46,9 +46,10 @@ enum SV_State : uint8_t {
     SV_WIFI,             // WiFi / Debug server status + control screen
     SV_FUJINET,          // DriveWire / FujiNet bus settings screen
     SV_KEYBOARD_MENU,    // Settings -> Keyboard submenu (language, Key Mapper)
-    SV_ORCH90_POPUP,     // popup over Settings: Orchestra-90 on/off confirm, ROM missing
+    SV_CART_POPUP,       // popup over Sound Carts: cartridge on/off confirm, ROM missing
     SV_CPU_POPUP,        // popup over the Machine submenu: MC6809 / HD6309 switch confirm
     SV_MACHINE_MENU,     // Settings -> Machine submenu (machine type, CPU, CoCo 3 memory)
+    SV_SOUND_MENU,       // Settings -> Sound Carts submenu (Orchestra-90, Speech/Sound)
     SV_RAM_SELECT,       // popup over the Machine submenu: CoCo 3 memory size, then confirm
     SV_CART,             // Load Cart screen: pick a .ccc / .rom cartridge, or unload it
 };
