@@ -22,6 +22,24 @@
 #define SSC_BATCH 8     // as ssc.cpp
 #endif
 
+// Scanlines from a $FF7E write to READY: the batch, plus (core-0 build) the
+// samples queued ahead (SSC_AHEAD in ssc.cpp) and the batch being produced.
+#ifdef SSC_CORE0
+#include <thread>
+#define SSC_LATENCY (48 + 2 * SSC_BATCH + 4)
+#else
+#define SSC_LATENCY (SSC_BATCH + 4)
+#endif
+
+// One scanline. The core-0 build waits until the engine thread has a sample
+// ready, so the test runs at the engine's pace instead of racing it.
+static void tick(void) {
+#ifdef SSC_CORE0
+    while (ssc_queued() == 0) std::this_thread::yield();
+#endif
+    ssc_scanline_tick();
+}
+
 static int s_fail = 0;
 #define CHECK(c, ...) do { if (!(c)) { printf("FAIL: " __VA_ARGS__); printf("\n"); s_fail++; } } while (0)
 
@@ -114,7 +132,7 @@ static Trace drive(Core& core, const std::vector<uint8_t>& bytes, int tail_ticks
 struct Port {
     uint8_t read(uint16_t a)             { return ssc_read(a); }
     void    write(uint16_t a, uint8_t v) { ssc_write(a, v); }
-    void    tick()                       { ssc_scanline_tick(); }
+    void    tick()                       { ::tick(); }
     uint8_t sample()                     { return (uint8_t)(ssc_level() + 128); }
 };
 
@@ -186,7 +204,7 @@ static void test_synthetic(void) {
     CHECK(ssc_load_roms_from(pic.data(), 4096, sp.data(), 2048), "ROM load failed");
     CHECK(ssc_read(SSC_CTRL_ADDR) == 0xFF, "$FF7D read is not $FF");
 
-    for (int i = 0; i < 100; i++) ssc_scanline_tick();      // let the firmware set up
+    for (int i = 0; i < 100; i++) tick();      // let the firmware set up
     uint8_t st = ssc_read(SSC_DATA_ADDR);
     CHECK(st == (SSC_ST_READY | SSC_ST_STANDBY | SSC_ST_QUIET | 0x1f), "idle status $%02X", st);
 
@@ -194,9 +212,9 @@ static void test_synthetic(void) {
     ssc_write(SSC_DATA_ADDR, 0x0F);                        // AY reg 0 = $0F, allophone 15
     CHECK(!(ssc_read(SSC_DATA_ADDR) & SSC_ST_READY), "READY did not drop after a write");
     int n = 0;
-    while (!(ssc_read(SSC_DATA_ADDR) & SSC_ST_READY) && n < 100) { ssc_scanline_tick(); n++; }
+    while (!(ssc_read(SSC_DATA_ADDR) & SSC_ST_READY) && n < 1000) { tick(); n++; }
     printf("synthetic: command serviced in %d scanline(s)\n", n);
-    CHECK(n > 0 && n <= SSC_BATCH + 4, "BUSY lasted %d scanlines", n);
+    CHECK(n > 0 && n <= SSC_LATENCY, "BUSY lasted %d scanlines", n);
     CHECK(ssc_command_count() == 1, "command count %u", ssc_command_count());
     CHECK(ssc_ay_write_count() - ay_boot == 1, "AY write count %u", ssc_ay_write_count() - ay_boot);
     CHECK(ssc_ald_speech_count() == 1, "allophone count %u", ssc_ald_speech_count());
@@ -210,7 +228,7 @@ static void test_synthetic(void) {
     // A sentence through the polling driver, and the same against VCC. The
     // counters are not cleared by a reset (as in VCC), so compare deltas.
     ssc_reset();
-    for (int i = 0; i < 100; i++) ssc_scanline_tick();
+    for (int i = 0; i < 100; i++) tick();
     uint32_t ay0 = ssc_ay_write_count(), ald0 = ssc_ald_speech_count();
     const char* text = "HELLO I AM A COLOR COMPUTER\r";
     std::vector<uint8_t> bytes(text, text + strlen(text));
@@ -262,7 +280,7 @@ static void test_real_roms(const char* pic_path, const char* sp_path, const char
         return;
     }
     CHECK(ssc_load_roms_from(pic.data(), 4096, sp.data(), 2048), "real ROM load failed");
-    for (int i = 0; i < 15720 / 2; i++) ssc_scanline_tick();     // firmware boot
+    for (int i = 0; i < 15720 / 2; i++) tick();     // firmware boot
     CHECK(ssc_ay_write_count() > 0, "firmware did not program the AY at boot");
     uint32_t ald0 = ssc_ald_speech_count();
 
@@ -299,7 +317,7 @@ int main(int argc, char** argv) {
         pic[0xffe] = 0xf0; pic[0xfff] = 0x00;
         CHECK(ssc_load_roms_from(pic.data(), 4096, sp.data(), 2048), "ROM load failed");
         for (int i = 0; i < 3 * 15720; i++) {
-            ssc_scanline_tick();
+            tick();
             if (i % 977 == 0) ssc_write(SSC_DATA_ADDR, (uint8_t)i);
             if (i % 5000 == 0) (void)ssc_read(SSC_DATA_ADDR);
             if (i % 10000 == 9999) { ssc_write(SSC_CTRL_ADDR, 0x00); ssc_write(SSC_CTRL_ADDR, 0x01); }

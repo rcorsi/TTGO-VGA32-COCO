@@ -36,8 +36,14 @@ g++ ${FLAGS/gnu++11/gnu++17} $DEFS -o "$OUT/chips_test" "$D/chips_test.cpp" $POR
 # compared with VCC tick for tick; the second build is the firmware's batching.
 g++ ${FLAGS/gnu++11/gnu++17} $DEFS -DSSC_BATCH=1 -o "$OUT/glue_test" "$D/glue_test.cpp" "$SSC/ssc.cpp" $PORT $OBJS
 g++ ${FLAGS/gnu++11/gnu++17} -o "$OUT/glue_test_batch" "$D/glue_test.cpp" "$SSC/ssc.cpp" $PORT
+# The device build: the chips on their own thread (FreeRTOS stubs), under
+# ThreadSanitizer to catch races between the two sides.
+g++ ${FLAGS/gnu++11/gnu++17} -DSSC_CORE0 -O1 -g -fsanitize=thread -pthread \
+    -o "$OUT/glue_test_core0" "$D/glue_test.cpp" "$SSC/ssc.cpp" $PORT
 "$OUT/glue_test"
 "$OUT/glue_test_batch"
 "$OUT/glue_test_batch" random
+TSAN_OPTIONS=halt_on_error=1 "$OUT/glue_test_core0"
+TSAN_OPTIONS=halt_on_error=1 "$OUT/glue_test_core0" random
 (cd "$OUT" && "$OUT/glue_test" "$SSC_ROMS/pic-7040-510.bin" "$SSC_ROMS/sp0256-al2.bin")
 echo "ssc_test: all passed"

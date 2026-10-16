@@ -53,10 +53,9 @@ void ssc_reset(void);
 uint8_t ssc_read(uint16_t addr);
 void    ssc_write(uint16_t addr, uint8_t val);
 
-// One CoCo scanline (1/15720 s) of the TMS7040 (~57 cycles), the AY (~14
-// steps) and the SP0256 (~0.64 samples), mixed and pushed to the sound core.
-// The chips run in batches of SSC_BATCH scanlines (ssc.cpp), so the
-// cartridge lags the CoCo by up to that many scanlines.
+// One CoCo scanline (1/15720 s): plays the next mixed sample of the TMS7040
+// (~57 cycles), AY (~14 steps) and SP0256 (~0.64 samples). On the device the
+// chips run ahead on core 0 (ssc.cpp); host builds run them inline in batches.
 void    ssc_scanline_tick(void);
 
 // Introspection for /api/status and the host tests.
@@ -65,5 +64,8 @@ uint32_t ssc_command_count(void);
 uint32_t ssc_ald_speech_count(void);    // allophones 5-63 strobed (not pauses)
 uint32_t ssc_ay_write_count(void);
 int8_t   ssc_level(void);               // last mixed output, -127..127
+uint32_t ssc_underruns(void);           // scanlines core 0 had no sample ready
+uint32_t ssc_queued(void);              // samples core 0 has ready
+uint32_t ssc_stack_free(void);          // core-0 task's unused stack, lowest (bytes)
 
 #endif // SSC_H

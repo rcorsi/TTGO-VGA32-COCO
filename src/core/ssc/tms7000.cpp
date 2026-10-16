@@ -31,17 +31,11 @@ namespace ssc {
 Tms7000::Tms7000()
 {
     memset(m_rf, 0, sizeof(m_rf));
-    memset(m_rom, 0, sizeof(m_rom));
 }
 
-void Tms7000::LoadRom(const uint8_t* data, size_t len)
+void Tms7000::LoadRom(const uint8_t* rom4k)
 {
-    memset(m_rom, 0xff, sizeof(m_rom));
-    if (data && len) {
-        size_t n = len < sizeof(m_rom) ? len : sizeof(m_rom);
-        memcpy(m_rom, data, n);
-    }
-    m_rom_loaded = true;
+    m_rom = rom4k;
 }
 
 // ---------------------------------------------------------------------

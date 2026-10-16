@@ -41,8 +41,10 @@ public:
     Tms7000();
 
     // --- host wiring -------------------------------------------------
-    // Internal ROM image (4096 bytes) must be supplied before Reset().
-    void LoadRom(const uint8_t* data, size_t len);
+    // Internal ROM image ($F000-$FFFF), 4096 bytes, before Reset(). The core
+    // reads it in place and never writes it: the caller keeps it alive (on the
+    // device it sits in PSRAM, so only ~200 bytes of this object are internal).
+    void LoadRom(const uint8_t* rom4k);
 
     // --- execution -----------------------------------------------------
     void Reset();
@@ -69,8 +71,7 @@ public:
 private:
     // ---- addressable state ----
     uint8_t  m_rf[128];       // internal register file RAM ($00-$7F); R0=A, R1=B
-    uint8_t  m_rom[4096];     // internal ROM ($F000-$FFFF)
-    bool     m_rom_loaded = false;
+    const uint8_t* m_rom = nullptr;  // internal ROM ($F000-$FFFF), 4096 bytes
 
     uint16_t m_pc = 0;
     uint32_t m_illegal_count = 0;

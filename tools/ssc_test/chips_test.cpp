@@ -41,7 +41,7 @@ static void test_cpu(void) {
     rom[0xFFF] = 0x00;
 
     static Tms7000 cpu;
-    cpu.LoadRom(rom, sizeof(rom));
+    cpu.LoadRom(rom);
     cpu.Reset();
     CHECK(cpu.PC() == 0xF000, "TMS7000 reset vector, PC=$%04X", cpu.PC());
 
@@ -157,7 +157,7 @@ static void test_cpu_vs_vcc(void) {
         b.InPortC = []() { return (uint8_t)0xff; };
         b.InPortD = []() { return (uint8_t)0xff; };
         b.OutPortB = b.OutPortC = b.OutPortD = [](uint8_t) {};
-        a.LoadRom(rom.data(), rom.size()); a.Reset();
+        a.LoadRom(rom.data()); a.Reset();
         b.LoadRom(rom.data(), rom.size()); b.Reset();
         for (int slice = 0; slice < 2000; slice++) {
             if (slice % 97 == 5)  { a.SetIrqLine(Tms7000Irq::Int3, true);  b.SetIrqLine(vcc_ssc::Tms7000Irq::Int3, true); }
