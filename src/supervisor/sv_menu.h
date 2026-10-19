@@ -61,20 +61,21 @@ void sv_machine_select_invalidate(void);
 // use these row numbers to put the cursor back on their own row.
 enum SV_SettingsRow : uint8_t {
     SV_SET_MACHINE,     // opens the Machine submenu
-    SV_SET_RS232,       // RS-232 Pak toggle (shares UART0 with the Echo Log)
     SV_SET_KEYBOARD,    // opens the Keyboard submenu
     SV_SET_JOYSTICK,    // Joy - Mouse Sensitivity screen
     SV_SET_WIFI,        // WiFi / Debug screen
     SV_SET_DRIVEWIRE,   // DriveWire screen
-    SV_SET_SOUND,       // opens the Cartridges submenu
+    SV_SET_SOUND,       // opens the Multi-Pak submenu
     SV_SET_COUNT
 };
-// Cartridges submenu (SV_SOUND_MENU state): the I/O cartridges, each an
-// on/off toggle that asks to confirm and restarts the emulator.
+// Multi-Pak submenu (SV_SOUND_MENU state): the I/O cartridges. Orchestra-90,
+// Speech/Sound and Hard Disk ask to confirm and restart the emulator; the
+// RS-232 Pak toggles live.
 enum SV_SoundRow : uint8_t {
     SV_SND_ORCH90,      // Orchestra-90 (also swaps the cartridge ROM)
     SV_SND_SSC,         // Speech/Sound Cartridge
     SV_SND_HARDDISK,    // VCC virtual hard disk at $FF80-$FF86: Off / RS-DOS / RGB-DOS picker
+    SV_SND_RS232,       // RS-232 Pak toggle, live (shares UART0 with the Echo Log)
     SV_SND_COUNT
 };
 // Machine submenu (SV_MACHINE_MENU state). Everything here is fixed at boot,
@@ -82,7 +83,7 @@ enum SV_SoundRow : uint8_t {
 enum SV_MachineRow : uint8_t {
     SV_MACH_TYPE,       // CoCo 2 / CoCo 3 (machine-select popup)
     SV_MACH_CPU,        // MC6809 / HD6309
-    SV_MACH_RAM,        // CoCo 3 memory: 128K / 512K / 1024K / 2048K
+    SV_MACH_RAM,        // CoCo 3 memory: 128K / 512K / 1024K / 2048K (CoCo 2: fixed 64K)
     SV_MACH_COUNT
 };
 enum SV_KeyboardRow : uint8_t {
@@ -110,8 +111,8 @@ void sv_cart_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_cart_popup_render(Supervisor_t* sv);
 
 // SV_CPU_POPUP state: popup over the Machine submenu, opened from its CPU row.
-// Asks to confirm switching to the other CPU (No / Yes, defaults to No); Yes
-// persists it and restarts.
+// Picker: 6809 / 6309, the running CPU preselected and marked "current";
+// ENTER on the other one persists it and restarts.
 void sv_cpu_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_cpu_popup_render(Supervisor_t* sv);
 
@@ -129,7 +130,8 @@ enum SV_RowIcon : uint8_t {
     ROW_ICON_WIFI, ROW_ICON_DRIVEWIRE, ROW_ICON_LANGUAGE, ROW_ICON_KEYCAP,
     ROW_ICON_CHIP, ROW_ICON_PAGE, ROW_ICON_SD, ROW_ICON_SPIDER,
     ROW_ICON_CHECK, ROW_ICON_STOP, ROW_ICON_CROSS, ROW_ICON_NOTE,
-    ROW_ICON_CART, ROW_ICON_FOLDER, ROW_ICON_SPEECH,
+    ROW_ICON_CART, ROW_ICON_FOLDER, ROW_ICON_SPEECH, ROW_ICON_MULTIPAK,
+    ROW_ICON_HARDDISK,
 };
 void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg);
 

@@ -579,9 +579,15 @@ void supervisor_save_state(void) {
             prefs.remove(key);
         }
     }
-    // Hard disks: kept while the hard disk is off, so turning it back on
-    // brings the images back.
-    if (vhd_enabled()) {
+    // Hard disks: forgotten once the hard disk is turned off (vhd_en already
+    // saved false for the next boot), so turning it back on starts empty.
+    if (!prefs.getBool("vhd_en", false)) {
+        for (int i = 0; i < VHD_NUM_DRIVES; i++) {
+            char key[10];
+            snprintf(key, sizeof(key), "hd%d_path", i);
+            prefs.remove(key);
+        }
+    } else if (vhd_enabled()) {
         for (int i = 0; i < VHD_NUM_DRIVES; i++) {
             char key[10];
             snprintf(key, sizeof(key), "hd%d_path", i);

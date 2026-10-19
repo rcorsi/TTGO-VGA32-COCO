@@ -16,7 +16,7 @@
  *
  * Browses FAT32 SD card directories.
  * Supports .DSK (JVC) and .VDK files. DMK is listed dimmed, not mountable.
- * With the hard disk on (Settings > Cartridges), .VHD images mount on HD0/HD1.
+ * With the hard disk on (Settings > Multi-Pak), .VHD images mount on HD0/HD1.
  *
  * Disk Manager screen: drive buttons on top, file list below, popups for
  * mount / replace / unmount. Drawn in the wide green frame.
