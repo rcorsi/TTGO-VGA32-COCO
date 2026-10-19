@@ -259,6 +259,14 @@ bool    hal_joystick_get_invert_y(void);
 // Current live logical position, each axis 0..63 (center 32).
 void    hal_joystick_get_pos(uint8_t* x, uint8_t* y);
 
+// Joy-Keyboard Emulation: arrow keys + Space as a CoCo joystick.
+enum { JOY_KBD_OFF = 0, JOY_KBD_RIGHT = 1, JOY_KBD_LEFT = 2 };
+void    hal_joystick_set_kbd_mode(uint8_t mode);
+uint8_t hal_joystick_get_kbd_mode(void);
+// Feed a FabGL VirtualKey; returns true when the key belongs to the joystick
+// (mode on and an arrow / Space), so it must not reach the CoCo keyboard.
+bool    hal_joystick_kbd_key(int vk, bool pressed);
+
 // Set machine pointer for keyboard hotkeys (F2 reset, etc.)
 struct Machine;
 void hal_keyboard_set_machine(Machine* m);

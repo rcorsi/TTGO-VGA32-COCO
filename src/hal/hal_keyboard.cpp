@@ -383,6 +383,8 @@ static void process_vk(const fabgl::VirtualKeyItem& it) {
 
     // Supervisor / hotkey gate — F3 always toggles supervisor.
     if (vk == fabgl::VK_F3 && pressed) { supervisor_toggle(); return; }
+    // Joy-Keyboard Emulation: releases always reach it so nothing sticks.
+    if (!pressed) hal_joystick_kbd_key((int)vk, false);
     if (supervisor_is_active()) {
         // Key Mapper capture/test screens need the raw VirtualKey — the HID
         // translation below is lossy (most symbol keys map to usage 0).
@@ -429,6 +431,11 @@ static void process_vk(const fabgl::VirtualKeyItem& it) {
             return;
         }
     }
+
+    // Joy-Keyboard Emulation takes the arrows and Space from the CoCo keyboard.
+    if (pressed && hal_joystick_kbd_key((int)vk, true)) return;
+    if (!pressed && hal_joystick_get_kbd_mode() != JOY_KBD_OFF &&
+        hal_joystick_kbd_key((int)vk, false)) return;
 
     // User remap first — a custom-bound key replaces its default meaning.
     VkMap custom_map;

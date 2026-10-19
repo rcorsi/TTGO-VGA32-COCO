@@ -3,6 +3,29 @@
 Releases before the three most recent ones. The latest changes are in the
 [Changelog section of the README](README.md#changelog).
 
+### v0.17.0 — October 15, 2026
+
+**Speech/Sound Cartridge.** Tandy's 26-3144 talking cartridge, ported from
+VCC's SSC module (itself from MAME). All four parts are emulated: the TMS7040
+microcontroller running the cartridge's own text-to-speech firmware, the
+SP0256-AL2 speech chip, the AY-3-8913 sound generator and the glue with its
+2 KB of RAM. Programs write text to `$FF7E` and the cartridge speaks it.
+
+- **Setup → Sound Carts** (Cartridges since v0.18.0) is a new submenu with
+  the Orchestra-90 and Speech/Sound toggles (the Setup list was full). Turning the cartridge on
+  restarts the emulator; if a ROM is missing the popup names it.
+- Needs `pic-7040-510.bin` and `sp0256-al2.bin` in `/roms/`. Works on the
+  CoCo 2 and the CoCo 3, alongside Disk BASIC and Orchestra-90.
+- **Runs on the second core.** On the emulator's core it cost ~2.6 ms per
+  frame and `WIDTH 80` / `HSCREEN 2` fell to ~49 FPS; on core 0 everything
+  holds 60 FPS. It uses about 4 KB of internal RAM while on, nothing while
+  off.
+- `/api/status` has an `ssc` block (busy, commands, allophones, underruns...).
+- Host tests in `tools/ssc_test/` compare the port with VCC's original code.
+- Checked on the board: the test sentence is spoken on the CoCo 3 and the
+  CoCo 2 with the real ROMs, at 59-60 FPS.
+- Details: [docs/ssc.md](docs/ssc.md).
+
 ### v0.16.1 — October 13, 2026
 
 **Sound no longer breaks up when the emulator runs slow.** Until now the
