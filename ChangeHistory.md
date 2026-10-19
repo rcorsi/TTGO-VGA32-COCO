@@ -1,7 +1,142 @@
 # Change History
 
-Releases before the two most recent ones. The latest changes are in the
+Releases before the three most recent ones. The latest changes are in the
 [Changelog section of the README](README.md#changelog).
+
+### v0.16.0 — October 12, 2026
+
+**Load cartridges from the supervisor.** The main menu grows from six tiles to
+eight (a 4x2 grid) and gains a **Cart** tile, drawn as a game cartridge.
+
+- **Load Cart** browses the SD card for `.ccc` and `.rom` cartridge ROMs,
+  starting in `/carts`. ENTER on a file stores it as the cartridge; **Unload
+  cartridge** removes it. A popup then asks whether to restart now: *No* keeps
+  the choice for the next restart, *Yes* restarts, ESC cancels.
+- The cartridge loader reads ROMs of up to 16 KB (it was 8 KB) from any folder.
+  Program cartridges start on their own, as on the real machine.
+- **Bank-switched cartridges on the CoCo 3.** A ROM of more than 16 KB, up to
+  128 KB, is split into 16 KB banks selected by writing `$FF40`. Tested on the
+  board with a 128 KB cartridge.
+- A cartridge takes the place of Disk BASIC, and loading one turns the
+  Orchestra-90 setting off.
+- A **WiFi** tile opens the WiFi / Debug screen straight from the main menu.
+
+**Clearer start-up errors.** The "no SD card" and "missing ROMs" screens are
+redrawn centred, with a red warning sign and an SD card or ROM chip icon. The
+first asks for a FAT-formatted card; the second names the missing files and the
+`/roms` folder. Both point to the project page.
+
+**Fix.** The Disk Manager showed an empty list when the folder it remembered
+was no longer on the SD card. It now goes back to the card root.
+
+### v0.15.4 — October 11, 2026
+
+**CoCo 2 runs at full speed, which fixes its sound.** CoCo 2 mode was not
+reaching 60 FPS: 56–58 FPS at the BASIC prompt in v0.15.2 and 48–52 FPS in
+v0.15.3. The v0.15.3 audio queue needs 60 FPS, so on the CoCo 2 it ran dry
+about six times a second and sounded worse than before.
+
+- CoCo 2 now uses the same direct RAM/ROM access in the CPU core that the
+  CoCo 3 has had since v0.12.2, instead of a callback for every memory access.
+- Measured on the board: 60 FPS at the BASIC prompt on both CPUs and with an
+  animated text screen, with no audio dropouts. One run on the 6809 right
+  after switching machines read 56 FPS with dropouts; not explained yet.
+- ROM stays read-only and the SAM all-RAM mode works through the new path
+  (checked with a test routine on the board).
+- Known limit: a program heavy enough to drop below 60 FPS still makes the
+  sound break up, on either machine.
+- Known issue: in one CoCo 2 session the audio interrupt was held off for up
+  to 0.5 ms at a time and lost about 1 % of its ticks; the audio queue then
+  stays full and drops about 16 samples a second. The FPS overlay (F5) is the
+  suspect, not confirmed.
+
+### v0.15.3 — October 11, 2026
+
+**Cleaner sound.** The audio output was losing part of every frame since the
+60 Hz frame pacing of v0.12: measured on the board, 6.6 of each frame's 262
+samples were cut off, and late frames replayed stale audio.
+
+- Samples now go through a ring buffer between the emulation loop and the
+  audio interrupt, and the playback rate follows the buffer's fill level. No
+  samples are dropped or replayed, on static or animated screens.
+- When emulation stops (supervisor menu, debugger pause) the output holds its
+  level and restarts cleanly, instead of looping the last frame.
+- The pitch trim constant is gone. `PLAY` pitch is unchanged: `O2 A` is
+  217.84 Hz and `O4 A` is 867.73 Hz, which is the ROM's own timing, not
+  concert pitch (see [audio-hal.md](docs/audio-hal.md), "Pitch").
+- Sound now runs about 20–25 ms behind the emulation.
+- `/api/status` reports audio queue and interrupt timing counters (`audio`).
+- New `tools/frequency_meter.py`: measures the pitch of the board's sound
+  output from a PC audio input.
+- Checked on the board with `SOUND`, `PLAY` and Orchestra-90 on the CoCo 3;
+  **not yet checked in CoCo 2 mode**.
+
+### v0.15.2 — October 10, 2026
+
+**`SYNC` and `CWAI` wake-up fixed (MC6809 and HD6309).** Found with the
+[6809/6309 functional test suite](https://github.com/reyco2000/6809_6309_functional_tests)
+(`6809_interrupt_test`, test `$10`).
+
+- `SYNC` no longer hangs when a masked interrupt line is already active. It
+  now ends as soon as IRQ or FIRQ is active, masked or not, and carries on
+  with the next instruction if the interrupt is masked.
+- `CWAI` no longer ends when a masked interrupt line goes active. It waits
+  until an interrupt is taken.
+- The CPU run loop now makes this decision; the per-scanline wake-up in
+  `machine.cpp` is gone.
+- The suite passes all 8 runs on the host, on both CPU builds; **not yet
+  checked on the board**.
+
+### v0.15.1 — October 10, 2026
+
+**CoCo 3 memory size.** Setup → Machine → CoCo 3 Memory selects 128K, 512K,
+1024K or 2048K; the choice is saved and the emulator restarts with it.
+
+- 128K behaves like an unexpanded CoCo 3. 1024K and 2048K emulate a memory
+  expansion board: two extra bits in each MMU register, and the video bank in
+  `$FF9B`.
+- 2048K uses half of the board's PSRAM; if it cannot be allocated at boot the
+  machine starts with 512K.
+- The debug API reports the size and can set it (`POST /api/machine` with
+  `ram=2048`).
+- Checked on the host (`tools/gime_ram_test`); **not yet tested on the board**.
+
+**Machine submenu.** Machine type, CPU and CoCo 3 Memory now share a
+**Machine** submenu under Setup, because the Setup list holds seven rows. The
+CPU option moved from Setup → CPU to Setup → Machine → CPU.
+
+### v0.15.0 — October 10, 2026
+
+**HD6309 CPU.** Setup → CPU (Setup → Machine → CPU since v0.15.1) switches between the Motorola MC6809 and the
+Hitachi HD6309; the choice is saved and the emulator restarts with it.
+
+- The 6309 adds the E, F, W, V and MD registers, all of its extra instructions
+  and addressing modes (including TFM block moves and the 16- and 32-bit
+  multiply and divide), native mode with its shorter timing and larger
+  interrupt frame, and the illegal-instruction and divide-by-zero trap.
+- On the 6309, undefined 6809 opcodes trap as they do on the real chip. Stay on
+  the MC6809 for software that relies on them.
+- The MC6809 is untouched: its compiled interpreter is byte-for-byte the same
+  as in v0.14.0.
+- **Status:** the 6309 core matches XRoar's over millions of random
+  instructions in a host test (`tools/cpu_test`), but it has **not yet been
+  tested on the board**.
+- The debug API and MCP bridge report the CPU, read and write the 6309
+  registers, and can switch the CPU (`POST /api/machine` with `cpu=6309`).
+
+**Orchestra-90/CC sound cartridge.** Setup → Orchestra-90 turns on the
+cartridge's two DACs at `$FF7A`/`$FF7B` and loads `orch90.rom` in place of Disk
+BASIC, starting it automatically.
+
+- The two channels are mixed to mono, because the board has one DAC pin.
+- The toggle needs `orch90.rom` in `/roms/` and restarts the emulator; turning
+  it off brings Disk BASIC back.
+
+**Documentation.** New [docs/cpu.md](docs/cpu.md) (MC6809 and HD6309) and
+[docs/orchestra90.md](docs/orchestra90.md); `docs/core.md` now covers the
+support chips and the machine only.
+
+Older releases (v0.14.0 and earlier) are in [ChangeHistory.md](ChangeHistory.md).
 
 ### v0.14.0 — October 6, 2026
 
