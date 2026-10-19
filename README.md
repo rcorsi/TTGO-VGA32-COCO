@@ -283,6 +283,7 @@ Press **F3** to open the supervisor: a box in the CoCo's green, black and dark b
   - **Machine** — *Choose Machine Type* (CoCo 2 / CoCo 3), *CPU* (pick 6809 or 6309) and *CoCo 3 Memory* (128K–2048K; shows the fixed 64K as *CoCo 2 Memory* on a CoCo 2). Each change restarts; persisted to NVS
   - **Keyboard** — *Keyboard Language* (US English / Spanish Latam, live switch) and the *Key Mapper*, which draws the running machine's keyboard (see [Custom Key Mapping](#custom-key-mapping))
   - **Joy - Mouse Sensitivity** — joystick 1 / PS/2 mouse, with a live cursor pad
+  - **Joy-Keyboard Emulation** — OFF / RIGHT / LEFT: the arrow keys glide that CoCo joystick (it stays put on release, like the mouse) and Space fires (live; while on they no longer reach the CoCo keyboard)
   - **WiFi / Debug** — *Config WiFi* scans for networks and takes the password from the keyboard; *Read WiFi from SD Card* loads it from `cocowifi.cfg`; plus connect, disconnect, forget, and the debug server switch (see [docs/wifi-debug.md](docs/wifi-debug.md))
   - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (FujiNet support — see below)
   - **Multi-Pak - Insert Cartridges** — *Orchestra-90* and *Speech/Sound* on/off, *Hard Disk*: Off, On booting RS-DOS (NitrOS-9 compatible), or On booting RGB-DOS (each change restarts), and *RS-232 Pak* on/off (live)
@@ -452,6 +453,23 @@ mode, with diagrams.
 
 ## Changelog
 
+### v0.18.2 — October 19, 2026
+
+**Arrow keys as a joystick, and a working RAM dump.**
+
+- **Setup → Joy-Keyboard Emulation** (OFF / RIGHT / LEFT): the arrow keys
+  move the chosen CoCo joystick and Space fires. Holding an arrow glides the
+  stick (about 1 s from centre to edge) and it stays put on release, like the
+  mouse. On RIGHT the arrows and the PS/2 mouse move the same stick. While
+  it's on, the arrows and Space don't reach the CoCo keyboard. Applied at
+  once and saved.
+- **Debug → Dump RAM to SD:**
+  - The name can be changed. It suggests the next free `DUMPnnn`; typing
+    replaces it.
+  - The Saving screen shows the real RAM size (up to 2048K) and a progress
+    bar.
+  - The result screen shows the file sizes (it showed 0 KB).
+
 ### v0.18.1 — October 19, 2026
 
 **NitrOS-9 shows its whole screen, and a tidier Setup menu.**
@@ -499,29 +517,6 @@ on the SD card. NitrOS-9 from the EOU images boots with its `emudsk` driver.
   on that CPU on the board). RGB-DOS's detection and disk routines were checked
   against a disassembly of `rgbdos.rom`.
 - Details: [docs/vhd.md](docs/vhd.md).
-
-### v0.17.0 — October 15, 2026
-
-**Speech/Sound Cartridge.** Tandy's 26-3144 talking cartridge, ported from
-VCC's SSC module (itself from MAME). All four parts are emulated: the TMS7040
-microcontroller running the cartridge's own text-to-speech firmware, the
-SP0256-AL2 speech chip, the AY-3-8913 sound generator and the glue with its
-2 KB of RAM. Programs write text to `$FF7E` and the cartridge speaks it.
-
-- **Setup → Sound Carts** (Cartridges since v0.18.0) is a new submenu with
-  the Orchestra-90 and Speech/Sound toggles (the Setup list was full). Turning the cartridge on
-  restarts the emulator; if a ROM is missing the popup names it.
-- Needs `pic-7040-510.bin` and `sp0256-al2.bin` in `/roms/`. Works on the
-  CoCo 2 and the CoCo 3, alongside Disk BASIC and Orchestra-90.
-- **Runs on the second core.** On the emulator's core it cost ~2.6 ms per
-  frame and `WIDTH 80` / `HSCREEN 2` fell to ~49 FPS; on core 0 everything
-  holds 60 FPS. It uses about 4 KB of internal RAM while on, nothing while
-  off.
-- `/api/status` has an `ssc` block (busy, commands, allophones, underruns...).
-- Host tests in `tools/ssc_test/` compare the port with VCC's original code.
-- Checked on the board: the test sentence is spoken on the CoCo 3 and the
-  CoCo 2 with the real ROMs, at 59-60 FPS.
-- Details: [docs/ssc.md](docs/ssc.md).
 
 ## ⚠️ Vibe Coding Alert
 

@@ -63,6 +63,7 @@ enum SV_SettingsRow : uint8_t {
     SV_SET_MACHINE,     // opens the Machine submenu
     SV_SET_KEYBOARD,    // opens the Keyboard submenu
     SV_SET_JOYSTICK,    // Joy - Mouse Sensitivity screen
+    SV_SET_JOYKBD,      // Joy-Keyboard Emulation: OFF / RIGHT / LEFT, live
     SV_SET_WIFI,        // WiFi / Debug screen
     SV_SET_DRIVEWIRE,   // DriveWire screen
     SV_SET_SOUND,       // opens the Multi-Pak submenu
@@ -131,7 +132,7 @@ enum SV_RowIcon : uint8_t {
     ROW_ICON_CHIP, ROW_ICON_PAGE, ROW_ICON_SD, ROW_ICON_SPIDER,
     ROW_ICON_CHECK, ROW_ICON_STOP, ROW_ICON_CROSS, ROW_ICON_NOTE,
     ROW_ICON_CART, ROW_ICON_FOLDER, ROW_ICON_SPEECH, ROW_ICON_MULTIPAK,
-    ROW_ICON_HARDDISK,
+    ROW_ICON_HARDDISK, ROW_ICON_ARROWS,
 };
 void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg);
 

@@ -55,7 +55,7 @@ States are defined in `supervisor.h` as `SV_State` enum:
 | `SV_MAIN_MENU` | Top-level menu with 8 tiles |
 | `SV_FILE_BROWSER` | **Disk Manager**: 2-row drive strip (all 4 drives) + file browser below. Left/Right selects active drive; Enter mounts; U ejects; F flushes. Also used as the stand-alone file browser. |
 | `SV_MACHINE_SELECT` | Machine select: popup over the Settings list (CoCo 2 / CoCo 3, `(current)` on the active one); picking the other asks to confirm the restart in the same window, defaulting to No |
-| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire, Multi-Pak - Insert Cartridges (submenu) |
+| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, Keyboard (submenu), Joy - Mouse Sensitivity, Joy-Keyboard Emulation (OFF / RIGHT / LEFT, cycles on ENTER, live, NVS `joy_kbd`; see `joystick-hal.md`), WiFi / Debug, DriveWire, Multi-Pak - Insert Cartridges (submenu) |
 | `SV_SOUND_MENU` | Settings -> Multi-Pak submenu: Orchestra-90 and Speech/Sound toggles (ON / OFF), Hard Disk (OFF / (RS-DOS) ON / (RGB-DOS) ON), RS-232 Pak toggle (live; shares UART0 with the Debug submenu's Echo Log, turning one on turns the other off) |
 | `SV_CART_POPUP` | Popup over the Multi-Pak list: confirm a cartridge toggle and restart, or name its missing ROM file(s); from the Hard Disk row, the Off / RS-DOS / RGB-DOS picker |
 | `SV_KEYBOARD_MENU` | Settings -> Keyboard submenu: Keyboard Language (US English / Spanish Latam, cycles on ENTER) and Key Mapper |

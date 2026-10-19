@@ -130,7 +130,9 @@ void       supervisor_save_serial_mode(SerialPortMode mode);
 
 // Mouse sensitivity (level 1..10) + invert-Y, persisted in NVS ("sv").
 void supervisor_save_joystick(uint8_t level, bool invert);
-void supervisor_load_joystick(void);   // reads NVS, applies to HAL
+void supervisor_load_joystick(void);   // reads NVS, applies to HAL (also Joy-Keyboard mode)
+// Joy-Keyboard Emulation mode (JOY_KBD_OFF / RIGHT / LEFT), NVS key "joy_kbd".
+void supervisor_save_joy_kbd(uint8_t mode);
 
 // PS/2 keyboard-layout persistence (NVS "sv" namespace, key "kbd_layout").
 // load returns the stored layout, or KBD_LAYOUT_FIRST_BOOT_DEFAULT if unset.

@@ -735,9 +735,18 @@ void supervisor_load_joystick(void) {
     // Default level 7 == config.h divisor 4 (11 - 7 == 4).
     uint8_t level  = prefs.getUChar("joyLevel", 7);
     bool    invert = prefs.getBool("joyInv", false);
+    uint8_t kbd    = prefs.getUChar("joy_kbd", JOY_KBD_OFF);
     prefs.end();
     hal_joystick_set_sensitivity(level);   // clamps internally
     hal_joystick_set_invert_y(invert);
+    hal_joystick_set_kbd_mode(kbd);        // out-of-range -> OFF
+}
+
+void supervisor_save_joy_kbd(uint8_t mode) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putUChar("joy_kbd", mode);
+    prefs.end();
 }
 
 static char s_cart_rom[256] = "";         // requested at boot

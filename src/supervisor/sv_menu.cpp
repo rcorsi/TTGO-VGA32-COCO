@@ -614,6 +614,16 @@ static void draw_row_icon(OSDCanvas* tft, int icon, int x, int y, uint16_t bg, u
             row_icon_box(tft, x, y, 13, 9, 14, 10, SVW_GREEN);
             break;
 
+        case ROW_ICON_ARROWS:       // arrow keys (inverted T) with a red fire dot
+            row_icon_box(tft, x, y, 5, 0, 8, 4, SVW_WHITE);
+            for (int k = 0; k < 3; k++) row_icon_box(tft, x, y, 1 + k * 4, 6, 4 + k * 4, 10, SVW_WHITE);
+            row_icon_box(tft, x, y, 6, 2, 7, 2, SVW_DKGRAY);
+            row_icon_box(tft, x, y, 2, 8, 2, 8, SVW_DKGRAY);
+            row_icon_box(tft, x, y, 6, 9, 7, 9, SVW_DKGRAY);
+            row_icon_box(tft, x, y, 11, 8, 11, 8, SVW_DKGRAY);
+            row_icon_box(tft, x, y, 13, 1, 15, 3, SVW_RED);
+            break;
+
         case ROW_ICON_FOLDER:       // folder: tab and body
             row_icon_box(tft, x, y, 1, 1, 6, 2, SVW_ORANGE);
             row_icon_box(tft, x, y, 1, 3, 14, 10, SVW_ORANGE);
@@ -671,6 +681,9 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //   Machine      opens the Machine submenu
 //   Keyboard     opens the Keyboard submenu
 //   Joy - Mouse Sensitivity, WiFi / Debug, DriveWire   open their own screens
+//   Joy-Keyboard Emulation   cycles OFF -> RIGHT -> LEFT: arrow keys + Space
+//                act as that CoCo joystick (and no longer reach the CoCo
+//                keyboard); applied live, persisted in NVS
 //   Multi-Pak - Insert Cartridges   opens the Multi-Pak submenu
 //
 // Multi-Pak rows (SV_SoundRow) — set up at boot, so each toggle asks to
@@ -714,6 +727,7 @@ static const SV_ListRow SETTINGS_ROWS[SV_SET_COUNT] = {
     { "Machine",                 ROW_ICON_MACHINE   },
     { "Keyboard",                ROW_ICON_KEYBOARD  },
     { "Joy - Mouse Sensitivity", ROW_ICON_JOYSTICK  },
+    { "Joy-Keyboard Emulation",  ROW_ICON_ARROWS    },
     { "WiFi / Debug",            ROW_ICON_WIFI      },
     { "DriveWire",               ROW_ICON_DRIVEWIRE },
     { "Multi-Pak - Insert Cartridges", ROW_ICON_MULTIPAK },
@@ -1217,6 +1231,13 @@ static void settings_activate(Supervisor_t* sv, int row) {
             break;
 
         case SV_SET_JOYSTICK:  sv_joystick_open(sv); break;
+        case SV_SET_JOYKBD: {
+            uint8_t next = (uint8_t)((hal_joystick_get_kbd_mode() + 1) % 3);   // OFF -> RIGHT -> LEFT
+            hal_joystick_set_kbd_mode(next);
+            supervisor_save_joy_kbd(next);
+            sv->needs_redraw = true;
+            break;
+        }
         case SV_SET_WIFI:      sv_wifi_open(sv, false); break;
         case SV_SET_DRIVEWIRE: sv_fujinet_open(sv);  break;
         case SV_SET_SOUND:
@@ -1329,6 +1350,10 @@ static const char* settings_value(int row, char* buf, size_t size) {
     switch (row) {
         // Runtime-active machine, not the compile-time default.
         case SV_SET_MACHINE:   return (g_machine_type == 4) ? MACHINE_NAME_COCO3 : MACHINE_NAME_COCO2;
+        case SV_SET_JOYKBD: {
+            static const char* const JOYKBD_VALUES[3] = { "OFF", "RIGHT", "LEFT" };
+            return JOYKBD_VALUES[hal_joystick_get_kbd_mode() % 3];
+        }
         case SV_SET_JOYSTICK:
             snprintf(buf, size, "%u", (unsigned)hal_joystick_get_sensitivity());
             return buf;
