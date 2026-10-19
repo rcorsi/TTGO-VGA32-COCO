@@ -19,7 +19,7 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 - **Real disk drives** — WD1793 floppy controller with `.DSK` and `.VDK` support, and entire disk images cached in PSRAM for zero-latency access.
 - **Virtual hard disk** — VCC's hard disk device at `$FF80`: two `.VHD` images of up to 512 MB, read in place from the SD card. Boots NitrOS-9 (EOU) with the `emudsk` driver, and RGB-DOS gives BASIC its virtual drives (new in v0.18.0).
 - **Complete hardware soul** — dual 6821 PIAs (keyboard, joystick, audio I/O), SAM6883 multiplexer on CoCo 2, GIME-integrated MMU on CoCo 3.
-- **FUJINET SUPPORT** - External fujinet support - still experimental
+- **FujiNet support** — through an external DriveWire / FujiNet server over WiFi; see [DriveWire / FujiNet Support](#drivewire--fujinet-support).
 
 ### Built for Real Use
 
@@ -40,26 +40,7 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 - **3.5 mm audio output** (mono) on the board's jack
 - **5 V USB-C** for power and serial programming
 
-> The board provides VGA, PS/2, audio jack, and SD socket on-board — no extra wiring is required. **Joystick 1 is emulated via the PS/2 mouse port** (GPIO26/27): plug a PS/2 mouse into the board's mouse header and it drives the CoCo right joystick. Joystick 2 is a neutral stub.
-
-## Fixed Pin Map (TTGO VGA32 v1.4)
-
-| Function | Pin(s) | Notes |
-|---|---|---|
-| VGA Red (R0, R1) | GPIO21, GPIO22 | Resistor-ladder DAC |
-| VGA Green (G0, G1) | GPIO18, GPIO19 | Resistor-ladder DAC |
-| VGA Blue (B0, B1) | GPIO4, GPIO5 | Resistor-ladder DAC |
-| VGA HSYNC | GPIO23 | |
-| VGA VSYNC | GPIO15 | |
-| PS/2 Keyboard CLK | GPIO33 | |
-| PS/2 Keyboard DATA | GPIO32 | |
-| PS/2 Mouse CLK | GPIO26 | Joystick 1 emulation (PS/2 mouse) |
-| PS/2 Mouse DATA | GPIO27 | Joystick 1 emulation (PS/2 mouse) |
-| SD Card CS | GPIO13 | HSPI |
-| SD Card MOSI | GPIO12 | HSPI |
-| SD Card MISO | GPIO2 | HSPI (note: GPIO2 is a strapping pin — must float/high at boot) |
-| SD Card SCK | GPIO14 | HSPI |
-| Audio DAC | GPIO25 | ESP32 internal DAC1 |
+> The board provides VGA, PS/2, audio jack, and SD socket on-board — no extra wiring is required. **Joystick 1 is emulated via the PS/2 mouse port** (GPIO26/27): plug a PS/2 mouse into the board's mouse header and it drives the CoCo right joystick. Joystick 2 is a neutral stub. Pin assignments: [LilyGo TTGO VGA32 v1.4 Pinout](docs/pinout.md).
 
 ## SD Card Setup
 
@@ -97,7 +78,7 @@ ROM files are validated by CRC-32 on startup.
 
 ### DriveWire / FujiNet ROMs (optional)
 
-Only needed if you use the experimental [DriveWire / FujiNet support](#drivewire--fujinet-support)
+Only needed if you use the [DriveWire / FujiNet support](#drivewire--fujinet-support)
 below. Get them from [toolshed](https://github.com/n6il/toolshed)'s `hdbdos` build:
 
 ```
@@ -304,7 +285,7 @@ Press **F3** to open the supervisor: a box in the CoCo's green, black and dark b
   - **Keyboard** — *Keyboard Language* (US English / Spanish Latam, live switch) and the *Key Mapper*, which draws the running machine's keyboard (see [Custom Key Mapping](#custom-key-mapping))
   - **Joy - Mouse Sensitivity** — joystick 1 / PS/2 mouse, with a live cursor pad
   - **WiFi / Debug** — *Config WiFi* scans for networks and takes the password from the keyboard; *Read WiFi from SD Card* loads it from `cocowifi.cfg`; plus connect, disconnect, forget, and the debug server switch (see [docs/wifi-debug.md](docs/wifi-debug.md))
-  - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (experimental FujiNet support — see below)
+  - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (FujiNet support — see below)
   - **Cartridges** — *Orchestra-90* and *Speech/Sound* on/off, and *Hard Disk*: Off, On with RS-DOS, or On with RGB-DOS (each change restarts)
 - **WiFi** — the same WiFi / Debug screen as in Setup, one step from the main menu
 - **Reset** — reset the machine, with confirmation
@@ -314,37 +295,8 @@ Press **F3** to open the supervisor: a box in the CoCo's green, black and dark b
 
 ## Architecture
 
-The emulator runs on the ESP32-WROVER's **dual cores**, though under FabGL the video DMA is what consumes Core 1 timing — the emulation lives alongside it.
-
-- **Core 0** — FabGL VGA scan-out timing and PS/2 ULP polling
-- **Core 1** — Main emulation loop (CPU, video scanline render, audio, OSD)
-
-### Emulation Loop
-
-```
-loop():
-  1. hal_process_input()        — drain FabGL VK queue, tick deferred releases
-  2. supervisor_update_and_render()  — if OSD active, render and return
-  3. machine_run_frame()        — emulate 262 scanlines (14,916 CPU cycles)
-  4. hal_render_frame()         — no-op on VGA32; FabGL DMA scans out continuously
-```
-
-### CoCo 2 Memory Map
-
-```
-$0000–$7FFF   RAM (up to 64 KB with SAM paging)
-$8000–$9FFF   Extended BASIC ROM (8 KB)
-$A000–$BFFF   Color BASIC ROM (8 KB)
-$C000–$FEFF   Cartridge / Disk BASIC ROM (16 KB)
-$FF00–$FF3F   PIA registers (keyboard, audio, VDG control)
-$FF40–$FF5F   Disk controller (WD1793)
-$FFC0–$FFDF   SAM control registers
-```
-
-### Architecture Diagrams
-
-- `docs/ESP32_COCO_CORE.png` — CPU, memory map, PIA, VDG, SAM wiring
-- `docs/Architecture.jpg` — system block diagram
+How the emulator is split across the ESP32's two cores, the main loop, the
+memory maps and every module: [docs/Architecture.md](docs/Architecture.md).
 
 ## Project Structure
 
@@ -426,7 +378,8 @@ All technical documentation is in the `docs/` directory:
 
 | File | Description |
 |------|-------------|
-| [Architecture.md](docs/Architecture.md) | System architecture — CoCo 2 and CoCo 3 extensions on TTGO VGA32 |
+| [Architecture.md](docs/Architecture.md) | System architecture — cores, main loop, memory maps, CoCo 2 and CoCo 3 modules on TTGO VGA32 |
+| [pinout.md](docs/pinout.md) | LilyGo TTGO VGA32 v1.4 pinout — VGA, PS/2, SD card and audio pins |
 | [core.md](docs/core.md) | MC6821 PIA, MC6847 VDG, SAM6883, GIME and machine integration |
 | [cpu.md](docs/cpu.md) | MC6809 and HD6309 CPUs — registers, interrupts, native mode, traps, host tests |
 | [orchestra90.md](docs/orchestra90.md) | Orchestra-90/CC cartridge — DAC ports, audio mix, ROM and autostart |

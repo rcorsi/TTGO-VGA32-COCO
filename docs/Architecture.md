@@ -14,6 +14,47 @@ A single firmware image contains both machine paths. The active machine is chose
 
 ---
 
+## At a Glance
+
+The emulator runs on both cores of the ESP32-WROVER:
+
+- **Core 1** — the main loop: CPU, video scanline render, audio capture, the
+  supervisor OSD, and the hard disk and floppy file I/O.
+- **Core 0** — WiFi, the debug server task (`dbg_srv`), the DriveWire client
+  task (`dw_client`) and the Speech/Sound Cartridge task (`ssc`). VGA scan-out
+  is I2S DMA and PS/2 runs on the ULP, so neither takes CPU time.
+
+### Main Loop (`loop()` in `TTGO-VGA32-COCO.ino`)
+
+```
+loop():
+  1. hal_process_input()             — drain FabGL VK queue, tick deferred releases
+     debug_rpc_keys_poll()           — OSD keys injected over the debug API
+  2. supervisor_update_and_render()  — if the OSD is open, render it and return
+  3. debug_rpc_poll()                — one pending debug-server command
+  4. machine_run_frame()             — emulate 262 scanlines (14,916 CPU cycles), then pace
+  5. hal_render_frame()              — no-op on VGA32; FabGL DMA scans out continuously
+```
+
+### CoCo 2 Memory Map
+
+```
+$0000–$7FFF   RAM (up to 64 KB with SAM paging)
+$8000–$9FFF   Extended BASIC ROM (8 KB)
+$A000–$BFFF   Color BASIC ROM (8 KB)
+$C000–$FEFF   Cartridge / Disk BASIC ROM (16 KB)
+$FF00–$FF3F   PIA registers (keyboard, audio, VDG control)
+$FF40–$FF5F   Disk controller (WD1793)
+$FFC0–$FFDF   SAM control registers
+```
+
+The CoCo 3 map (GIME MMU, `$FF90-$FFBF` registers) is under
+[CoCo 3 Extensions](#coco-3-extensions). Cartridge devices that answer only
+when turned on: RS-232 Pak `$FF68-$FF6B`, Orchestra-90 `$FF7A/$FF7B`,
+Speech/Sound `$FF7D/$FF7E`, virtual hard disk `$FF80-$FF86`.
+
+---
+
 ## System Architecture
 
 ```
@@ -364,24 +405,7 @@ The supervisor's coordinate system is the framebuffer (`DISPLAY_WIDTH` × `DISPL
 
 ### 6. Pin Assignments (fixed by the TTGO VGA32 v1.4 board)
 
-| Function | GPIO | Notes |
-|----------|------|-------|
-| VGA R0 / R1 | 21 / 22 | Resistor-ladder DAC |
-| VGA G0 / G1 | 18 / 19 | Resistor-ladder DAC |
-| VGA B0 / B1 | 4 / 5 | Resistor-ladder DAC |
-| VGA HSYNC | 23 | |
-| VGA VSYNC | 15 | |
-| PS/2 Keyboard CLK | 33 | |
-| PS/2 Keyboard DATA | 32 | |
-| PS/2 Mouse CLK | 26 | (unused) |
-| PS/2 Mouse DATA | 27 | (unused) |
-| SD Card CS | 13 | HSPI |
-| SD Card MOSI | 12 | HSPI |
-| SD Card MISO | 2 | HSPI (strapping pin — must not be low at boot) |
-| SD Card SCK | 14 | HSPI |
-| Audio | 25 | ESP32 internal DAC1 |
-
-Joystick GPIOs are not wired on this board; the HAL stub avoids claiming any.
+See [LilyGo TTGO VGA32 v1.4 Pinout](pinout.md).
 
 ---
 
