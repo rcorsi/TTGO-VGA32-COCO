@@ -19,7 +19,7 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 - **Real disk drives** — WD1793 floppy controller with `.DSK` and `.VDK` support, and entire disk images cached in PSRAM for zero-latency access.
 - **Virtual hard disk** — VCC's hard disk device at `$FF80`: two `.VHD` images of up to 512 MB, read in place from the SD card. Boots NitrOS-9 (EOU) with the `emudsk` driver, and RGB-DOS gives BASIC its virtual drives (new in v0.18.0).
 - **Complete hardware soul** — dual 6821 PIAs (keyboard, joystick, audio I/O), SAM6883 multiplexer on CoCo 2, GIME-integrated MMU on CoCo 3.
-- **FUJINET SUPPORT** - External fujinet support - still experimental
+- **FujiNet support** — through an external DriveWire / FujiNet server over WiFi; see [DriveWire / FujiNet Support](#drivewire--fujinet-support).
 
 ### Built for Real Use
 
@@ -40,26 +40,7 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 - **3.5 mm audio output** (mono) on the board's jack
 - **5 V USB-C** for power and serial programming
 
-> The board provides VGA, PS/2, audio jack, and SD socket on-board — no extra wiring is required. **Joystick 1 is emulated via the PS/2 mouse port** (GPIO26/27): plug a PS/2 mouse into the board's mouse header and it drives the CoCo right joystick. Joystick 2 is a neutral stub.
-
-## Fixed Pin Map (TTGO VGA32 v1.4)
-
-| Function | Pin(s) | Notes |
-|---|---|---|
-| VGA Red (R0, R1) | GPIO21, GPIO22 | Resistor-ladder DAC |
-| VGA Green (G0, G1) | GPIO18, GPIO19 | Resistor-ladder DAC |
-| VGA Blue (B0, B1) | GPIO4, GPIO5 | Resistor-ladder DAC |
-| VGA HSYNC | GPIO23 | |
-| VGA VSYNC | GPIO15 | |
-| PS/2 Keyboard CLK | GPIO33 | |
-| PS/2 Keyboard DATA | GPIO32 | |
-| PS/2 Mouse CLK | GPIO26 | Joystick 1 emulation (PS/2 mouse) |
-| PS/2 Mouse DATA | GPIO27 | Joystick 1 emulation (PS/2 mouse) |
-| SD Card CS | GPIO13 | HSPI |
-| SD Card MOSI | GPIO12 | HSPI |
-| SD Card MISO | GPIO2 | HSPI (note: GPIO2 is a strapping pin — must float/high at boot) |
-| SD Card SCK | GPIO14 | HSPI |
-| Audio DAC | GPIO25 | ESP32 internal DAC1 |
+> The board provides VGA, PS/2, audio jack, and SD socket on-board — no extra wiring is required. **Joystick 1 is emulated via the PS/2 mouse port** (GPIO26/27): plug a PS/2 mouse into the board's mouse header and it drives the CoCo right joystick. Joystick 2 is a neutral stub. Pin assignments: [LilyGo TTGO VGA32 v1.4 Pinout](docs/pinout.md).
 
 ## SD Card Setup
 
@@ -97,7 +78,7 @@ ROM files are validated by CRC-32 on startup.
 
 ### DriveWire / FujiNet ROMs (optional)
 
-Only needed if you use the experimental [DriveWire / FujiNet support](#drivewire--fujinet-support-experimental)
+Only needed if you use the [DriveWire / FujiNet support](#drivewire--fujinet-support)
 below. Get them from [toolshed](https://github.com/n6il/toolshed)'s `hdbdos` build:
 
 ```
@@ -304,7 +285,7 @@ Press **F3** to open the supervisor: a box in the CoCo's green, black and dark b
   - **Keyboard** — *Keyboard Language* (US English / Spanish Latam, live switch) and the *Key Mapper*, which draws the running machine's keyboard (see [Custom Key Mapping](#custom-key-mapping))
   - **Joy - Mouse Sensitivity** — joystick 1 / PS/2 mouse, with a live cursor pad
   - **WiFi / Debug** — *Config WiFi* scans for networks and takes the password from the keyboard; *Read WiFi from SD Card* loads it from `cocowifi.cfg`; plus connect, disconnect, forget, and the debug server switch (see [docs/wifi-debug.md](docs/wifi-debug.md))
-  - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (experimental FujiNet support — see below)
+  - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (FujiNet support — see below)
   - **Cartridges** — *Orchestra-90* and *Speech/Sound* on/off, and *Hard Disk*: Off, On with RS-DOS, or On with RGB-DOS (each change restarts)
 - **WiFi** — the same WiFi / Debug screen as in Setup, one step from the main menu
 - **Reset** — reset the machine, with confirmation
@@ -314,37 +295,8 @@ Press **F3** to open the supervisor: a box in the CoCo's green, black and dark b
 
 ## Architecture
 
-The emulator runs on the ESP32-WROVER's **dual cores**, though under FabGL the video DMA is what consumes Core 1 timing — the emulation lives alongside it.
-
-- **Core 0** — FabGL VGA scan-out timing and PS/2 ULP polling
-- **Core 1** — Main emulation loop (CPU, video scanline render, audio, OSD)
-
-### Emulation Loop
-
-```
-loop():
-  1. hal_process_input()        — drain FabGL VK queue, tick deferred releases
-  2. supervisor_update_and_render()  — if OSD active, render and return
-  3. machine_run_frame()        — emulate 262 scanlines (14,916 CPU cycles)
-  4. hal_render_frame()         — no-op on VGA32; FabGL DMA scans out continuously
-```
-
-### CoCo 2 Memory Map
-
-```
-$0000–$7FFF   RAM (up to 64 KB with SAM paging)
-$8000–$9FFF   Extended BASIC ROM (8 KB)
-$A000–$BFFF   Color BASIC ROM (8 KB)
-$C000–$FEFF   Cartridge / Disk BASIC ROM (16 KB)
-$FF00–$FF3F   PIA registers (keyboard, audio, VDG control)
-$FF40–$FF5F   Disk controller (WD1793)
-$FFC0–$FFDF   SAM control registers
-```
-
-### Architecture Diagrams
-
-- `docs/ESP32_COCO_CORE.png` — CPU, memory map, PIA, VDG, SAM wiring
-- `docs/Architecture.jpg` — system block diagram
+How the emulator is split across the ESP32's two cores, the main loop, the
+memory maps and every module: [docs/Architecture.md](docs/Architecture.md).
 
 ## Project Structure
 
@@ -426,7 +378,8 @@ All technical documentation is in the `docs/` directory:
 
 | File | Description |
 |------|-------------|
-| [Architecture.md](docs/Architecture.md) | System architecture — CoCo 2 and CoCo 3 extensions on TTGO VGA32 |
+| [Architecture.md](docs/Architecture.md) | System architecture — cores, main loop, memory maps, CoCo 2 and CoCo 3 modules on TTGO VGA32 |
+| [pinout.md](docs/pinout.md) | LilyGo TTGO VGA32 v1.4 pinout — VGA, PS/2, SD card and audio pins |
 | [core.md](docs/core.md) | MC6821 PIA, MC6847 VDG, SAM6883, GIME and machine integration |
 | [cpu.md](docs/cpu.md) | MC6809 and HD6309 CPUs — registers, interrupts, native mode, traps, host tests |
 | [orchestra90.md](docs/orchestra90.md) | Orchestra-90/CC cartridge — DAC ports, audio mix, ROM and autostart |
@@ -446,9 +399,6 @@ All technical documentation is in the `docs/` directory:
 
 ## Known Limitations
 
-- DMK disk format is recognized but not mountable
-- HD6309 support is checked on the host against XRoar's CPU core; on the board it has run NitrOS-9 (EOU, 6309 build) but no wider test yet
-- CoCo 3 memory sizes other than 512K are new and have not been tested on the board yet
 - Orchestra-90 plays in mono (one DAC pin), and Disk BASIC is unavailable while it is on
 - The Speech/Sound Cartridge plays in mono, and its sound holds briefly while core 0 is busy (screenshots, heavy WiFi traffic); PSG music programs are not tested yet
 - Disk BASIC is unavailable while a program cartridge is loaded (there is no Multi-Pak)
@@ -458,7 +408,7 @@ All technical documentation is in the `docs/` directory:
 - NTSC composite simulation covers RG6 (PMODE 4) artifact colour only — there is no
   chroma/luma bleed modelling for the other modes
 
-## DriveWire / FujiNet Support (Experimental)
+## DriveWire / FujiNet Support
 
 The emulator can talk **DriveWire** over an emulated **Becker port**
 (`$FF41` status / `$FF42` data — the same virtual port XRoar, MAME and VCC
@@ -499,7 +449,6 @@ mode, with diagrams.
 - **Run NitrOS-9 testing** — boot and exercise NitrOS-9 Level 2, including the 6309 build, on both CPUs and at each CoCo 3 memory size.
 - Testing and adjustment of RS-232 Pak support
 - **CPU speed test** — a test that confirms the emulated CPU runs at 0.89 MHz on the CoCo 2 and 1.78 MHz on the CoCo 3.
-- **Speech synthesizer cartridge** support.
 - **CoCo SDC** emulation.
 
 ## Changelog
@@ -581,141 +530,6 @@ dropped samples.
   836.99 Hz, 3.6 % low). The CoCo 2 drops to about 57.7 FPS while that note
   plays, and sound now follows the emulator's speed. CoCo 2 needs more speed
   margin; the audio code is doing what it should.
-
-### v0.16.0 — October 12, 2026
-
-**Load cartridges from the supervisor.** The main menu grows from six tiles to
-eight (a 4x2 grid) and gains a **Cart** tile, drawn as a game cartridge.
-
-- **Load Cart** browses the SD card for `.ccc` and `.rom` cartridge ROMs,
-  starting in `/carts`. ENTER on a file stores it as the cartridge; **Unload
-  cartridge** removes it. A popup then asks whether to restart now: *No* keeps
-  the choice for the next restart, *Yes* restarts, ESC cancels.
-- The cartridge loader reads ROMs of up to 16 KB (it was 8 KB) from any folder.
-  Program cartridges start on their own, as on the real machine.
-- **Bank-switched cartridges on the CoCo 3.** A ROM of more than 16 KB, up to
-  128 KB, is split into 16 KB banks selected by writing `$FF40`. Tested on the
-  board with a 128 KB cartridge.
-- A cartridge takes the place of Disk BASIC, and loading one turns the
-  Orchestra-90 setting off.
-- A **WiFi** tile opens the WiFi / Debug screen straight from the main menu.
-
-**Clearer start-up errors.** The "no SD card" and "missing ROMs" screens are
-redrawn centred, with a red warning sign and an SD card or ROM chip icon. The
-first asks for a FAT-formatted card; the second names the missing files and the
-`/roms` folder. Both point to the project page.
-
-**Fix.** The Disk Manager showed an empty list when the folder it remembered
-was no longer on the SD card. It now goes back to the card root.
-
-### v0.15.4 — October 11, 2026
-
-**CoCo 2 runs at full speed, which fixes its sound.** CoCo 2 mode was not
-reaching 60 FPS: 56–58 FPS at the BASIC prompt in v0.15.2 and 48–52 FPS in
-v0.15.3. The v0.15.3 audio queue needs 60 FPS, so on the CoCo 2 it ran dry
-about six times a second and sounded worse than before.
-
-- CoCo 2 now uses the same direct RAM/ROM access in the CPU core that the
-  CoCo 3 has had since v0.12.2, instead of a callback for every memory access.
-- Measured on the board: 60 FPS at the BASIC prompt on both CPUs and with an
-  animated text screen, with no audio dropouts. One run on the 6809 right
-  after switching machines read 56 FPS with dropouts; not explained yet.
-- ROM stays read-only and the SAM all-RAM mode works through the new path
-  (checked with a test routine on the board).
-- Known limit: a program heavy enough to drop below 60 FPS still makes the
-  sound break up, on either machine.
-- Known issue: in one CoCo 2 session the audio interrupt was held off for up
-  to 0.5 ms at a time and lost about 1 % of its ticks; the audio queue then
-  stays full and drops about 16 samples a second. The FPS overlay (F5) is the
-  suspect, not confirmed.
-
-### v0.15.3 — October 11, 2026
-
-**Cleaner sound.** The audio output was losing part of every frame since the
-60 Hz frame pacing of v0.12: measured on the board, 6.6 of each frame's 262
-samples were cut off, and late frames replayed stale audio.
-
-- Samples now go through a ring buffer between the emulation loop and the
-  audio interrupt, and the playback rate follows the buffer's fill level. No
-  samples are dropped or replayed, on static or animated screens.
-- When emulation stops (supervisor menu, debugger pause) the output holds its
-  level and restarts cleanly, instead of looping the last frame.
-- The pitch trim constant is gone. `PLAY` pitch is unchanged: `O2 A` is
-  217.84 Hz and `O4 A` is 867.73 Hz, which is the ROM's own timing, not
-  concert pitch (see [audio-hal.md](docs/audio-hal.md), "Pitch").
-- Sound now runs about 20–25 ms behind the emulation.
-- `/api/status` reports audio queue and interrupt timing counters (`audio`).
-- New `tools/frequency_meter.py`: measures the pitch of the board's sound
-  output from a PC audio input.
-- Checked on the board with `SOUND`, `PLAY` and Orchestra-90 on the CoCo 3;
-  **not yet checked in CoCo 2 mode**.
-
-### v0.15.2 — October 10, 2026
-
-**`SYNC` and `CWAI` wake-up fixed (MC6809 and HD6309).** Found with the
-[6809/6309 functional test suite](https://github.com/reyco2000/6809_6309_functional_tests)
-(`6809_interrupt_test`, test `$10`).
-
-- `SYNC` no longer hangs when a masked interrupt line is already active. It
-  now ends as soon as IRQ or FIRQ is active, masked or not, and carries on
-  with the next instruction if the interrupt is masked.
-- `CWAI` no longer ends when a masked interrupt line goes active. It waits
-  until an interrupt is taken.
-- The CPU run loop now makes this decision; the per-scanline wake-up in
-  `machine.cpp` is gone.
-- The suite passes all 8 runs on the host, on both CPU builds; **not yet
-  checked on the board**.
-
-### v0.15.1 — October 10, 2026
-
-**CoCo 3 memory size.** Setup → Machine → CoCo 3 Memory selects 128K, 512K,
-1024K or 2048K; the choice is saved and the emulator restarts with it.
-
-- 128K behaves like an unexpanded CoCo 3. 1024K and 2048K emulate a memory
-  expansion board: two extra bits in each MMU register, and the video bank in
-  `$FF9B`.
-- 2048K uses half of the board's PSRAM; if it cannot be allocated at boot the
-  machine starts with 512K.
-- The debug API reports the size and can set it (`POST /api/machine` with
-  `ram=2048`).
-- Checked on the host (`tools/gime_ram_test`); **not yet tested on the board**.
-
-**Machine submenu.** Machine type, CPU and CoCo 3 Memory now share a
-**Machine** submenu under Setup, because the Setup list holds seven rows. The
-CPU option moved from Setup → CPU to Setup → Machine → CPU.
-
-### v0.15.0 — October 10, 2026
-
-**HD6309 CPU.** Setup → CPU (Setup → Machine → CPU since v0.15.1) switches between the Motorola MC6809 and the
-Hitachi HD6309; the choice is saved and the emulator restarts with it.
-
-- The 6309 adds the E, F, W, V and MD registers, all of its extra instructions
-  and addressing modes (including TFM block moves and the 16- and 32-bit
-  multiply and divide), native mode with its shorter timing and larger
-  interrupt frame, and the illegal-instruction and divide-by-zero trap.
-- On the 6309, undefined 6809 opcodes trap as they do on the real chip. Stay on
-  the MC6809 for software that relies on them.
-- The MC6809 is untouched: its compiled interpreter is byte-for-byte the same
-  as in v0.14.0.
-- **Status:** the 6309 core matches XRoar's over millions of random
-  instructions in a host test (`tools/cpu_test`), but it has **not yet been
-  tested on the board**.
-- The debug API and MCP bridge report the CPU, read and write the 6309
-  registers, and can switch the CPU (`POST /api/machine` with `cpu=6309`).
-
-**Orchestra-90/CC sound cartridge.** Setup → Orchestra-90 turns on the
-cartridge's two DACs at `$FF7A`/`$FF7B` and loads `orch90.rom` in place of Disk
-BASIC, starting it automatically.
-
-- The two channels are mixed to mono, because the board has one DAC pin.
-- The toggle needs `orch90.rom` in `/roms/` and restarts the emulator; turning
-  it off brings Disk BASIC back.
-
-**Documentation.** New [docs/cpu.md](docs/cpu.md) (MC6809 and HD6309) and
-[docs/orchestra90.md](docs/orchestra90.md); `docs/core.md` now covers the
-support chips and the machine only.
-
-Older releases (v0.14.0 and earlier) are in [ChangeHistory.md](ChangeHistory.md).
 
 ## ⚠️ Vibe Coding Alert
 
