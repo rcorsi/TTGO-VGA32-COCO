@@ -10,13 +10,13 @@ and NitrOS-9 with the **`emudsk`** driver (for example the EOU images for VCC).
 
 ## Turning it on
 
-F3 → Setup → **Cartridges** → **Hard Disk** opens a picker. The current mode is
+F3 → Setup → **Multi-Pak - Insert Cartridges** → **Hard Disk** opens a picker. The current mode is
 marked "current"; picking a different one restarts the emulator.
 
 | Mode | `$FF80-$FF86` | Cartridge ROM at `$C000` |
 |---|---|---|
 | Off | not decoded | Disk BASIC (or whatever Load Cart chose) |
-| **On, boot RS-DOS** | on | Disk BASIC (`disk11.rom`) |
+| **On, boot RS-DOS (NitrOS-9 compatible)** | on | Disk BASIC (`disk11.rom`) |
 | **On, boot RGB-DOS** | on | `rgbdos.rom` |
 
 - **RS-DOS** is VCC's Multi-Pak setup: the FD-502 controller (RS-DOS) in one
@@ -31,7 +31,8 @@ Then mount images in the **Disk Manager** (F3 → Disks). With the hard disk on,
 it shows six buttons: D0–D3 for the floppies, then **HD0** and **HD1**. ENTER
 on a `.vhd` file offers HD0/HD1; any other image offers Drive 0–3. The mounts
 are stored as `hd0_path`/`hd1_path` and come back at every boot, before the CPU
-starts, so RGB-DOS finds them at cold start.
+starts, so RGB-DOS finds them at cold start. Turning the hard disk Off
+removes both from NVS: turning it back on starts with HD0/HD1 empty.
 
 The debug API and the MCP bridge can mount too: `POST /api/disk` with
 `op=mount&drive=hd0&path=/vhd/EOU.VHD` (MCP: `mount_disk("hd0", ...)`).
@@ -117,7 +118,7 @@ with `>` instead of `>=`.
 | `src/core/vhd.h/.cpp` | The device: ports, commands, status, two drives, enable flag |
 | `src/core/blockfile.h/.cpp` | Image files read and written in place, a sector at a time (shared with the planned CoCo SDC) |
 | `src/core/machine.cpp` | `$FF80-$FF86` decode in the four CoCo 2/3 read/write handlers; `vhd_reset()` and `vhd_tick()` in the dispatchers |
-| `src/supervisor/sv_menu.cpp` | Cartridges row and the Hard Disk picker (`hd_popup_*`) |
+| `src/supervisor/sv_menu.cpp` | Multi-Pak row and the Hard Disk picker (`hd_popup_*`) |
 | `src/supervisor/sv_filebrowser.cpp` | HD0/HD1 buttons and mount popups (slots 4 and 5) |
 | `src/supervisor/supervisor.cpp` | NVS: `vhd_en`, `hd0_path`/`hd1_path`, auto-mount, flush on supervisor entry and restart |
 | `src/net/debug_rpc.cpp`, `debug_server.cpp` | `/api/disk` with `drive=hd0` / `hd1` |

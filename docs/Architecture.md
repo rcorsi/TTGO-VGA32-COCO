@@ -374,7 +374,7 @@ State machine: `INACTIVE → MAIN_MENU → FILE_BROWSER | MACHINE_SELECT | SETTI
 - **Menu** (`sv_menu.cpp`) — 6-item main menu: Disk Manager, Machine type, Settings, Reset Machine, Debug, About. Reset flushes all dirty disks before calling `machine_reset()`.
 - **Disk Manager / File Browser** (`sv_filebrowser.cpp`) — unified screen: 2-row drive strip (D0–D3) above a FAT32 file list. Left/Right select active drive; Enter mounts; U ejects; F flushes to SD. After mount, OSD stays open for additional drives.
 - **Machine Select** (`sv_menu.cpp`) — CoCo 2 / CoCo 3 submenu; confirm dialog → `supervisor_set_machine_type()` flushes all dirty disks then calls `esp_restart()`.
-- **Settings** (`sv_menu.cpp`) — Debug Log / RS-232 Pak toggle (mutually exclusive; both share UART0).
+- **Settings** (`sv_menu.cpp`) — Debug Log (Debug submenu) / RS-232 Pak (Multi-Pak submenu) toggles (mutually exclusive; both share UART0).
 - **FDC** (`sv_disk.cpp`) — WD1793 command-level emulation with PSRAM cache, deferred INTRQ (byte-257 mechanism)
 - **Render** (`sv_render.cpp`) — green phosphor theme; draws via `osd_canvas` into the FabGL framebuffer; `sv_render_drive_strip()` renders the 2×2 drive status grid.
 

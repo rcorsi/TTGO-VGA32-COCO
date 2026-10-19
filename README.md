@@ -104,11 +104,11 @@ can browse to any other folder:
 └── biggame.ccc        # up to 128 KB (bank-switched) on the CoCo 3
 ```
 
-The Speech/Sound Cartridge (Setup → Cartridges → Speech/Sound) needs two ROM
+The Speech/Sound Cartridge (Setup → Multi-Pak → Speech/Sound) needs two ROM
 dumps in `/roms/`, with the MAME names: `pic-7040-510.bin` (4096 bytes) and
 `sp0256-al2.bin` (2048 bytes). See [docs/ssc.md](docs/ssc.md).
 
-The hard disk's RGB-DOS mode (Setup → Cartridges → Hard Disk) needs VCC's
+The hard disk's RGB-DOS mode (Setup → Multi-Pak → Hard Disk) needs VCC's
 `rgbdos.rom` in `/roms/`. Its RS-DOS mode uses `disk11.rom`. See
 [docs/vhd.md](docs/vhd.md).
 
@@ -280,13 +280,12 @@ Press **F3** to open the supervisor: a box in the CoCo's green, black and dark b
 - **Disks** — Disk Manager. A button per drive (0–3) shows what is mounted, plus HD0 and HD1 while the hard disk is on; the SD card browser sits below. `.VHD` images mount on HD0/HD1. **TAB** switches between drives and files. ENTER on a `.DSK`/`.VDK` image asks which drive takes it (the first empty one is preselected) and confirms before replacing a disk or mounting the same image twice; ENTER on a mounted drive asks to unmount it. **F** flushes cached writes to the SD card.
 - **Cart** — Load Cart. Browse the SD card for a `.ccc` or `.rom` cartridge ROM and press ENTER on it; **Unload cartridge** removes it. The cartridge takes effect at a restart, so a popup asks whether to restart now or keep the choice for the next restart. The cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded.
 - **Setup**
-  - **Machine** — switch between CoCo 2 and CoCo 3 (restarts after a confirmation; persisted to NVS)
-  - **RS-232 Pak** — on/off
+  - **Machine** — *Choose Machine Type* (CoCo 2 / CoCo 3), *CPU* (pick 6809 or 6309) and *CoCo 3 Memory* (128K–2048K; shows the fixed 64K as *CoCo 2 Memory* on a CoCo 2). Each change restarts; persisted to NVS
   - **Keyboard** — *Keyboard Language* (US English / Spanish Latam, live switch) and the *Key Mapper*, which draws the running machine's keyboard (see [Custom Key Mapping](#custom-key-mapping))
   - **Joy - Mouse Sensitivity** — joystick 1 / PS/2 mouse, with a live cursor pad
   - **WiFi / Debug** — *Config WiFi* scans for networks and takes the password from the keyboard; *Read WiFi from SD Card* loads it from `cocowifi.cfg`; plus connect, disconnect, forget, and the debug server switch (see [docs/wifi-debug.md](docs/wifi-debug.md))
   - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (FujiNet support — see below)
-  - **Cartridges** — *Orchestra-90* and *Speech/Sound* on/off, and *Hard Disk*: Off, On with RS-DOS, or On with RGB-DOS (each change restarts)
+  - **Multi-Pak - Insert Cartridges** — *Orchestra-90* and *Speech/Sound* on/off, *Hard Disk*: Off, On booting RS-DOS (NitrOS-9 compatible), or On booting RGB-DOS (each change restarts), and *RS-232 Pak* on/off (live)
 - **WiFi** — the same WiFi / Debug screen as in Setup, one step from the main menu
 - **Reset** — reset the machine, with confirmation
 - **Debug** — CPU / GIME status, memory hex dump, RS-232 Pak status, Dump RAM to SD, and the **Echo Log** toggle (debug output on the serial port; it shares the port with the RS-232 Pak, so turning one on turns the other off)
@@ -453,6 +452,26 @@ mode, with diagrams.
 
 ## Changelog
 
+### v0.18.1 — October 19, 2026
+
+**NitrOS-9 shows its whole screen, and a tidier Setup menu.**
+
+- **All 25 rows of NitrOS-9's 80x25 screen are visible.** The GIME's
+  225-line mode didn't fit the 200-line VGA picture, so the last three rows
+  (the shell prompt) were cut off. Now the blank line under each row of text
+  is dropped instead, so the text keeps its shape.
+- **Setup → Cartridges is now Setup → Multi-Pak - Insert Cartridges**, with a
+  Multi-Pak icon. **RS-232 Pak** moved there from Setup (still on/off with no
+  restart).
+- **Hard Disk** has a hard-drive icon. Its options are **On, boot RS-DOS
+  (NitrOS-9 compatible)** and **On, boot RGB-DOS**, and the row shows
+  **(RS-DOS) ON** / **(RGB-DOS) ON** / **OFF**. Turning the hard disk off also
+  forgets the HD0/HD1 images saved in NVS.
+- **Setup → Machine:** the first row is **Choose Machine Type**. **CPU** is a
+  list of **6809** and **6309** with the running one marked *current*, instead
+  of a Yes/No "switch to the other CPU" question. The memory row reads
+  **CoCo 3 Memory** on a CoCo 3 and **CoCo 2 Memory (64K, fixed)** on a CoCo 2.
+
 ### v0.18.0 — October 18, 2026
 
 **Virtual hard disk.** VCC's hard disk device ("EmuDsk", `HardDisk/cc3vhd.cpp`)
@@ -503,33 +522,6 @@ SP0256-AL2 speech chip, the AY-3-8913 sound generator and the glue with its
 - Checked on the board: the test sentence is spoken on the CoCo 3 and the
   CoCo 2 with the real ROMs, at 59-60 FPS.
 - Details: [docs/ssc.md](docs/ssc.md).
-
-### v0.16.1 — October 13, 2026
-
-**Sound no longer breaks up when the emulator runs slow.** Until now the
-audio queue needed a steady 60 FPS: below that it ran dry several times a
-second, and if the audio interrupt was delayed the queue stayed full and
-dropped samples.
-
-- When the emulator cannot hold 60 FPS, playback now slows down with it and
-  stays continuous. Sound is slower and lower by the same amount the emulator
-  is slow (7 % at 55.6 FPS, about 1.3 semitones).
-- The audio interrupt now advances by the time that really passed, so a
-  delayed interrupt skips ahead instead of falling behind.
-- At 60 FPS nothing changes audibly: the rate correction stays within about
-  0.03 % on a static screen and 0.2 % on an animated one.
-- `/api/status` adds `catchup_ticks` to the `audio` counters.
-- Checked on the board: a test build slowed to 50 FPS settled with no
-  dropouts after the first seconds; CoCo 3 and CoCo 2 (6809) at 60 FPS, an
-  animated screen and a debugger pause all show none.
-- By ear: Orchestra-90 holds 60 FPS on the CoCo 3 and the CoCo 2 with no
-  audio issues, and CoCo 2 games that drop to 58 FPS show no audible problem.
-- `PLAY` pitch on the CoCo 3 is unchanged (`O2 A` 217.76 Hz, `O4 A`
-  867.70 Hz).
-- Known issue: on the CoCo 2, high `PLAY` notes come out flat (`O4 A` reads
-  836.99 Hz, 3.6 % low). The CoCo 2 drops to about 57.7 FPS while that note
-  plays, and sound now follows the emulator's speed. CoCo 2 needs more speed
-  margin; the audio code is doing what it should.
 
 ## ⚠️ Vibe Coding Alert
 

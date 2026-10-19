@@ -10,7 +10,7 @@ The OSD is rendered into the FabGL VGA framebuffer through the **OSD canvas** (`
 
 **Activation:** F3 toggles the overlay on/off. While active, `supervisor_update_and_render()` returns `true`, telling the main loop to skip emulation. (F1/F2 are reserved for the CoCo 3 keyboard matrix — see `keyboard-hal.md`.)
 
-**Machine selection:** The Settings menu's "Machine" row reflects the runtime-active machine (`g_machine_type`, not the compile-time `MACHINE_NAME`) and opens the Machine submenu; its own "Machine" row opens the `SV_MACHINE_SELECT` popup over that list (CoCo 2 / CoCo 3, `(current)` marker on the active one); ESC returns to the submenu. Picking the other machine asks to confirm the restart in the same popup (No / Yes, defaults to No); accepting calls `supervisor_set_machine_type()` which saves supervisor state, persists the choice in NVS (`"sv"` namespace, `"machine_type"` key), and calls `esp_restart()`. On boot, `supervisor_load_machine_type()` returns the NVS value or the compile-time `MACHINE_TYPE`. See `runtime-machine-switch.md` for the complete flow.
+**Machine selection:** The Settings menu's "Machine" row reflects the runtime-active machine (`g_machine_type`, not the compile-time `MACHINE_NAME`) and opens the Machine submenu; its own "Choose Machine Type" row opens the `SV_MACHINE_SELECT` popup over that list (CoCo 2 / CoCo 3, `(current)` marker on the active one); ESC returns to the submenu. Picking the other machine asks to confirm the restart in the same popup (No / Yes, defaults to No); accepting calls `supervisor_set_machine_type()` which saves supervisor state, persists the choice in NVS (`"sv"` namespace, `"machine_type"` key), and calls `esp_restart()`. On boot, `supervisor_load_machine_type()` returns the NVS value or the compile-time `MACHINE_TYPE`. See `runtime-machine-switch.md` for the complete flow.
 
 ---
 
@@ -55,9 +55,9 @@ States are defined in `supervisor.h` as `SV_State` enum:
 | `SV_MAIN_MENU` | Top-level menu with 8 tiles |
 | `SV_FILE_BROWSER` | **Disk Manager**: 2-row drive strip (all 4 drives) + file browser below. Left/Right selects active drive; Enter mounts; U ejects; F flushes. Also used as the stand-alone file browser. |
 | `SV_MACHINE_SELECT` | Machine select: popup over the Settings list (CoCo 2 / CoCo 3, `(current)` on the active one); picking the other asks to confirm the restart in the same window, defaulting to No |
-| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, RS-232 Pak toggle (shares UART0 with the Debug submenu's Echo Log; turning one on turns the other off), Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire, Cartridges (submenu) |
-| `SV_SOUND_MENU` | Settings -> Cartridges submenu: Orchestra-90 and Speech/Sound toggles (ON / OFF), Hard Disk (OFF / RS-DOS / RGB-DOS) |
-| `SV_CART_POPUP` | Popup over the Cartridges list: confirm a cartridge toggle and restart, or name its missing ROM file(s); from the Hard Disk row, the Off / RS-DOS / RGB-DOS picker |
+| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire, Multi-Pak - Insert Cartridges (submenu) |
+| `SV_SOUND_MENU` | Settings -> Multi-Pak submenu: Orchestra-90 and Speech/Sound toggles (ON / OFF), Hard Disk (OFF / (RS-DOS) ON / (RGB-DOS) ON), RS-232 Pak toggle (live; shares UART0 with the Debug submenu's Echo Log, turning one on turns the other off) |
+| `SV_CART_POPUP` | Popup over the Multi-Pak list: confirm a cartridge toggle and restart, or name its missing ROM file(s); from the Hard Disk row, the Off / RS-DOS / RGB-DOS picker |
 | `SV_KEYBOARD_MENU` | Settings -> Keyboard submenu: Keyboard Language (US English / Spanish Latam, cycles on ENTER) and Key Mapper |
 | `SV_JOY_SENSE` | Joy - Mouse Sensitivity: popup over the Settings list in the theme colours, with a live cursor pad tracking the PS/2 mouse, sensitivity bar (1-10), Invert-Y toggle |
 | `SV_ABOUT` | Info screen (version, free heap) |
@@ -151,7 +151,7 @@ This module is the **unified Disk Manager** (the `SV_FILE_BROWSER` state), drawn
 
 **Drive buttons (top row):** one white button per drive (`DRIVE 0`..`DRIVE 3`) with a diskette icon (red when mounted, grey when empty) and the mounted file name on two 14-character lines without its extension. The focused button is filled with the accent colour.
 
-With the hard disk on (Cartridges → Hard Disk), the row has six narrower buttons (84 px, names on two 8-character lines): `D0`..`D3`, then `HD0` and `HD1` with a hard-drive icon (red light when mounted). Internally they are slots: 0-3 are the WD1793 drives, `FB_HD_SLOT0` (4) + n is hard disk n (`vhd.cpp`). See `vhd.md`.
+With the hard disk on (Multi-Pak → Hard Disk), the row has six narrower buttons (84 px, names on two 8-character lines): `D0`..`D3`, then `HD0` and `HD1` with a hard-drive icon (red light when mounted). Internally they are slots: 0-3 are the WD1793 drives, `FB_HD_SLOT0` (4) + n is hard disk n (`vhd.cpp`). See `vhd.md`.
 
 **File list (below):** FAT32 directory browser, 8 dense rows (`SV_FB_VISIBLE_ITEMS`, 8x8 font). Name on the left, `<DIR>` or the size right-aligned; the selected row is a full-width accent bar. A thin scrollbar appears only when the list is longer than the page.
 - **scan:** `sv_fb_scan_directory()` reads directory entries into `SV_FileEntry[]` (max 128, allocated once in PSRAM)
@@ -362,15 +362,16 @@ SV_CONTENT_Y = BORDER_Y + TITLE_H + 4
 
 ### Machine submenu — machine type, CPU, CoCo 3 memory
 
-The Settings row **Machine** opens a submenu (`SV_MACHINE_MENU` state, an icon list like the Keyboard submenu) with three rows. All three are fixed at boot, so each asks to confirm (No / Yes, default No) and restarts the emulator. The Settings list has room for seven rows, which is why these live in a submenu.
+The Settings row **Machine** opens a submenu (`SV_MACHINE_MENU` state, an icon list like the Keyboard submenu) with three rows. All three are fixed at boot, so a change restarts the emulator: Choose Machine Type and CoCo 3 Memory ask to confirm (No / Yes, default No); the CPU picker restarts as soon as the other CPU is picked.
 
 | Row | Value shown | Popup | Persisted as |
 |---|---|---|---|
-| Machine | CoCo 2 / CoCo 3 | `SV_MACHINE_SELECT` | `machine_type` |
-| CPU | MC6809 / HD6309 | `SV_CPU_POPUP` — switches to the other CPU; see `cpu.md` | `cpu_variant` |
+| Choose Machine Type | CoCo 2 / CoCo 3 | `SV_MACHINE_SELECT` | `machine_type` |
+| CPU | MC6809 / HD6309 | `SV_CPU_POPUP` — picker listing 6809 and 6309, `current` on the running one; ENTER on the other saves and restarts; see `cpu.md` | `cpu_variant` |
 | CoCo 3 Memory | 128K / 512K / 1024K / 2048K | `SV_RAM_SELECT` — lists the four sizes with `(current)` on the active one, then confirms; see "RAM sizes" in `coco3-gime.md` | `coco3_ram` |
+| CoCo 2 Memory (on a CoCo 2, same row) | 64K | none — fixed, ENTER does nothing | — |
 
-`supervisor_load_cpu_variant()` and `supervisor_load_coco3_ram()` seed `g_cpu_variant` and `g_coco3_ram_kb` in `setup()` before `machine_init()`. The memory size is used by the CoCo 3 only; it can be set while the CoCo 2 is running and applies the next time the CoCo 3 is selected.
+`supervisor_load_cpu_variant()` and `supervisor_load_coco3_ram()` seed `g_cpu_variant` and `g_coco3_ram_kb` in `setup()` before `machine_init()`. The memory size is used by the CoCo 3 only, so it is set while the CoCo 3 is running; on a CoCo 2 the row shows the fixed 64K.
 
 ### Cartridge ROM — Load Cart
 
@@ -386,16 +387,17 @@ The choice is stored in `cart_rom` as a full SD path. `load_cart_rom()` in `mach
 
 A cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded. Loading or unloading a cartridge here also turns the Orchestra-90 setting off.
 
-### Cartridges — Orchestra-90, Speech/Sound and Hard Disk
+### Multi-Pak — Orchestra-90, Speech/Sound and Hard Disk
 
 See `orchestra90.md`, `ssc.md` and `vhd.md` for the cartridges themselves.
 
-The Settings row **Cartridges** (called Sound Carts before v0.18.0) opens a submenu (`SV_SOUND_MENU`, an icon list like the Keyboard submenu; the Settings list holds seven rows and is full) with three rows. All three cartridges are set up at boot, so a row opens a popup (`SV_CART_POPUP` state, 480 px wide, drawn with `sv_render_popup_w()` in the theme colours) before calling `supervisor_save_and_restart()`. The two ON/OFF rows share the popup code, which explains the change and asks No / Yes; each is an entry in `CART_TOGGLES` (`sv_menu.cpp`: name, enable flag, save function, ROM files and sizes, messages).
+The Settings row **Multi-Pak - Insert Cartridges** (a Multi-Pak icon; called Cartridges in v0.18.0 and Sound Carts before) opens a submenu (`SV_SOUND_MENU`, an icon list like the Keyboard submenu; the Settings list has six rows) with four rows. Orchestra-90, Speech/Sound and Hard Disk are set up at boot, so their rows open a popup (`SV_CART_POPUP` state, 480 px wide, drawn with `sv_render_popup_w()` in the theme colours) before calling `supervisor_save_and_restart()`. The two ON/OFF rows share the popup code, which explains the change and asks No / Yes; each is an entry in `CART_TOGGLES` (`sv_menu.cpp`: name, enable flag, save function, ROM files and sizes, messages).
 
 - **Orchestra-90** turns the `$FF7A`/`$FF7B` DAC ports on and puts `orch90.rom` in the cartridge slot at `$C000` in place of Disk BASIC (read once at boot by `load_cart_rom()` in `machine.cpp`). Turning it off clears the stored cartridge, so Disk BASIC is back after the restart.
 - **Speech/Sound** turns the `$FF7D`/`$FF7E` ports on. It has no CoCo-side ROM, so Disk BASIC stays. It needs `pic-7040-510.bin` (4096 bytes) and `sp0256-al2.bin` (2048 bytes).
 - **Turning either on** first checks its ROM file(s) (exact size where known). If one is missing, the popup names it and nothing changes.
-- **Hard Disk** opens a picker instead (`hd_popup_*` in `sv_menu.cpp`, same popup state): **Off**, **On, boot RS-DOS** (Disk BASIC, as in VCC's Multi-Pak with the FD-502 and the hard disk in two slots) and **On, boot RGB-DOS**. The current mode is preselected and marked "current"; the row value is OFF / RS-DOS / RGB-DOS. The mode comes from `vhd_en` plus whether the boot cartridge's file name is `rgbdos.rom`. RGB-DOS is marked "no ROM" unless `rgbdos.rom` is in `/roms/` or already chosen with Load Cart. Picking another mode saves `vhd_en` and `cart_rom` (RS-DOS clears it, RGB-DOS sets `rgbdos.rom` unless Load Cart already chose an RGB-DOS file) and restarts. The On modes, and Orchestra-90, turn each other off: both need the cartridge slot.
+- **Hard Disk** opens a picker instead (`hd_popup_*` in `sv_menu.cpp`, same popup state): **Off**, **On, boot RS-DOS (NitrOS-9 compatible)** (Disk BASIC, as in VCC's Multi-Pak with the FD-502 and the hard disk in two slots) and **On, boot RGB-DOS**. The current mode is preselected and marked "current"; the row value is OFF / (RS-DOS) ON / (RGB-DOS) ON. The mode comes from `vhd_en` plus whether the boot cartridge's file name is `rgbdos.rom`. RGB-DOS is marked "no ROM" unless `rgbdos.rom` is in `/roms/` or already chosen with Load Cart. Picking another mode saves `vhd_en` and `cart_rom` (RS-DOS clears it, RGB-DOS sets `rgbdos.rom` unless Load Cart already chose an RGB-DOS file) and restarts. The On modes, and Orchestra-90, turn each other off: both need the cartridge slot. The row has a hard-disk icon. Turning the hard disk off (Off, or Orchestra-90 on) also removes the saved HD0/HD1 images (`hd0_path`/`hd1_path`) from NVS in `supervisor_save_state()`, so turning it back on starts with no images mounted.
+- **RS-232 Pak** (moved here from Settings) toggles at once with no restart: ON sets `SERIAL_MODE_RS232` (UART0, forcing the Debug submenu's Echo Log off), OFF sets `SERIAL_MODE_OFF`.
 
 `supervisor_load_cart_config()` runs in `setup()` after `dw_bus_load_config()`, so the Orchestra-90 ROM replaces DriveWire's HDB-DOS ROM. While it is on there is no Disk BASIC.
 

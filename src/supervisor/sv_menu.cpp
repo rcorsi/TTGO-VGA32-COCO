@@ -594,6 +594,26 @@ static void draw_row_icon(OSDCanvas* tft, int icon, int x, int y, uint16_t bg, u
             row_icon_box(tft, x, y, 4, 9, 11, 11, SVW_ORANGE);
             break;
 
+        case ROW_ICON_MULTIPAK:     // Multi-Pak: base unit with four cartridges in its slots
+            row_icon_box(tft, x, y, 0, 6, 15, 11, SVW_DKGRAY);
+            row_icon_box(tft, x, y, 1, 9, 14, 9, SVW_GRAY);
+            for (int s = 0; s < 4; s++) {
+                row_icon_box(tft, x, y, 1 + s * 4, 1, 2 + s * 4, 5, SVW_GRAY);
+                row_icon_box(tft, x, y, 1 + s * 4, 1, 2 + s * 4, 2, SVW_RED);
+            }
+            break;
+
+        case ROW_ICON_HARDDISK:     // hard disk: case, platter with spindle, head arm, LED
+            row_icon_box(tft, x, y, 0, 0, 15, 11, SVW_DKGRAY);
+            row_icon_box(tft, x, y, 2, 2, 9, 9, SVW_GRAY);
+            row_icon_box(tft, x, y, 1, 4, 10, 7, SVW_GRAY);
+            row_icon_box(tft, x, y, 5, 5, 6, 6, SVW_BLACK);
+            row_icon_box(tft, x, y, 12, 1, 13, 2, SVW_WHITE);
+            row_icon_box(tft, x, y, 10, 2, 12, 3, SVW_WHITE);
+            row_icon_box(tft, x, y, 8, 3, 10, 4, SVW_WHITE);
+            row_icon_box(tft, x, y, 13, 9, 14, 10, SVW_GREEN);
+            break;
+
         case ROW_ICON_FOLDER:       // folder: tab and body
             row_icon_box(tft, x, y, 1, 1, 6, 2, SVW_ORANGE);
             row_icon_box(tft, x, y, 1, 3, 14, 10, SVW_ORANGE);
@@ -642,22 +662,18 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 }
 
 // ============================================================
-// Settings submenu and its Keyboard, Machine and Cartridges submenus
+// Settings submenu and its Keyboard, Machine and Multi-Pak submenus
 // ============================================================
 //
 // All are icon lists in the wide green frame.
 //
 // Settings rows (SV_SettingsRow):
 //   Machine      opens the Machine submenu
-//   RS-232 Pak   toggle; owns UART0 while on:
-//                  ON  -> SERIAL_MODE_RS232  (forces the debug Echo Log off)
-//                  OFF -> SERIAL_MODE_OFF
-//                The Echo Log toggle that shares the port is in the Debug submenu.
 //   Keyboard     opens the Keyboard submenu
 //   Joy - Mouse Sensitivity, WiFi / Debug, DriveWire   open their own screens
-//   Cartridges   opens the Cartridges submenu
+//   Multi-Pak - Insert Cartridges   opens the Multi-Pak submenu
 //
-// Cartridges rows (SV_SoundRow) — set up at boot, so each toggle asks to
+// Multi-Pak rows (SV_SoundRow) — set up at boot, so each toggle asks to
 // confirm and restarts (CART_TOGGLES, popup refused with the missing file
 // names if a ROM is not on the SD card):
 //   Orchestra-90  ON  -> DAC ports on, orch90.rom as the cartridge
@@ -672,12 +688,17 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //                 RGB-DOS -> $FF80-$FF86 decoded, rgbdos.rom as the cartridge
 //                 Both turn Orchestra-90 off. Images go on HD0/HD1 in the
 //                 Disk Manager.
+//   RS-232 Pak    toggle, live (no restart); owns UART0 while on:
+//                   ON  -> SERIAL_MODE_RS232  (forces the debug Echo Log off)
+//                   OFF -> SERIAL_MODE_OFF
+//                 The Echo Log toggle that shares the port is in the Debug submenu.
 //
 // Machine rows (SV_MachineRow) — all fixed at boot, so each asks to confirm
 // and restarts:
-//   Machine         CoCo 2 / CoCo 3 popup
-//   CPU             MC6809 / HD6309 popup
-//   CoCo 3 Memory   128K / 512K / 1024K / 2048K popup
+//   Choose Machine Type   CoCo 2 / CoCo 3 popup
+//   CPU                   6809 / 6309 picker
+//   CoCo 3 Memory         128K / 512K / 1024K / 2048K popup; on a CoCo 2 the
+//                         row reads "CoCo 2 Memory", fixed at 64K (no popup)
 //
 // Keyboard rows (SV_KeyboardRow):
 //   Keyboard Language   cycles the PS/2 layout (US English / Spanish Latam);
@@ -691,24 +712,24 @@ struct SV_ListRow {
 
 static const SV_ListRow SETTINGS_ROWS[SV_SET_COUNT] = {
     { "Machine",                 ROW_ICON_MACHINE   },
-    { "RS-232 Pak",              ROW_ICON_SERIAL    },
     { "Keyboard",                ROW_ICON_KEYBOARD  },
     { "Joy - Mouse Sensitivity", ROW_ICON_JOYSTICK  },
     { "WiFi / Debug",            ROW_ICON_WIFI      },
     { "DriveWire",               ROW_ICON_DRIVEWIRE },
-    { "Cartridges",              ROW_ICON_CART      },
+    { "Multi-Pak - Insert Cartridges", ROW_ICON_MULTIPAK },
 };
 
 static const SV_ListRow SOUND_ROWS[SV_SND_COUNT] = {
     { "Orchestra-90",  ROW_ICON_NOTE   },
     { "Speech/Sound",  ROW_ICON_SPEECH },
-    { "Hard Disk",     ROW_ICON_SD     },
+    { "Hard Disk",     ROW_ICON_HARDDISK },
+    { "RS-232 Pak",    ROW_ICON_SERIAL   },
 };
 
 static const SV_ListRow MACHINE_ROWS[SV_MACH_COUNT] = {
-    { "Machine",       ROW_ICON_MACHINE },
-    { "CPU",           ROW_ICON_CHIP    },
-    { "CoCo 3 Memory", ROW_ICON_PAGE    },
+    { "Choose Machine Type", ROW_ICON_MACHINE },
+    { "CPU",                 ROW_ICON_CHIP    },
+    { "CoCo 3 Memory",       ROW_ICON_PAGE    },   // "CoCo 2 Memory" on a CoCo 2
 };
 
 static const SV_ListRow KEYBOARD_ROWS[SV_KBD_COUNT] = {
@@ -724,7 +745,7 @@ void sv_settings_invalidate(void) {
     s_settings_drawn = -1;
 }
 
-// Cartridge toggle: a popup over the Cartridges list, wider than the usual
+// Cartridge toggle: a popup over the Multi-Pak list, wider than the usual
 // one for its two-line explanation. Turning a cartridge on needs its ROM
 // file(s) on the SD card: without them the popup names what is missing and
 // nothing changes. The Hard Disk row has its own picker (hd_popup_*).
@@ -874,8 +895,8 @@ void sv_cart_popup_render(Supervisor_t* sv) {
 // RGB-DOS instead reaches the RS-DOS virtual disks on the VHD from BASIC.
 enum { HD_OFF, HD_RSDOS, HD_RGBDOS, HD_MODE_COUNT };
 static const char* const HD_MODE_LABELS[HD_MODE_COUNT] = {
-    "Off", "On, boot RS-DOS (Disk BASIC)", "On, boot RGB-DOS" };
-static const char* const HD_MODE_VALUES[HD_MODE_COUNT] = { "OFF", "RS-DOS", "RGB-DOS" };
+    "Off", "On, boot RS-DOS (NitrOS-9 compatible)", "On, boot RGB-DOS" };
+static const char* const HD_MODE_VALUES[HD_MODE_COUNT] = { "OFF", "(RS-DOS) ON", "(RGB-DOS) ON" };
 
 static int8_t      s_hd_sel   = 0;
 static int8_t      s_hd_drawn = -1;      // row drawn selected; -1 = draw the window
@@ -972,14 +993,22 @@ static void hd_popup_render(void) {
     s_hd_drawn = s_hd_sel;
 }
 
-// CPU switch: the same kind of popup. The other CPU is always the target.
+// CPU picker: 6809 / 6309, the running CPU preselected and marked "current".
+// ENTER on the other one saves it and restarts; on the current one, closes.
 #define CPU_POPUP_W   480
 
-static int8_t s_cpu_sel   = 0;             // 0 = No, 1 = Yes
+static const uint8_t     CPU_VARIANTS[2]   = { CPU_VARIANT_MC6809, CPU_VARIANT_HD6309 };
+static const char* const CPU_LABELS[2]     = { "6809  (Motorola MC6809)", "6309  (Hitachi HD6309)" };
+
+static int8_t s_cpu_sel   = 0;             // row: 0 = 6809, 1 = 6309
 static int8_t s_cpu_drawn = -1;            // row drawn selected; -1 = draw the window
 
+static int cpu_current_index(void) {
+    return (g_cpu_variant == CPU_VARIANT_HD6309) ? 1 : 0;
+}
+
 static void cpu_toggle_open(Supervisor_t* sv) {
-    s_cpu_sel   = 0;
+    s_cpu_sel   = (int8_t)cpu_current_index();
     s_cpu_drawn = -1;
     sv->prev_state = sv->state;
     sv->state = SV_CPU_POPUP;
@@ -997,12 +1026,11 @@ void sv_cpu_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
             break;
 
         case HID_ENTER:
-            if (s_cpu_sel == 1) {
-                supervisor_save_cpu_variant(g_cpu_variant == CPU_VARIANT_HD6309 ? CPU_VARIANT_MC6809
-                                                                                 : CPU_VARIANT_HD6309);
+            if (s_cpu_sel != cpu_current_index()) {
+                supervisor_save_cpu_variant(CPU_VARIANTS[s_cpu_sel]);
                 supervisor_save_and_restart();   // never returns
             }
-            // fall through: No
+            // fall through: current CPU picked, nothing to change
         case HID_ESC:
             sv->state = SV_MACHINE_MENU;
             sv->needs_redraw = true;
@@ -1016,19 +1044,19 @@ void sv_cpu_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
 
 void sv_cpu_popup_render(Supervisor_t* sv) {
     (void)sv;
-    bool to_6309 = (g_cpu_variant != CPU_VARIANT_HD6309);
-    const char* title = to_6309 ? "Switch to HD6309?" : "Switch to MC6809?";
-    const char* msg1  = to_6309 ? "CoCo will restart with a Hitachi 6309 CPU."
-                                : "CoCo will restart with a Motorola 6809 CPU.";
-    const char* msg2  = to_6309 ? "Illegal 6809 opcodes will trap, as on the chip."
-                                : "6309 software will no longer run.";
+    const char* title = "Choose CPU";
+    const char* msg1  = "Changing the CPU restarts the emulator.";
+    const char* msg2  = "6309: illegal 6809 opcodes trap, as on the chip.";
 
     bool all = (s_cpu_drawn < 0);
+    int now = cpu_current_index();
     int ry = sv_render_popup_w(CPU_POPUP_W, title, msg1, msg2, 2, all);
     if (all) DEBUG_PRINTF("popup: %s: %s %s", title, msg1, msg2);
     for (int i = 0; i < 2; i++) {
         if (!all && i != s_cpu_sel && i != s_cpu_drawn) continue;
-        sv_render_popup_row_w(CPU_POPUP_W, ry + i * SVP_ROW_H, (i == 0) ? "No" : "Yes", NULL, i == s_cpu_sel);
+        sv_render_popup_row_w(CPU_POPUP_W, ry + i * SVP_ROW_H, CPU_LABELS[i],
+                              (i == now) ? "current" : NULL, i == s_cpu_sel);
+        if (i == s_cpu_sel) DEBUG_PRINTF("popup: %s > %s", title, CPU_LABELS[i]);
     }
     s_cpu_drawn = s_cpu_sel;
 }
@@ -1166,7 +1194,9 @@ static void machine_menu_activate(Supervisor_t* sv, int row) {
     switch (row) {
         case SV_MACH_TYPE: machine_select_open(sv); break;
         case SV_MACH_CPU:  cpu_toggle_open(sv);     break;
-        case SV_MACH_RAM:  ram_select_open(sv);     break;
+        case SV_MACH_RAM:
+            if (g_machine_type == 4) ram_select_open(sv);   // CoCo 2: fixed 64K
+            break;
     }
 }
 
@@ -1178,15 +1208,6 @@ static void settings_activate(Supervisor_t* sv, int row) {
             sv->menu_cursor = 0;
             sv->needs_redraw = true;
             break;
-
-        case SV_SET_RS232: {
-            SerialPortMode next = (g_serial_mode == SERIAL_MODE_RS232) ? SERIAL_MODE_OFF
-                                                                        : SERIAL_MODE_RS232;
-            serial_mode_apply(next);
-            supervisor_save_serial_mode(next);
-            sv->needs_redraw = true;
-            break;
-        }
 
         case SV_SET_KEYBOARD:
             sv->prev_state = sv->state;
@@ -1266,8 +1287,17 @@ void sv_sound_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
         case HID_UP:
         case HID_DOWN:  list_move_cursor(sv, hid_usage, SV_SND_COUNT); break;
         case HID_ENTER:
-            if (sv->menu_cursor == SV_SND_HARDDISK) hd_popup_open(sv);
-            else                                    cart_toggle_open(sv, sv->menu_cursor);
+            if (sv->menu_cursor == SV_SND_HARDDISK) {
+                hd_popup_open(sv);
+            } else if (sv->menu_cursor == SV_SND_RS232) {
+                SerialPortMode next = (g_serial_mode == SERIAL_MODE_RS232) ? SERIAL_MODE_OFF
+                                                                            : SERIAL_MODE_RS232;
+                serial_mode_apply(next);
+                supervisor_save_serial_mode(next);
+                sv->needs_redraw = true;
+            } else {
+                cart_toggle_open(sv, sv->menu_cursor);
+            }
             break;
         case HID_ESC:
             sv->state = SV_SETTINGS;
@@ -1299,7 +1329,6 @@ static const char* settings_value(int row, char* buf, size_t size) {
     switch (row) {
         // Runtime-active machine, not the compile-time default.
         case SV_SET_MACHINE:   return (g_machine_type == 4) ? MACHINE_NAME_COCO3 : MACHINE_NAME_COCO2;
-        case SV_SET_RS232:     return (g_serial_mode == SERIAL_MODE_RS232) ? "ON" : "OFF";
         case SV_SET_JOYSTICK:
             snprintf(buf, size, "%u", (unsigned)hal_joystick_get_sensitivity());
             return buf;
@@ -1315,6 +1344,7 @@ static const char* machine_value(int row, char* buf, size_t size) {
         case SV_MACH_TYPE: return (g_machine_type == 4) ? MACHINE_NAME_COCO3 : MACHINE_NAME_COCO2;
         case SV_MACH_CPU:  return (g_cpu_variant == CPU_VARIANT_HD6309) ? "HD6309" : "MC6809";
         case SV_MACH_RAM:
+            if (g_machine_type != 4) return "64K";
             snprintf(buf, size, "%uK", (unsigned)g_coco3_ram_kb);
             return buf;
         default:           return NULL;
@@ -1345,10 +1375,13 @@ static void render_icon_list(Supervisor_t* sv, const char* title, const SV_ListR
         const char* value = (list == LIST_SETTINGS) ? settings_value(i, buf, sizeof(buf))
                           : (list == LIST_MACHINE)  ? machine_value(i, buf, sizeof(buf))
                           : (list == LIST_SOUND)    ? (i == SV_SND_HARDDISK ? HD_MODE_VALUES[hd_mode_now()]
+                                                       : i == SV_SND_RS232 ? (g_serial_mode == SERIAL_MODE_RS232 ? "ON" : "OFF")
                                                        : CART_TOGGLES[i].enabled() ? "ON" : "OFF")
                           : (i == SV_KBD_LANGUAGE)  ? hal_keyboard_layout_name(g_kbd_layout)
                                                     : NULL;
-        sv_render_wide_row(y, rows[i].label, value, hl);
+        const char* label = (list == LIST_MACHINE && i == SV_MACH_RAM && g_machine_type != 4)
+                          ? "CoCo 2 Memory" : rows[i].label;
+        sv_render_wide_row(y, label, value, hl);
         draw_row_icon(tft, rows[i].icon, SVW_ICON_X, y + 2,
                       hl ? SVW_DKBLUE : SVW_GREEN, hl ? SVW_WHITE : SVW_BLACK);
         if (hl) DEBUG_PRINTF("menu: %s > %s %s", title, rows[i].label, value ? value : "");
@@ -1361,7 +1394,7 @@ void sv_settings_render(Supervisor_t* sv) {
 }
 
 void sv_sound_menu_render(Supervisor_t* sv) {
-    render_icon_list(sv, "Cartridges", SOUND_ROWS, SV_SND_COUNT, LIST_SOUND);
+    render_icon_list(sv, "Multi-Pak", SOUND_ROWS, SV_SND_COUNT, LIST_SOUND);
 }
 
 void sv_keyboard_menu_render(Supervisor_t* sv) {
@@ -1379,7 +1412,7 @@ void sv_machine_menu_render(Supervisor_t* sv) {
 // Drawn in the wide green frame as an icon list. Rows 0..2 open the debug
 // pages, the next row opens the "Dump RAM to SD" filename screen, and the
 // last toggles the Echo Log: debug output on the serial port
-// (SERIAL_MODE_DEBUG). It shares UART0 with the RS-232 Pak in Settings, so
+// (SERIAL_MODE_DEBUG). It shares UART0 with the RS-232 Pak in Multi-Pak, so
 // turning it on forces the Pak off.
 
 static const char* const DEBUG_PAGE_LABELS[SV_DBG_PAGE_COUNT] = {
