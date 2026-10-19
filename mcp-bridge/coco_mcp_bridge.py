@@ -188,6 +188,90 @@ def set_machine(machine_type: int, wait: bool = True, cpu: int | None = None,
             "initial_response": resp}
 
 
+# Disk mounts can read a whole floppy image into PSRAM, so the device allows
+# them up to 10 s (h_post_disk).
+DISK_TIMEOUT = float(os.environ.get("COCO_DISK_TIMEOUT", "15.0"))
+
+
+def _disk_drive(drive: int | str) -> str:
+    """Normalise a drive: 0-3 (floppy) or "hd0" / "hd1" (hard disk)."""
+    d = str(drive).strip().lower()
+    if d in ("0", "1", "2", "3", "hd0", "hd1"):
+        return d
+    raise ValueError('drive must be 0-3 (floppy) or "hd0" / "hd1" (hard disk)')
+
+
+def _disk_post(**data) -> dict:
+    r = httpx.post(f"{HOST}/api/disk", data=data, timeout=DISK_TIMEOUT)
+    r.raise_for_status()
+    return r.json()
+
+
+@mcp.tool()
+def list_disks() -> dict:
+    """List the mounted images. `drives` are the WD1793 floppy drives 0-3
+    (path, bytes, read_only, dirty). `hd_enabled` says whether the virtual hard
+    disk at $FF80-$FF86 is on (Settings > Cartridges > Hard Disk); `hard_disks`
+    are its two drives hd0 / hd1 (path, read_only)."""
+    return _get("/api/disk").json()
+
+
+@mcp.tool()
+def mount_disk(drive: int | str, path: str) -> dict:
+    """Mount an image from the SD card, as the Disk Manager does (the mount is
+    remembered and comes back at boot). `drive` is 0-3 for a floppy (.DSK /
+    .VDK) or "hd0" / "hd1" for a hard disk (.VHD). `path` is the full SD path,
+    e.g. "/vhd/EOU.VHD". Hard disks are only seen by the CoCo while the hard
+    disk is on (see list_disks); RGB-DOS checks for one at cold start, so
+    reset after mounting."""
+    return _disk_post(op="mount", drive=_disk_drive(drive), path=path)
+
+
+@mcp.tool()
+def eject_disk(drive: int | str) -> dict:
+    """Unmount drive 0-3 or "hd0" / "hd1". Floppy writes are flushed to the SD
+    card first."""
+    return _disk_post(op="eject", drive=_disk_drive(drive))
+
+
+@mcp.tool()
+def flush_disk(drive: int | str) -> dict:
+    """Write pending changes to the SD card now: floppy drive 0-3, or "hd0" /
+    "hd1" (flushes both hard disks)."""
+    return _disk_post(op="flush", drive=_disk_drive(drive))
+
+
+# USB HID usages the supervisor understands.
+OSD_KEYS = {
+    "up": 0x52, "down": 0x51, "left": 0x50, "right": 0x4F,
+    "enter": 0x28, "esc": 0x29, "backspace": 0x2A, "tab": 0x2B,
+    "pgup": 0x4B, "pgdn": 0x4E, "home": 0x4A, "end": 0x4D, "f": 0x09,
+}
+
+
+@mcp.tool()
+def osd_keys(keys: list[str], delay_s: float = 0.3) -> dict:
+    """Press keys in the supervisor menu (the OSD), in order. "toggle" opens or
+    closes it (like F3); the others reach it only while it is open: up, down,
+    left, right, enter, esc, backspace, tab, pgup, pgdn, home, end, f (flush in
+    the Disk Manager), or a raw HID usage number as a string. They never reach
+    the emulated keyboard. Screenshots don't work while the OSD is open (the
+    emulation is paused), so close it before taking one."""
+    sent = []
+    for k in keys:
+        name = str(k).strip().lower()
+        if name == "toggle":
+            _post("/api/key", toggle=1)
+        else:
+            hid = OSD_KEYS.get(name)
+            if hid is None:
+                hid = int(name, 0)
+            _post("/api/key", hid=hid)
+        sent.append(name)
+        time.sleep(delay_s)   # one menu step per frame or two
+    return {"ok": True, "sent": sent}
+
+
 @mcp.tool()
 def read_nvram() -> dict:
     """Dump all persisted settings in the device's NVS "sv" namespace as JSON

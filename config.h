@@ -25,8 +25,8 @@
 // Firmware version (reported by the WiFi debug API /api/status and shown on
 // the supervisor About screen). Bump both of these together on a release —
 // they are the single source of truth; nothing else should hardcode a version.
-#define FIRMWARE_VERSION        "0.17.0"
-#define FIRMWARE_BUILD_DATE     "16.10.2026"
+#define FIRMWARE_VERSION        "0.18.0"
+#define FIRMWARE_BUILD_DATE     "18.10.2026"
 
 // ------------------------------------------------------------
 // Build target — standalone USB flash vs. ESP32_Bootloader
@@ -226,6 +226,9 @@
 // Speech/Sound Cartridge: TMS7040 firmware and SP0256-AL2 mask ROM (MAME names).
 #define ROM_SSC_PIC_FILE        "pic-7040-510.bin"
 #define ROM_SSC_SPEECH_FILE     "sp0256-al2.bin"
+// VCC RGB-DOS: Disk BASIC for the virtual hard disk at $FF80-$FF86. Optional:
+// without it the ports still work for NitrOS-9 (emudsk driver).
+#define ROM_RGBDOS_FILE         "rgbdos.rom"
 #define COCO3_ROM_SIZE          (32 * 1024)
 #define COCO3_PHYSICAL_RAM      (512 * 1024)
 

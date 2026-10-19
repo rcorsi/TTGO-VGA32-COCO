@@ -10,13 +10,14 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 
 - **One firmware, two CoCos** — CoCo 2 and CoCo 3 live in the same binary. Pick your machine at boot from NVS or flip it live in the supervisor menu.
 - **Cycle-accurate to the chip** — full MC6809 CPU emulation with accurate cycle counts, faithful enough to run the software that matters.
-- **MC6809 or HD6309** — switch the CPU from Setup → Machine → CPU. The Hitachi 6309 adds its extra registers and instructions, native mode and traps (new in v0.15.0, not yet tested on hardware).
+- **MC6809 or HD6309** — switch the CPU from Setup → Machine → CPU. The Hitachi 6309 adds its extra registers and instructions, native mode and traps (new in v0.15.0; boots NitrOS-9 for the 6309 since v0.18.0).
 - **Program cartridges** — load a `.ccc` or `.rom` cartridge ROM from the SD card with the supervisor's **Cart** menu: up to 16 KB on the CoCo 2, and bank-switched ROMs up to 128 KB on the CoCo 3 (new in v0.16.0).
 - **Orchestra-90/CC** — the stereo music cartridge's two DACs, mixed to mono on the audio jack, with its ROM in the cartridge slot.
 - **Speech/Sound Cartridge** — Tandy's talking cartridge, fully emulated (TMS7040 firmware, SP0256-AL2 speech, AY-3-8913 sound) on the ESP32's second core, alongside Disk BASIC. Needs two ROM dumps (new in v0.17.0).
 - **Authentic video, both eras** — MC6847 VDG for CoCo 2 (text plus every semigraphics and graphics mode) and the TCC1014 GIME for CoCo 3 (128 KB to 2 MB RAM with MMU, 16-color palette, native graphics up to 640 px), output over crisp VGA at 640×200 @ 60 Hz via FabGL in 64-color direct mode.
 - **Real-time speed** — CoCo 3 text and graphics modes run at a paced 60 FPS, the speed of the real machine (v0.12.0 rewrote the GIME video path; it used to manage ~39 FPS at the BASIC prompt and ~20 FPS in graphics).
 - **Real disk drives** — WD1793 floppy controller with `.DSK` and `.VDK` support, and entire disk images cached in PSRAM for zero-latency access.
+- **Virtual hard disk** — VCC's hard disk device at `$FF80`: two `.VHD` images of up to 512 MB, read in place from the SD card. Boots NitrOS-9 (EOU) with the `emudsk` driver, and RGB-DOS gives BASIC its virtual drives (new in v0.18.0).
 - **Complete hardware soul** — dual 6821 PIAs (keyboard, joystick, audio I/O), SAM6883 multiplexer on CoCo 2, GIME-integrated MMU on CoCo 3.
 - **FUJINET SUPPORT** - External fujinet support - still experimental
 
@@ -122,9 +123,13 @@ can browse to any other folder:
 └── biggame.ccc        # up to 128 KB (bank-switched) on the CoCo 3
 ```
 
-The Speech/Sound Cartridge (Setup → Sound Carts → Speech/Sound) needs two ROM
+The Speech/Sound Cartridge (Setup → Cartridges → Speech/Sound) needs two ROM
 dumps in `/roms/`, with the MAME names: `pic-7040-510.bin` (4096 bytes) and
 `sp0256-al2.bin` (2048 bytes). See [docs/ssc.md](docs/ssc.md).
+
+The hard disk's RGB-DOS mode (Setup → Cartridges → Hard Disk) needs VCC's
+`rgbdos.rom` in `/roms/`. Its RS-DOS mode uses `disk11.rom`. See
+[docs/vhd.md](docs/vhd.md).
 
 ### If the Emulator Does Not Start
 
@@ -137,6 +142,7 @@ and restart.
 
 - **`.DSK`** (JVC format) — fully supported
 - **`.VDK`** (Virtual Disk with 12-byte header) — fully supported
+- **`.VHD`** (raw hard disk image, VCC format) — on HD0/HD1 while the hard disk is on
 
 ## Build & Flash
 
@@ -290,7 +296,7 @@ The remappable keys are the symbol keys, the arrows and, on a CoCo 3, ALT, CTRL,
 
 Press **F3** to open the supervisor: a box in the CoCo's green, black and dark blue over the paused emulator picture. The main menu is a grid of eight icon tiles — all four arrows move, **ENTER** opens a tile, **ESC** goes back one level and **F3** closes the menu from anywhere. Questions and confirmations appear as small white popups and always start on **No**.
 
-- **Disks** — Disk Manager. A button per drive (0–3) shows what is mounted; the SD card browser sits below. **TAB** switches between drives and files. ENTER on a `.DSK`/`.VDK` image asks which drive takes it (the first empty one is preselected) and confirms before replacing a disk or mounting the same image twice; ENTER on a mounted drive asks to unmount it. **F** flushes cached writes to the SD card.
+- **Disks** — Disk Manager. A button per drive (0–3) shows what is mounted, plus HD0 and HD1 while the hard disk is on; the SD card browser sits below. `.VHD` images mount on HD0/HD1. **TAB** switches between drives and files. ENTER on a `.DSK`/`.VDK` image asks which drive takes it (the first empty one is preselected) and confirms before replacing a disk or mounting the same image twice; ENTER on a mounted drive asks to unmount it. **F** flushes cached writes to the SD card.
 - **Cart** — Load Cart. Browse the SD card for a `.ccc` or `.rom` cartridge ROM and press ENTER on it; **Unload cartridge** removes it. The cartridge takes effect at a restart, so a popup asks whether to restart now or keep the choice for the next restart. The cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded.
 - **Setup**
   - **Machine** — switch between CoCo 2 and CoCo 3 (restarts after a confirmation; persisted to NVS)
@@ -299,6 +305,7 @@ Press **F3** to open the supervisor: a box in the CoCo's green, black and dark b
   - **Joy - Mouse Sensitivity** — joystick 1 / PS/2 mouse, with a live cursor pad
   - **WiFi / Debug** — *Config WiFi* scans for networks and takes the password from the keyboard; *Read WiFi from SD Card* loads it from `cocowifi.cfg`; plus connect, disconnect, forget, and the debug server switch (see [docs/wifi-debug.md](docs/wifi-debug.md))
   - **DriveWire** — *External Server* on/off with host, port and HDB-DOS ROM (experimental FujiNet support — see below)
+  - **Cartridges** — *Orchestra-90* and *Speech/Sound* on/off, and *Hard Disk*: Off, On with RS-DOS, or On with RGB-DOS (each change restarts)
 - **WiFi** — the same WiFi / Debug screen as in Setup, one step from the main menu
 - **Reset** — reset the machine, with confirmation
 - **Debug** — CPU / GIME status, memory hex dump, RS-232 Pak status, Dump RAM to SD, and the **Echo Log** toggle (debug output on the serial port; it shares the port with the RS-232 Pak, so turning one on turns the other off)
@@ -360,6 +367,8 @@ src/
 │   ├── sound.h/cpp           Sound mixing core — mux/DAC/single-bit, XRoar gain model
 │   ├── orch90.h/cpp          Orchestra-90/CC cartridge — two DAC latches ($FF7A/$FF7B)
 │   ├── ssc/                  Speech/Sound Cartridge ($FF7D/$FF7E) — TMS7040, SP0256-AL2, AY-3-8913, glue; runs on core 0
+│   ├── vhd.h/cpp             Virtual hard disk ($FF80-$FF86) — VCC's EmuDsk device, two .VHD drives
+│   ├── blockfile.h/cpp       Image files read and written in place, a sector at a time
 │   ├── becker.h/cpp          Becker port ($FF41/$FF42) — DriveWire byte channel
 │   └── font_gime.h           GIME font ROM — 128 chars × 12 rows (PROGMEM)
 ├── hal/                    Hardware Abstraction Layer
@@ -373,7 +382,7 @@ src/
 │   └── osd_canvas.h/cpp      OSD drawing API backed by FabGL Canvas (supervisor OSD)
 ├── supervisor/             On-Screen Display system (HAL-agnostic via osd_canvas)
 │   ├── supervisor.h/cpp      OSD lifecycle and state machine
-│   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard, Sound Carts and Debug lists; machine, CPU and cartridge popups
+│   ├── sv_menu.h/cpp         Main menu tiles and icons; Setup, Keyboard, Cartridges and Debug lists; machine, CPU, cartridge and hard disk popups
 │   ├── sv_disk.h/cpp         WD1793 FDC emulation and PSRAM cache
 │   ├── sv_filebrowser.h/cpp  Disk Manager — drive buttons, SD card browser, mount popups
 │   ├── sv_cart.h/cpp         Load Cart — cartridge ROM browser, unload, restart popup
@@ -403,6 +412,7 @@ tools/
 ├── cpu_test/               Host tests for the CPU cores (vectors, 6809 vs 6309, optional XRoar comparison)
 ├── gime_render_test/       Host test for the GIME scanline renderers
 ├── gime_ram_test/          Host test for GIME address translation at each CoCo 3 RAM size
+├── vhd_test/               Hard disk: test image builders and a port test over the debug API
 ├── perf/                   Benchmark and measurement scripts
 ├── dw_test_server.py, dw_proxy.py   DriveWire test server and proxy
 └── frequency_meter.py    Audio test: measures the pitch of the board's sound output from a PC audio input
@@ -421,6 +431,7 @@ All technical documentation is in the `docs/` directory:
 | [cpu.md](docs/cpu.md) | MC6809 and HD6309 CPUs — registers, interrupts, native mode, traps, host tests |
 | [orchestra90.md](docs/orchestra90.md) | Orchestra-90/CC cartridge — DAC ports, audio mix, ROM and autostart |
 | [ssc.md](docs/ssc.md) | Speech/Sound Cartridge — ports, status bits, chips, core-0 task, audio mix, host tests |
+| [vhd.md](docs/vhd.md) | Virtual hard disk — modes, booting NitrOS-9, RGB-DOS layout, ports, SD performance |
 | [coco3-gime.md](docs/coco3-gime.md) | CoCo 3 GIME porting guide, register map, MMU |
 | [disk-hal.md](docs/disk-hal.md) | WD1793 FDC emulation, HALT/NMI flow, PSRAM disk cache |
 | [drivewire.md](docs/drivewire.md) | DriveWire modes, Becker port, built-in server; diagrams of the floppy vs DriveWire sector path |
@@ -436,7 +447,7 @@ All technical documentation is in the `docs/` directory:
 ## Known Limitations
 
 - DMK disk format is recognized but not mountable
-- HD6309 support is new and has not been tested on the board yet; it is checked on the host against XRoar's CPU core
+- HD6309 support is checked on the host against XRoar's CPU core; on the board it has run NitrOS-9 (EOU, 6309 build) but no wider test yet
 - CoCo 3 memory sizes other than 512K are new and have not been tested on the board yet
 - Orchestra-90 plays in mono (one DAC pin), and Disk BASIC is unavailable while it is on
 - The Speech/Sound Cartridge plays in mono, and its sound holds briefly while core 0 is busy (screenshots, heavy WiFi traffic); PSG music programs are not tested yet
@@ -493,6 +504,34 @@ mode, with diagrams.
 
 ## Changelog
 
+### v0.18.0 — October 18, 2026
+
+**Virtual hard disk.** VCC's hard disk device ("EmuDsk", `HardDisk/cc3vhd.cpp`)
+at `$FF80-$FF86`: two `.VHD` images of up to 512 MB, read and written in place
+on the SD card. NitrOS-9 from the EOU images boots with its `emudsk` driver.
+
+- **Setup → Cartridges → Hard Disk** picks **Off**, **On, boot RS-DOS** or
+  **On, boot RGB-DOS**. RS-DOS is VCC's Multi-Pak setup: Disk BASIC boots, and
+  `DOS` starts NitrOS-9 from a floppy that then finds the VHD. RGB-DOS
+  (`rgbdos.rom` in `/roms/`) gives BASIC the RS-DOS virtual drives on the VHD;
+  type `DRIVE OFF` before `DOS` to boot a floppy from it.
+- **Setup → Sound Carts is now Setup → Cartridges**, with the Hard Disk row
+  next to Orchestra-90 and Speech/Sound.
+- **Disk Manager** shows HD0 and HD1 while the hard disk is on; `.VHD` images
+  mount there and come back at every boot.
+- **Fast enough for NitrOS-9**: about 0.8 ms per sector in sequence and 4 ms
+  with seeks. Arduino's file layer threw away a 4 KB buffer on every seek
+  (9.6 ms per sector); hard disk files now use a 512-byte buffer, which also
+  cuts the internal RAM an open file costs from about 5 KB to 760 bytes.
+- **Debug API and MCP bridge**: `/api/disk` takes `drive=hd0` / `hd1`. The
+  bridge gains `list_disks`, `mount_disk`, `eject_disk`, `flush_disk` (floppies
+  and hard disks) and `osd_keys`, which drives the supervisor menu.
+- Checked on the board: EOU NitrOS-9 for the 6309 boots from `63EMU.DSK` with
+  `63SDC.VHD` on HD0, on the emulated HD6309 (the first real software checked
+  on that CPU on the board). RGB-DOS's detection and disk routines were checked
+  against a disassembly of `rgbdos.rom`.
+- Details: [docs/vhd.md](docs/vhd.md).
+
 ### v0.17.0 — October 15, 2026
 
 **Speech/Sound Cartridge.** Tandy's 26-3144 talking cartridge, ported from
@@ -501,8 +540,8 @@ microcontroller running the cartridge's own text-to-speech firmware, the
 SP0256-AL2 speech chip, the AY-3-8913 sound generator and the glue with its
 2 KB of RAM. Programs write text to `$FF7E` and the cartridge speaks it.
 
-- **Setup → Sound Carts** is a new submenu with the Orchestra-90 and
-  Speech/Sound toggles (the Setup list was full). Turning the cartridge on
+- **Setup → Sound Carts** (Cartridges since v0.18.0) is a new submenu with
+  the Orchestra-90 and Speech/Sound toggles (the Setup list was full). Turning the cartridge on
   restarts the emulator; if a ROM is missing the popup names it.
 - Needs `pic-7040-510.bin` and `sp0256-al2.bin` in `/roms/`. Works on the
   CoCo 2 and the CoCo 3, alongside Disk BASIC and Orchestra-90.
