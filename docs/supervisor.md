@@ -285,8 +285,8 @@ S9033C00xx
 
 The "Dump RAM to SD" row of the Debug submenu is an action, not a page: ENTER on it calls `sv_debug_begin_dump()` and enters the `SV_DEBUG_DUMP_NAME` state instead of opening a debug page. The screen has three sub-phases tracked by `SV_DumpPhase` in `SV_DebugState`:
 
-- **`SV_DUMP_INPUT`** — filename entry. Type an up-to-8-char base name (defaults to `COCODUMP`); the supervisor HID route only delivers uppercase letters, digits, BACKSPACE, ENTER and ESC, which keeps names FAT-friendly. ENTER (non-empty) starts the save; ESC returns to the Debug submenu.
-- **`SV_DUMP_SAVING`** — the render draws a "Saving…" banner first (FabGL scans the framebuffer out continuously, so it is on screen immediately), then performs the **blocking** write, then flips to the result phase. Emulation is already paused while the supervisor is open.
+- **`SV_DUMP_INPUT`** — filename entry. Type an up-to-8-char base name. The suggested default is the first `DUMPnnn` (`DUMP001`, `DUMP002`, …) with no `-RAM.txt` on the card, so a repeat dump doesn't overwrite the last one; ENTER keeps it, the first letter or digit typed replaces it, and BACKSPACE edits it; the supervisor HID route only delivers uppercase letters, digits, BACKSPACE, ENTER and ESC, which keeps names FAT-friendly. ENTER (non-empty) starts the save; ESC returns to the Debug submenu.
+- **`SV_DUMP_SAVING`** — the render draws a "Saving…" banner first (FabGL scans the framebuffer out continuously, so it is on screen immediately) with the real sizes (64KB CPU space + the machine's RAM), then performs the **blocking** write, then flips to the result phase. A progress bar with a percentage covers both files; the write loops advance it every 4KB of memory and it is redrawn only when the percentage changes. Emulation is already paused while the supervisor is open.
 - **`SV_DUMP_RESULT`** — shows the saved file paths and sizes (or an error in red). Any key returns to the Debug submenu.
 
 **Output:** two hex-text files are written under `/DUMPS/` on the SD card (created if missing), both in the same `AAAAA: bb bb … |ascii|` layout as the serial hex dump:
@@ -294,9 +294,9 @@ The "Dump RAM to SD" row of the Debug submenu is an action, not a page: ENTER on
 | File | Contents |
 |---|---|
 | `/DUMPS/<NAME>-CPU.txt` | 64KB CPU address space via `machine_read($0000–$FFFF)` — RAM through the current MMU map, plus mapped ROM and I/O (what the 6809 sees now). 4-digit addresses. |
-| `/DUMPS/<NAME>-RAM.txt` | Full physical RAM straight from `m->ram_physical`: the configured size on CoCo 3 (512KB by default) (5-digit addresses), 64KB on CoCo 2. |
+| `/DUMPS/<NAME>-RAM.txt` | Full physical RAM straight from `m->ram_physical`: the configured size on CoCo 3 (`m->ram_size`: 128KB–2MB; 5-digit addresses, 6 digits for 2MB), 64KB on CoCo 2. |
 
-Lines are batched through a 4KB static buffer (`s_dump_buf`) so a 512KB dump becomes ~256 bulk SD writes rather than 32K per-line writes. The RAM hex file is ~2.4 MB and the write blocks for roughly 20–30s on the 4 MHz SD bus; serial logging reports progress.
+Lines are batched through a 4KB static buffer (`s_dump_buf`) so a 512KB dump becomes ~256 bulk SD writes rather than 32K per-line writes. The RAM hex file is about 4.7× the RAM size (~2.4 MB for 512KB, ~9.7 MB for 2MB), and the write blocks for the whole time; the on-screen bar and serial logging report progress.
 
 ### sv_keymap.cpp — Key Mapper
 
