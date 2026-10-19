@@ -10,7 +10,7 @@ The emulation is a port of VCC's `ssc/` module (commit db8f7d7, by 780TECH),
 itself ported from MAME's `coco_ssc.cpp`. All four parts are emulated: there is
 no shortcut, because the text-to-speech rules live in the firmware.
 
-**Turning it on:** F3 → Setup → Sound Carts → Speech/Sound (ON / OFF). It
+**Turning it on:** F3 → Setup → Cartridges → Speech/Sound (ON / OFF). It
 restarts the emulator. It works on the CoCo 2 and the CoCo 3, alongside Disk
 BASIC (it has no CoCo-side ROM, so it is decoded next to the floppy controller
 like a built-in Multi-Pak) and alongside Orchestra-90 (`$FF7A/B` do not
@@ -38,7 +38,7 @@ at boot the cartridge stays off for that boot (the setting is kept).
 | `src/core/ssc/ssc_bus.h` | Chip-to-glue wiring (direct calls instead of `std::function`) |
 | `src/core/sound.cpp` | `sound_set_ssc()` — mixes the cartridge into the audio output |
 | `src/core/machine.cpp` | `$FF7D`/`$FF7E` decode, ROM load, reset, per-scanline call |
-| `src/supervisor/sv_menu.cpp` | Sound Carts row and confirm popup (`CART_TOGGLES`) |
+| `src/supervisor/sv_menu.cpp` | Cartridges row and confirm popup (`CART_TOGGLES`) |
 | `tools/ssc_test/` | Host tests (see below) |
 
 The chip cores keep their BSD-3-Clause notices (MAME: hap, Tim Lindner, Joseph

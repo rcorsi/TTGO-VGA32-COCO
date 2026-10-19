@@ -25,9 +25,6 @@ static uint8_t s_bounce[512];
 // One SD sector refills in ~1.2 ms and costs 3.5 KB less internal RAM.
 #define BLOCKFILE_STDIO_BUF 512
 
-// Bring-up timing (microseconds), reported by GET /api/disk.
-BlockFileStats g_blockfile_stats;
-
 // Open the handle if it was closed by the idle timer.
 static bool ensure_open(BlockFile* bf) {
     if (!blockfile_is_open(bf)) return false;
@@ -92,13 +89,9 @@ void blockfile_close(BlockFile* bf) {
 }
 
 size_t blockfile_read(BlockFile* bf, uint32_t offset, uint8_t* buf, size_t len) {
-    if (offset >= bf->size) return 0;
-    uint32_t t0 = micros();
-    if (!ensure_open(bf)) return 0;
-    uint32_t t1 = micros();
+    if (offset >= bf->size || !ensure_open(bf)) return 0;
     if (len > bf->size - offset) len = bf->size - offset;
     if (!position(bf, offset, false)) return 0;
-    uint32_t t2 = micros();
     size_t done = 0;
     while (done < len) {
         size_t chunk = len - done;
@@ -109,13 +102,6 @@ size_t blockfile_read(BlockFile* bf, uint32_t offset, uint8_t* buf, size_t len) 
         done += got;
     }
     bf->pos = (done == len) ? offset + done : UINT32_MAX;
-    uint32_t t3 = micros();
-    BlockFileStats* st = &g_blockfile_stats;
-    st->reads++;
-    st->open_us += t1 - t0;
-    st->seek_us += t2 - t1;
-    st->read_us += t3 - t2;
-    if (t3 - t0 > st->max_us) st->max_us = t3 - t0;
     return done;
 }
 

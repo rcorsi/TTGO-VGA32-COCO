@@ -4,7 +4,7 @@ The Orchestra-90/CC is a Tandy cartridge with two 8-bit DACs for stereo music
 and an 8 KB ROM holding its music editor. The emulation is a port of XRoar's
 `orch90.c`.
 
-**Turning it on:** F3 → Setup → Sound Carts → Orchestra-90 (ON / OFF). It needs `orch90.rom`
+**Turning it on:** F3 → Setup → Cartridges → Orchestra-90 (ON / OFF). It needs `orch90.rom`
 in `/roms/` on the SD card and restarts the emulator. While it is on, the
 cartridge ROM takes the place of Disk BASIC, so there are no disk commands.
 It works on both the CoCo 2 and the CoCo 3.
@@ -16,7 +16,7 @@ It works on both the CoCo 2 and the CoCo 3.
 | `src/core/orch90.h/.cpp` | The two DAC latches and the enable flag |
 | `src/core/sound.cpp` | `sound_set_external()` — mixes the cartridge into the audio output |
 | `src/core/machine.cpp` | `$FF7A`/`$FF7B` decode, cartridge ROM load, autostart pulse |
-| `src/supervisor/sv_menu.cpp` | Sound Carts row and the shared confirm popup (`SV_CART_POPUP`) |
+| `src/supervisor/sv_menu.cpp` | Cartridges row and the shared confirm popup (`SV_CART_POPUP`) |
 | `src/supervisor/supervisor.cpp` | NVS load/save (`supervisor_load_cart_config()` and friends) |
 
 ## Hardware model

@@ -65,10 +65,4 @@ void blockfile_flush(BlockFile* bf);
 // been idle for BLOCKFILE_IDLE_MS.
 void blockfile_tick(BlockFile* bf, uint32_t now_ms);
 
-// Bring-up timing of blockfile_read(), summed over all calls.
-struct BlockFileStats {
-    uint32_t reads, open_us, seek_us, read_us, max_us;
-};
-extern BlockFileStats g_blockfile_stats;
-
 #endif // BLOCKFILE_H

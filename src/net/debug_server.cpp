@@ -36,7 +36,6 @@
 #include "../supervisor/sv_disk.h"
 #include "../core/ssc/ssc.h"
 #include "../core/vhd.h"
-#include "../core/blockfile.h"
 #include "../utils/debug.h"
 #include "../../config.h"           // MACHINE_NAME_COCO2/3, FW version
 
@@ -278,10 +277,7 @@ static void h_get_disk() {
         }
         j += "}";
     }
-    const BlockFileStats* bs = &g_blockfile_stats;
-    j += "],\"hd_stats\":{\"reads\":" + String(bs->reads) + ",\"open_us\":" + String(bs->open_us)
-       + ",\"seek_us\":" + String(bs->seek_us) + ",\"read_us\":" + String(bs->read_us)
-       + ",\"max_us\":" + String(bs->max_us) + "}}";
+    j += "]}";
     send_json(200, j);
 }
 

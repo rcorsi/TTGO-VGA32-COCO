@@ -55,9 +55,9 @@ States are defined in `supervisor.h` as `SV_State` enum:
 | `SV_MAIN_MENU` | Top-level menu with 8 tiles |
 | `SV_FILE_BROWSER` | **Disk Manager**: 2-row drive strip (all 4 drives) + file browser below. Left/Right selects active drive; Enter mounts; U ejects; F flushes. Also used as the stand-alone file browser. |
 | `SV_MACHINE_SELECT` | Machine select: popup over the Settings list (CoCo 2 / CoCo 3, `(current)` on the active one); picking the other asks to confirm the restart in the same window, defaulting to No |
-| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, RS-232 Pak toggle (shares UART0 with the Debug submenu's Echo Log; turning one on turns the other off), Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire, Sound Carts (submenu) |
-| `SV_SOUND_MENU` | Settings -> Sound Carts submenu: Orchestra-90 and Speech/Sound toggles (ON / OFF) |
-| `SV_CART_POPUP` | Popup over the Sound Carts list: confirm a cartridge toggle and restart, or name its missing ROM file(s) |
+| `SV_SETTINGS` | Settings submenu, an icon list in the wide green frame: Machine, RS-232 Pak toggle (shares UART0 with the Debug submenu's Echo Log; turning one on turns the other off), Keyboard (submenu), Joy - Mouse Sensitivity, WiFi / Debug, DriveWire, Cartridges (submenu) |
+| `SV_SOUND_MENU` | Settings -> Cartridges submenu: Orchestra-90 and Speech/Sound toggles (ON / OFF), Hard Disk (OFF / RS-DOS / RGB-DOS) |
+| `SV_CART_POPUP` | Popup over the Cartridges list: confirm a cartridge toggle and restart, or name its missing ROM file(s); from the Hard Disk row, the Off / RS-DOS / RGB-DOS picker |
 | `SV_KEYBOARD_MENU` | Settings -> Keyboard submenu: Keyboard Language (US English / Spanish Latam, cycles on ENTER) and Key Mapper |
 | `SV_JOY_SENSE` | Joy - Mouse Sensitivity: popup over the Settings list in the theme colours, with a live cursor pad tracking the PS/2 mouse, sensitivity bar (1-10), Invert-Y toggle |
 | `SV_ABOUT` | Info screen (version, free heap) |
@@ -151,24 +151,26 @@ This module is the **unified Disk Manager** (the `SV_FILE_BROWSER` state), drawn
 
 **Drive buttons (top row):** one white button per drive (`DRIVE 0`..`DRIVE 3`) with a diskette icon (red when mounted, grey when empty) and the mounted file name on two 14-character lines without its extension. The focused button is filled with the accent colour.
 
+With the hard disk on (Cartridges → Hard Disk), the row has six narrower buttons (84 px, names on two 8-character lines): `D0`..`D3`, then `HD0` and `HD1` with a hard-drive icon (red light when mounted). Internally they are slots: 0-3 are the WD1793 drives, `FB_HD_SLOT0` (4) + n is hard disk n (`vhd.cpp`). See `vhd.md`.
+
 **File list (below):** FAT32 directory browser, 8 dense rows (`SV_FB_VISIBLE_ITEMS`, 8x8 font). Name on the left, `<DIR>` or the size right-aligned; the selected row is a full-width accent bar. A thin scrollbar appears only when the list is longer than the page.
 - **scan:** `sv_fb_scan_directory()` reads directory entries into `SV_FileEntry[]` (max 128, allocated once in PSRAM)
-- **sort:** `..` always first, then directories (alphabetical), then supported files (.dsk/.vdk), then others (dimmed, not mountable)
+- **sort:** `..` always first, then directories (alphabetical), then supported files (.dsk/.vdk, and .vhd while the hard disk is on), then others (dimmed, not mountable)
 
 **Keys:**
 - Tab switches between buttons and list; Up from the first file goes to the buttons, Down from the buttons returns to the list; Left/Right move between buttons.
 - List: Enter on a folder descends, Backspace = parent, PgUp/PgDn/Home/End.
-- Enter on a supported file opens the "Mount disk on" popup: each drive with its current contents plus Cancel, first empty drive preselected. Choosing an occupied drive asks "Replace disk?"; choosing an empty one while the image is already mounted elsewhere asks "Mount again?".
+- Enter on a supported file opens the "Mount disk on" popup: each drive with its current contents plus Cancel, first empty drive preselected. A `.vhd` opens "Mount hard disk on" with HD0 / HD1 instead. Choosing an occupied drive asks "Replace disk?"; choosing an empty one while the image is already mounted elsewhere asks "Mount again?".
 - Enter on a mounted drive button asks "Unmount disk" (eject flushes the dirty cache first).
 - Every confirmation is No / Yes and defaults to No. After a mount the screen stays open.
-- F flushes the dirty cache to SD: the focused drive when on the buttons, all drives when in the list.
+- F flushes the dirty cache to SD: the focused drive when on the buttons (both hard disks for HD0/HD1), all drives and hard disks when in the list.
 - ESC returns to the main menu; F1/F3 close the supervisor.
 
 **Popups** are a sub-state of this screen (`pop` in `sv_filebrowser.cpp`), not an `SV_State`: white window, double accent border, accent title bar, up to two message lines, option rows. Closing one repaints the whole screen.
 
 **Redraw:** only the two affected rows or buttons repaint on a keypress; the list repaints when it scrolls or the folder changes. `sv_filebrowser_invalidate()` forces a full repaint (called by the supervisor when the screen is entered).
 
-**Supported formats:** `.dsk` (JVC) and `.vdk` = fully supported. `.dmk` = recognized but not mountable.
+**Supported formats:** `.dsk` (JVC) and `.vdk` = fully supported. `.vhd` = hard disk images, on HD0/HD1 while the hard disk is on. `.dmk` = recognized but not mountable.
 
 ### sv_disk.cpp — FDC Emulation
 
@@ -384,15 +386,16 @@ The choice is stored in `cart_rom` as a full SD path. `load_cart_rom()` in `mach
 
 A cartridge takes the place of Disk BASIC, so the disk drives are not usable from BASIC until it is unloaded. Loading or unloading a cartridge here also turns the Orchestra-90 setting off.
 
-### Sound Carts — Orchestra-90 and Speech/Sound toggles
+### Cartridges — Orchestra-90, Speech/Sound and Hard Disk
 
-See `orchestra90.md` and `ssc.md` for the cartridges themselves.
+See `orchestra90.md`, `ssc.md` and `vhd.md` for the cartridges themselves.
 
-The Settings row **Sound Carts** opens a submenu (`SV_SOUND_MENU`, an icon list like the Keyboard submenu; the Settings list holds seven rows and is full) with two ON/OFF rows. Both cartridges are set up at boot, so a row opens a popup (`SV_CART_POPUP` state, 480 px wide, drawn with `sv_render_popup_w()` in the theme colours) that explains the change and asks No / Yes before calling `supervisor_save_and_restart()`. The two rows share the popup code; each is an entry in `CART_TOGGLES` (`sv_menu.cpp`: name, enable flag, save function, ROM files and sizes, messages).
+The Settings row **Cartridges** (called Sound Carts before v0.18.0) opens a submenu (`SV_SOUND_MENU`, an icon list like the Keyboard submenu; the Settings list holds seven rows and is full) with three rows. All three cartridges are set up at boot, so a row opens a popup (`SV_CART_POPUP` state, 480 px wide, drawn with `sv_render_popup_w()` in the theme colours) before calling `supervisor_save_and_restart()`. The two ON/OFF rows share the popup code, which explains the change and asks No / Yes; each is an entry in `CART_TOGGLES` (`sv_menu.cpp`: name, enable flag, save function, ROM files and sizes, messages).
 
 - **Orchestra-90** turns the `$FF7A`/`$FF7B` DAC ports on and puts `orch90.rom` in the cartridge slot at `$C000` in place of Disk BASIC (read once at boot by `load_cart_rom()` in `machine.cpp`). Turning it off clears the stored cartridge, so Disk BASIC is back after the restart.
 - **Speech/Sound** turns the `$FF7D`/`$FF7E` ports on. It has no CoCo-side ROM, so Disk BASIC stays. It needs `pic-7040-510.bin` (4096 bytes) and `sp0256-al2.bin` (2048 bytes).
 - **Turning either on** first checks its ROM file(s) (exact size where known). If one is missing, the popup names it and nothing changes.
+- **Hard Disk** opens a picker instead (`hd_popup_*` in `sv_menu.cpp`, same popup state): **Off**, **On, boot RS-DOS** (Disk BASIC, as in VCC's Multi-Pak with the FD-502 and the hard disk in two slots) and **On, boot RGB-DOS**. The current mode is preselected and marked "current"; the row value is OFF / RS-DOS / RGB-DOS. The mode comes from `vhd_en` plus whether the boot cartridge's file name is `rgbdos.rom`. RGB-DOS is marked "no ROM" unless `rgbdos.rom` is in `/roms/` or already chosen with Load Cart. Picking another mode saves `vhd_en` and `cart_rom` (RS-DOS clears it, RGB-DOS sets `rgbdos.rom` unless Load Cart already chose an RGB-DOS file) and restarts. The On modes, and Orchestra-90, turn each other off: both need the cartridge slot.
 
 `supervisor_load_cart_config()` runs in `setup()` after `dw_bus_load_config()`, so the Orchestra-90 ROM replaces DriveWire's HDB-DOS ROM. While it is on there is no Disk BASIC.
 
@@ -415,12 +418,14 @@ Namespace: `"sv"`. Stored in NVS flash.
 | `joyInv` | Bool | Mouse-as-joystick Invert-Y flag (default false) |
 | `orch90` | Bool | Orchestra-90 DAC ports enabled (default false) |
 | `ssc` | Bool | Speech/Sound Cartridge enabled (default false) |
+| `vhd_en` | Bool | Virtual hard disk at `$FF80-$FF86` enabled (default false) |
+| `hd0_path`, `hd1_path` | String | Hard disk images on HD0/HD1, auto-mounted at boot with the floppies; written only while the hard disk is on, so turning it off and on again keeps them |
 | `cpu_variant` | UChar | 0 = MC6809, 1 = HD6309 (default `CPU_VARIANT`) |
 | `coco3_ram` | UShort | CoCo 3 memory in KB: 128, 512, 1024 or 2048 (default `COCO3_RAM_KB`) |
-| `cart_rom` | String | Cartridge ROM loaded at `$C000`: a full SD path set by the Load Cart screen, or a bare file name in `/roms/` (`orch90.rom`, set by the Orchestra-90 toggle); absent = default (Disk BASIC) |
+| `cart_rom` | String | Cartridge ROM loaded at `$C000`: a full SD path set by the Load Cart screen, or a bare file name in `/roms/` (`orch90.rom` from the Orchestra-90 toggle, `rgbdos.rom` from Hard Disk → RGB-DOS); absent = default (Disk BASIC) |
 
-- `supervisor_save_state()` — writes current dir + all mounted disk paths
-- `supervisor_load_state()` — restores dir + auto-mounts disks on boot
+- `supervisor_save_state()` — writes current dir + all mounted disk and hard disk paths
+- `supervisor_load_state()` — restores dir + auto-mounts disks and hard disks on boot (before the CPU starts, so RGB-DOS finds the hard disk at cold start)
 - `supervisor_quick_mount_last_disk()` — mounts drive 0 from saved path (used at boot)
 
 ---

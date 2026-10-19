@@ -121,8 +121,9 @@ Responses are JSON. Transfers are capped at 4 KB per request.
 | `GET /api/nvram` | dump all `"sv"` NVS settings as JSON |
 | `GET /api/bus` | DriveWire bus mode, host/port, link state, byte counters, `connects`, `max_reply_ms`, `slow_replies` |
 | `POST /api/bus` | `mode=0\|1` (Off / External), `host=`, `port=`, `rom_to=` — **reboots** |
-| `GET /api/disk` | Disk Manager drives 0–3: path, size, read-only, dirty |
-| `POST /api/disk` | `op=mount&drive=N&path=/X.DSK`, `op=eject&drive=N`, `op=flush&drive=N` (runs on core 1; mounts are remembered like the OSD's) |
+| `GET /api/disk` | Disk Manager drives 0–3 (`drives`: path, size, read-only, dirty); `hd_enabled` and the hard disks (`hard_disks`: `hd0`/`hd1`, path, read-only — see [vhd.md](vhd.md)) |
+| `POST /api/disk` | `op=mount&drive=N&path=/X.DSK`, `op=eject&drive=N`, `op=flush&drive=N`; `drive=hd0` / `hd1` for the hard disks (`op=flush` flushes both). Runs on core 1; mounts are remembered like the OSD's |
+| `POST /api/key` | `hid=<USB HID usage>` presses and releases a key in the supervisor menu (only while it is open; never reaches the emulated keyboard); `toggle=1` opens or closes the menu like F3 |
 
 ### Examples (curl)
 
@@ -152,6 +153,11 @@ curl       http://$IP/api/nvram
   one frame is stepped on core 1 (which renders + fills the PSRAM capture
   buffer), then the prior pause state is restored. The PNG covers the active
   GIME area at its native width (320 or 640) × active lines.
+- **While the supervisor menu is open**, requests that run on core 1 (memory,
+  registers, inject, reset, disk mount/eject/flush, screenshot) time out with
+  `504`: `loop()` returns from `supervisor_update_and_render()` before
+  `debug_rpc_poll()`. `GET /api/status` (`osd_state`, 0 = closed),
+  `GET /api/disk`, `GET /api/nvram` and `POST /api/key` still answer.
 - **No authentication / TLS** — intended for a trusted LAN.
 
 ## Screenshot capture
@@ -191,4 +197,5 @@ See [`../mcp-bridge/README.md`](../mcp-bridge/README.md). Configure `COCO_DEBUG_
 register `coco_mcp_bridge.py` with Claude Code or Claude Desktop. Tools:
 `status`, `read_registers`, `write_registers`, `read_memory`, `write_memory`,
 `pause`, `resume`, `inject_code`, `reset`, `get_machine`, `set_machine`,
-`read_nvram`, `screenshot`.
+`list_disks`, `mount_disk`, `eject_disk`, `flush_disk` (floppies 0–3 and hard
+disks `hd0`/`hd1`), `osd_keys`, `read_nvram`, `screenshot`.
