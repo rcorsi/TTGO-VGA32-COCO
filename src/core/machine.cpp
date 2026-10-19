@@ -20,6 +20,7 @@
 #include "becker.h"   // Becker port (DriveWire) at $FF41/$FF42
 #include "sound.h"    // Sound mixing core (mux/DAC/single-bit)
 #include "orch90.h"   // Orchestra-90/CC DAC latches at $FF7A/$FF7B
+#include "vhd.h"      // VCC virtual hard disk at $FF80-$FF86
 #include "ssc/ssc.h"  // Speech/Sound Cartridge at $FF7D/$FF7E
 
 // Global machine pointer for CPU memory callbacks
@@ -226,6 +227,10 @@ uint8_t machine_read_coco3(uint16_t addr) {
     if (ssc_enabled() && (uint16_t)(addr - SSC_CTRL_ADDR) < 2)
         return ssc_read(addr);
 
+    // Virtual hard disk ($FF80-$FF86). No-op unless the hard disk is on.
+    if (vhd_enabled() && vhd_is_port(addr))
+        return vhd_read(addr);
+
     // Slow path: GIME address decode for I/O, ROM, registers
     uint8_t reg_data = 0xFF;
     bool is_reg = false;
@@ -360,6 +365,12 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
     // Speech/Sound Cartridge ($FF7D/$FF7E). No-op unless the cartridge is on.
     if (ssc_enabled() && (uint16_t)(addr - SSC_CTRL_ADDR) < 2) {
         ssc_write(addr, val);
+        return;
+    }
+
+    // Virtual hard disk ($FF80-$FF86). No-op unless the hard disk is on.
+    if (vhd_enabled() && vhd_is_port(addr)) {
+        vhd_write(addr, val);
         return;
     }
 
@@ -995,6 +1006,11 @@ uint8_t machine_read_coco2(uint16_t addr) {
             return ssc_read(addr);
         }
 
+        // Virtual hard disk ($FF80-$FF86). No-op unless the hard disk is on.
+        if (vhd_enabled() && vhd_is_port(addr)) {
+            return vhd_read(addr);
+        }
+
         // Reserved: $FF60-$FFBF
         if (addr < 0xFFC0) {
             return 0xFF;
@@ -1127,6 +1143,12 @@ void machine_write_coco2(uint16_t addr, uint8_t val) {
         // Speech/Sound Cartridge ($FF7D/$FF7E). No-op unless the cartridge is on.
         if (ssc_enabled() && (uint16_t)(addr - SSC_CTRL_ADDR) < 2) {
             ssc_write(addr, val);
+            return;
+        }
+
+        // Virtual hard disk ($FF80-$FF86). No-op unless the hard disk is on.
+        if (vhd_enabled() && vhd_is_port(addr)) {
+            vhd_write(addr, val);
             return;
         }
 
@@ -1509,6 +1531,7 @@ void machine_reset(Machine* m) {
     mc6551_reset();
     becker_reset();
     ssc_reset();
+    vhd_reset();
 }
 
 void machine_run_scanline(Machine* m) {
@@ -1519,6 +1542,7 @@ void machine_run_scanline(Machine* m) {
 void machine_run_frame(Machine* m) {
     if (g_machine_type == 4) machine_run_frame_coco3(m);
     else                     machine_run_frame_coco2(m);
+    if (vhd_enabled()) vhd_tick();
 }
 
 void machine_free(Machine* m) {

@@ -27,6 +27,7 @@
 #include "sv_cart.h"
 #include "../core/orch90.h"
 #include "../core/ssc/ssc.h"
+#include "../core/vhd.h"
 #include "../net/dw_bus.h"
 #include "../net/wifi_mgr.h"
 #include "../hal/hal.h"
@@ -641,7 +642,7 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 }
 
 // ============================================================
-// Settings submenu and its Keyboard, Machine and Sound Carts submenus
+// Settings submenu and its Keyboard, Machine and Cartridges submenus
 // ============================================================
 //
 // All are icon lists in the wide green frame.
@@ -654,9 +655,9 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //                The Echo Log toggle that shares the port is in the Debug submenu.
 //   Keyboard     opens the Keyboard submenu
 //   Joy - Mouse Sensitivity, WiFi / Debug, DriveWire   open their own screens
-//   Sound Carts  opens the Sound Carts submenu
+//   Cartridges   opens the Cartridges submenu
 //
-// Sound Carts rows (SV_SoundRow) — set up at boot, so each toggle asks to
+// Cartridges rows (SV_SoundRow) — set up at boot, so each toggle asks to
 // confirm and restarts (CART_TOGGLES, popup refused with the missing file
 // names if a ROM is not on the SD card):
 //   Orchestra-90  ON  -> DAC ports on, orch90.rom as the cartridge
@@ -664,6 +665,13 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //   Speech/Sound  ON  -> $FF7D/$FF7E decoded beside the FDC (needs
 //                        pic-7040-510.bin and sp0256-al2.bin); Disk BASIC stays
 //                 OFF -> ports off
+//   Hard Disk     picker (hd_popup_*): Off / RS-DOS / RGB-DOS
+//                 RS-DOS  -> $FF80-$FF86 decoded, Disk BASIC as the cartridge
+//                            (VCC's Multi-Pak setup: DOS boots NitrOS-9 from a
+//                            floppy, its emudsk driver finds the VHD)
+//                 RGB-DOS -> $FF80-$FF86 decoded, rgbdos.rom as the cartridge
+//                 Both turn Orchestra-90 off. Images go on HD0/HD1 in the
+//                 Disk Manager.
 //
 // Machine rows (SV_MachineRow) — all fixed at boot, so each asks to confirm
 // and restarts:
@@ -688,12 +696,13 @@ static const SV_ListRow SETTINGS_ROWS[SV_SET_COUNT] = {
     { "Joy - Mouse Sensitivity", ROW_ICON_JOYSTICK  },
     { "WiFi / Debug",            ROW_ICON_WIFI      },
     { "DriveWire",               ROW_ICON_DRIVEWIRE },
-    { "Sound Carts",             ROW_ICON_NOTE      },
+    { "Cartridges",              ROW_ICON_CART      },
 };
 
 static const SV_ListRow SOUND_ROWS[SV_SND_COUNT] = {
     { "Orchestra-90",  ROW_ICON_NOTE   },
     { "Speech/Sound",  ROW_ICON_SPEECH },
+    { "Hard Disk",     ROW_ICON_SD     },
 };
 
 static const SV_ListRow MACHINE_ROWS[SV_MACH_COUNT] = {
@@ -715,10 +724,10 @@ void sv_settings_invalidate(void) {
     s_settings_drawn = -1;
 }
 
-// Sound cartridge toggle: a popup over the Sound Carts list, wider than the
-// usual one for its two-line explanation. Turning a cartridge on needs its
-// ROM file(s) on the SD card: without them the popup names what is missing
-// and nothing changes.
+// Cartridge toggle: a popup over the Cartridges list, wider than the usual
+// one for its two-line explanation. Turning a cartridge on needs its ROM
+// file(s) on the SD card: without them the popup names what is missing and
+// nothing changes. The Hard Disk row has its own picker (hd_popup_*).
 #define CART_POPUP_W   480
 
 struct CartToggle {
@@ -731,12 +740,16 @@ struct CartToggle {
     const char* off_msg[2];
 };
 
+// Orchestra-90 and the hard disk both want the cartridge ROM slot, so turning
+// one on turns the other off.
 static void orch90_save(bool on) {
     supervisor_save_orch90(on);
     supervisor_save_cart_rom(on ? ROM_ORCH90_FILE : "");
+    if (on) supervisor_save_vhd(false);
 }
 
-static const CartToggle CART_TOGGLES[SV_SND_COUNT] = {
+// One per row before SV_SND_HARDDISK.
+static const CartToggle CART_TOGGLES[SV_SND_HARDDISK] = {
     {   "Orchestra 90", orch90_enabled, orch90_save,
         { ROM_ORCH90_FILE, NULL }, { 0, 0 },
         { "CoCo will restart with the Orchestra 90 ROM.",
@@ -781,8 +794,15 @@ static void cart_toggle_open(Supervisor_t* sv, int row) {
     sv->needs_redraw = true;
 }
 
+// Hard Disk picker (defined below), sharing the SV_CART_POPUP state.
+static bool s_hd_open = false;
+static void hd_popup_on_key(Supervisor_t* sv, uint8_t hid_usage);
+static void hd_popup_render(void);
+
 void sv_cart_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
-    if (!pressed || !s_cart) return;
+    if (!pressed) return;
+    if (s_hd_open) { hd_popup_on_key(sv, hid_usage); return; }
+    if (!s_cart) return;
     bool no_rom = s_cart_missing[0] != '\0';
 
     switch (hid_usage) {
@@ -801,7 +821,7 @@ void sv_cart_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
             }
             // fall through: No / OK
         case HID_ESC:
-            sv->state = SV_SOUND_MENU;
+            sv->state = sv->prev_state;
             sv->needs_redraw = true;
             break;
 
@@ -813,6 +833,7 @@ void sv_cart_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
 
 void sv_cart_popup_render(Supervisor_t* sv) {
     (void)sv;
+    if (s_hd_open) { hd_popup_render(); return; }
     if (!s_cart) return;
     char title[40];
     char line[64];
@@ -844,6 +865,111 @@ void sv_cart_popup_render(Supervisor_t* sv) {
         sv_render_popup_row_w(CART_POPUP_W, ry + i * SVP_ROW_H, label, NULL, i == s_cart_sel);
     }
     s_cart_drawn = s_cart_sel;
+}
+
+// Hard Disk picker: Off / RS-DOS / RGB-DOS, the current mode preselected.
+// The $FF80 device works with either ROM, as in VCC, where the hard disk and
+// the FD-502 (RS-DOS) sit in different Multi-Pak slots: the CoCo boots RS-DOS
+// and DOS starts NitrOS-9 from a floppy whose emudsk driver finds the VHD.
+// RGB-DOS instead reaches the RS-DOS virtual disks on the VHD from BASIC.
+enum { HD_OFF, HD_RSDOS, HD_RGBDOS, HD_MODE_COUNT };
+static const char* const HD_MODE_LABELS[HD_MODE_COUNT] = {
+    "Off", "On, boot RS-DOS (Disk BASIC)", "On, boot RGB-DOS" };
+static const char* const HD_MODE_VALUES[HD_MODE_COUNT] = { "OFF", "RS-DOS", "RGB-DOS" };
+
+static int8_t      s_hd_sel   = 0;
+static int8_t      s_hd_drawn = -1;      // row drawn selected; -1 = draw the window
+static const char* s_hd_note  = NULL;    // replaces the second message line
+
+static bool is_rgbdos_name(const char* path) {
+    const char* base = strrchr(path, '/');
+    return strcasecmp(base ? base + 1 : path, ROM_RGBDOS_FILE) == 0;
+}
+
+// Mode this boot is running in.
+static int hd_mode_now(void) {
+    if (!vhd_enabled()) return HD_OFF;
+    return is_rgbdos_name(supervisor_cart_rom_boot()) ? HD_RGBDOS : HD_RSDOS;
+}
+
+// RGB-DOS can boot: in ROM_BASE_PATH, or already chosen with Load Cart.
+static bool rgbdos_available(void) {
+    return rom_file_ok(ROM_RGBDOS_FILE, 0) || is_rgbdos_name(supervisor_cart_rom_saved());
+}
+
+// Orchestra-90 needs the cartridge slot too, so an On mode turns it off.
+static void hd_mode_save(int mode) {
+    const char* saved = supervisor_cart_rom_saved();
+    supervisor_save_vhd(mode != HD_OFF);
+    if (mode != HD_OFF) supervisor_save_orch90(false);
+    if (mode == HD_RGBDOS) {
+        if (!is_rgbdos_name(saved)) supervisor_save_cart_rom(ROM_RGBDOS_FILE);
+    } else if (mode == HD_RSDOS || is_rgbdos_name(saved)) {
+        supervisor_save_cart_rom("");        // Disk BASIC
+    }
+}
+
+static void hd_popup_open(Supervisor_t* sv) {
+    s_hd_open  = true;
+    s_hd_sel   = hd_mode_now();
+    s_hd_drawn = -1;
+    s_hd_note  = NULL;
+    sv->prev_state = sv->state;
+    sv->state = SV_CART_POPUP;
+    sv->needs_redraw = true;
+}
+
+static void hd_popup_close(Supervisor_t* sv) {
+    s_hd_open = false;
+    sv->state = sv->prev_state;
+    sv->needs_redraw = true;
+}
+
+static void hd_popup_on_key(Supervisor_t* sv, uint8_t hid_usage) {
+    switch (hid_usage) {
+        case HID_UP:
+            if (s_hd_sel > 0) { s_hd_sel--; sv->needs_redraw = true; }
+            break;
+        case HID_DOWN:
+            if (s_hd_sel < HD_MODE_COUNT - 1) { s_hd_sel++; sv->needs_redraw = true; }
+            break;
+        case HID_ENTER:
+            if (s_hd_sel == hd_mode_now()) { hd_popup_close(sv); break; }
+            if (s_hd_sel == HD_RGBDOS && !rgbdos_available()) {
+                s_hd_note  = "Copy " ROM_RGBDOS_FILE " to " ROM_BASE_PATH "/ on the SD card.";
+                s_hd_drawn = -1;
+                sv->needs_redraw = true;
+                break;
+            }
+            hd_mode_save(s_hd_sel);
+            supervisor_save_and_restart();   // never returns
+            break;
+        case HID_ESC:
+            hd_popup_close(sv);
+            break;
+        case HID_F1:
+            s_hd_open = false;
+            supervisor_toggle();
+            break;
+    }
+}
+
+static void hd_popup_render(void) {
+    const char* title = "Hard Disk at $FF80";
+    const char* msg1  = "Choose how the CoCo boots. It restarts.";
+    const char* msg2  = s_hd_note ? s_hd_note : "Mount images on HD0/HD1 in Disks.";
+    bool all = (s_hd_drawn < 0);
+    int now = hd_mode_now();
+    int ry = sv_render_popup_w(CART_POPUP_W, title, msg1, msg2, HD_MODE_COUNT, all);
+    if (all) DEBUG_PRINTF("popup: %s: %s %s", title, msg1, msg2);
+    for (int i = 0; i < HD_MODE_COUNT; i++) {
+        if (!all && i != s_hd_sel && i != s_hd_drawn) continue;
+        const char* value = (i == now) ? "current"
+                          : (i == HD_RGBDOS && !rgbdos_available()) ? "no ROM" : NULL;
+        sv_render_popup_row_w(CART_POPUP_W, ry + i * SVP_ROW_H, HD_MODE_LABELS[i], value, i == s_hd_sel);
+        if (i == s_hd_sel) DEBUG_PRINTF("popup: %s > %s", title, HD_MODE_LABELS[i]);
+    }
+    s_hd_drawn = s_hd_sel;
 }
 
 // CPU switch: the same kind of popup. The other CPU is always the target.
@@ -1139,7 +1265,10 @@ void sv_sound_menu_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed) {
     switch (hid_usage) {
         case HID_UP:
         case HID_DOWN:  list_move_cursor(sv, hid_usage, SV_SND_COUNT); break;
-        case HID_ENTER: cart_toggle_open(sv, sv->menu_cursor); break;
+        case HID_ENTER:
+            if (sv->menu_cursor == SV_SND_HARDDISK) hd_popup_open(sv);
+            else                                    cart_toggle_open(sv, sv->menu_cursor);
+            break;
         case HID_ESC:
             sv->state = SV_SETTINGS;
             sv->menu_cursor = SV_SET_SOUND;
@@ -1215,7 +1344,8 @@ static void render_icon_list(Supervisor_t* sv, const char* title, const SV_ListR
         char buf[12];
         const char* value = (list == LIST_SETTINGS) ? settings_value(i, buf, sizeof(buf))
                           : (list == LIST_MACHINE)  ? machine_value(i, buf, sizeof(buf))
-                          : (list == LIST_SOUND)    ? (CART_TOGGLES[i].enabled() ? "ON" : "OFF")
+                          : (list == LIST_SOUND)    ? (i == SV_SND_HARDDISK ? HD_MODE_VALUES[hd_mode_now()]
+                                                       : CART_TOGGLES[i].enabled() ? "ON" : "OFF")
                           : (i == SV_KBD_LANGUAGE)  ? hal_keyboard_layout_name(g_kbd_layout)
                                                     : NULL;
         sv_render_wide_row(y, rows[i].label, value, hl);
@@ -1231,7 +1361,7 @@ void sv_settings_render(Supervisor_t* sv) {
 }
 
 void sv_sound_menu_render(Supervisor_t* sv) {
-    render_icon_list(sv, "Sound Carts", SOUND_ROWS, SV_SND_COUNT, LIST_SOUND);
+    render_icon_list(sv, "Cartridges", SOUND_ROWS, SV_SND_COUNT, LIST_SOUND);
 }
 
 void sv_keyboard_menu_render(Supervisor_t* sv) {

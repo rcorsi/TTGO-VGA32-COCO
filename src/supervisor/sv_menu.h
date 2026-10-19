@@ -66,14 +66,15 @@ enum SV_SettingsRow : uint8_t {
     SV_SET_JOYSTICK,    // Joy - Mouse Sensitivity screen
     SV_SET_WIFI,        // WiFi / Debug screen
     SV_SET_DRIVEWIRE,   // DriveWire screen
-    SV_SET_SOUND,       // opens the Sound Carts submenu
+    SV_SET_SOUND,       // opens the Cartridges submenu
     SV_SET_COUNT
 };
-// Sound Carts submenu (SV_SOUND_MENU state): the sound cartridges, each an
+// Cartridges submenu (SV_SOUND_MENU state): the I/O cartridges, each an
 // on/off toggle that asks to confirm and restarts the emulator.
 enum SV_SoundRow : uint8_t {
     SV_SND_ORCH90,      // Orchestra-90 (also swaps the cartridge ROM)
     SV_SND_SSC,         // Speech/Sound Cartridge
+    SV_SND_HARDDISK,    // VCC virtual hard disk at $FF80-$FF86: Off / RS-DOS / RGB-DOS picker
     SV_SND_COUNT
 };
 // Machine submenu (SV_MACHINE_MENU state). Everything here is fixed at boot,
@@ -100,10 +101,11 @@ void sv_sound_menu_render(Supervisor_t* sv);
 // Force the next render to repaint the whole Settings / Keyboard list.
 void sv_settings_invalidate(void);
 
-// SV_CART_POPUP state: popup over the Sound Carts list, opened from one of
+// SV_CART_POPUP state: popup over the Cartridges list, opened from one of
 // its rows. Asks to confirm the restart (No / Yes, defaults to No), or, when
 // turning a cartridge on without its ROM file(s) on the SD card, names the
-// missing file(s) and changes nothing.
+// missing file(s) and changes nothing. From the Hard Disk row it is a picker
+// instead: Off / On with RS-DOS / On with RGB-DOS, restarting on a change.
 void sv_cart_popup_on_key(Supervisor_t* sv, uint8_t hid_usage, bool pressed);
 void sv_cart_popup_render(Supervisor_t* sv);
 

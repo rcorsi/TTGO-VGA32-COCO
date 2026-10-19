@@ -35,6 +35,8 @@
 #include "../supervisor/supervisor.h" // supervisor_set_machine_type
 #include "../supervisor/sv_disk.h"
 #include "../core/ssc/ssc.h"
+#include "../core/vhd.h"
+#include "../core/blockfile.h"
 #include "../utils/debug.h"
 #include "../../config.h"           // MACHINE_NAME_COCO2/3, FW version
 
@@ -264,7 +266,22 @@ static void h_get_disk() {
         j += "}";
     }
     sv_disk_unlock();
-    j += "]}";
+    // Hard disks: plain fields, changed only by mounts on core 1.
+    j += "],\"hd_enabled\":" + String(vhd_enabled() ? "true" : "false") + ",\"hard_disks\":[";
+    for (int d = 0; d < VHD_NUM_DRIVES; d++) {
+        bool mounted = vhd_is_mounted(d);
+        if (d) j += ",";
+        j += "{\"drive\":\"hd" + String(d) + "\",\"mounted\":" + (mounted ? "true" : "false");
+        if (mounted) {
+            j += ",\"path\":\"" + String(vhd_get_path(d)) + "\"";
+            j += ",\"read_only\":" + String(vhd_is_read_only(d) ? "true" : "false");
+        }
+        j += "}";
+    }
+    const BlockFileStats* bs = &g_blockfile_stats;
+    j += "],\"hd_stats\":{\"reads\":" + String(bs->reads) + ",\"open_us\":" + String(bs->open_us)
+       + ",\"seek_us\":" + String(bs->seek_us) + ",\"read_us\":" + String(bs->read_us)
+       + ",\"max_us\":" + String(bs->max_us) + "}}";
     send_json(200, j);
 }
 
@@ -272,7 +289,10 @@ static void h_post_disk() {
     String op = s_server.arg("op");
     DebugCmd c = {};
     c.type = DBG_CMD_DISK;
-    c.addr = arg_u32("drive", 0);
+    // drive=0-3 for the floppies, drive=hd0 / hd1 for the hard disks
+    String drive = s_server.arg("drive");
+    if (drive.startsWith("hd")) c.addr = SV_DISK_MAX_DRIVES + drive.substring(2).toInt();
+    else                        c.addr = arg_u32("drive", 0);
     String path = s_server.arg("path");
     if (op == "mount") {
         if (path.length() == 0) { send_err(400, "mount needs path"); return; }

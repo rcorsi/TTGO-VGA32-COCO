@@ -30,6 +30,7 @@
 #include "sv_cart.h"
 #include "../core/orch90.h"
 #include "../core/ssc/ssc.h"
+#include "../core/vhd.h"
 #include "../net/dw_bus.h"
 #include "sv_render.h"
 #include "../hal/hal.h"
@@ -283,6 +284,7 @@ void supervisor_toggle(void) {
     if (sv.state == SV_INACTIVE) {
         // Activate
         capture_snapshot();
+        vhd_flush_all();   // the user may pull the SD card next
         sv.state = SV_MAIN_MENU;
         sv.menu_cursor = 0;
         sv.needs_redraw = true;
@@ -577,6 +579,16 @@ void supervisor_save_state(void) {
             prefs.remove(key);
         }
     }
+    // Hard disks: kept while the hard disk is off, so turning it back on
+    // brings the images back.
+    if (vhd_enabled()) {
+        for (int i = 0; i < VHD_NUM_DRIVES; i++) {
+            char key[10];
+            snprintf(key, sizeof(key), "hd%d_path", i);
+            if (vhd_is_mounted(i)) prefs.putString(key, vhd_get_path(i));
+            else                   prefs.remove(key);
+        }
+    }
     prefs.end();
 }
 
@@ -596,6 +608,12 @@ void supervisor_load_state(void) {
             if (path.length() > 0) {
                 sv_disk_mount(&sv.machine->fdc, i, path.c_str());
             }
+        }
+        for (int i = 0; vhd_enabled() && i < VHD_NUM_DRIVES; i++) {
+            char key[10];
+            snprintf(key, sizeof(key), "hd%d_path", i);
+            String path = prefs.getString(key, "");
+            if (path.length() > 0) vhd_mount(i, path.c_str());
         }
     }
 
@@ -724,6 +742,7 @@ void supervisor_load_cart_config(void) {
     prefs.begin("sv", true);
     g_orch90_enabled = prefs.getBool("orch90", false);
     g_ssc_enabled    = prefs.getBool("ssc", false);
+    g_vhd_enabled    = prefs.getBool("vhd_en", false);
     String rom = prefs.getString("cart_rom", "");
     prefs.end();
 
@@ -734,15 +753,22 @@ void supervisor_load_cart_config(void) {
         g_cart_rom_request[0] = s_cart_rom;
         g_cart_rom_request[1] = s_cart_rom;
     }
-    DEBUG_PRINTF("Cartridge: Orchestra-90 %s, Speech/Sound %s, cart ROM %s",
+    DEBUG_PRINTF("Cartridge: Orchestra-90 %s, Speech/Sound %s, hard disk %s, cart ROM %s",
                  g_orch90_enabled ? "on" : "off", g_ssc_enabled ? "on" : "off",
-                 s_cart_rom[0] ? s_cart_rom : "(default)");
+                 g_vhd_enabled ? "on" : "off", s_cart_rom[0] ? s_cart_rom : "(default)");
 }
 
 void supervisor_save_orch90(bool enabled) {
     Preferences prefs;
     prefs.begin("sv", false);
     prefs.putBool("orch90", enabled);
+    prefs.end();
+}
+
+void supervisor_save_vhd(bool enabled) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putBool("vhd_en", enabled);
     prefs.end();
 }
 
@@ -772,6 +798,7 @@ void supervisor_save_and_restart(void) {
     if (sv.machine) {
         sv_disk_flush_all(&sv.machine->fdc);
     }
+    vhd_flush_all();
 
     // Preserve supervisor state (mounted disks, last_dir) across the restart.
     supervisor_save_state();

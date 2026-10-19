@@ -46,10 +46,10 @@ enum SV_State : uint8_t {
     SV_WIFI,             // WiFi / Debug server status + control screen
     SV_FUJINET,          // DriveWire / FujiNet bus settings screen
     SV_KEYBOARD_MENU,    // Settings -> Keyboard submenu (language, Key Mapper)
-    SV_CART_POPUP,       // popup over Sound Carts: cartridge on/off confirm, ROM missing
+    SV_CART_POPUP,       // popup over Cartridges: cartridge on/off confirm, ROM missing
     SV_CPU_POPUP,        // popup over the Machine submenu: MC6809 / HD6309 switch confirm
     SV_MACHINE_MENU,     // Settings -> Machine submenu (machine type, CPU, CoCo 3 memory)
-    SV_SOUND_MENU,       // Settings -> Sound Carts submenu (Orchestra-90, Speech/Sound)
+    SV_SOUND_MENU,       // Settings -> Cartridges submenu (Orchestra-90, Speech/Sound, Hard Disk)
     SV_RAM_SELECT,       // popup over the Machine submenu: CoCo 3 memory size, then confirm
     SV_CART,             // Load Cart screen: pick a .ccc / .rom cartridge, or unload it
 };
@@ -161,15 +161,18 @@ void     supervisor_save_coco3_ram(uint16_t kb);
 
 // Cartridge settings (NVS "sv" namespace): key "orch90" turns the
 // Orchestra-90 DAC ports on, key "ssc" the Speech/Sound Cartridge, key
+// "vhd_en" the virtual hard disk at $FF80-$FF86 (its images are remembered
+// as "hd0_path"/"hd1_path" by supervisor_save_state), key
 // "cart_rom" names the ROM (up to 128 KB) to load at $C000 instead of Disk
 // BASIC ("" = default): a bare name in ROM_BASE_PATH, or a full SD path
 // starting with '/' (Load Cart screen). The Orchestra-90 toggle sets it to
-// ROM_ORCH90_FILE. load applies them (g_orch90_enabled, g_ssc_enabled,
+// ROM_ORCH90_FILE. load applies them (g_orch90_enabled, g_ssc_enabled, g_vhd_enabled,
 // g_cart_rom_request); called from setup() after dw_bus_load_config() and before machine_init(). The saves
 // only persist: the caller restarts the emulator to apply them.
 void        supervisor_load_cart_config(void);
 void        supervisor_save_orch90(bool enabled);
 void        supervisor_save_ssc(bool enabled);
+void        supervisor_save_vhd(bool enabled);
 void        supervisor_save_cart_rom(const char* name);
 // The cartridge this boot asked for, and the one stored for the next restart
 // ("" = none). They differ while a Load Cart change is waiting for a restart.
