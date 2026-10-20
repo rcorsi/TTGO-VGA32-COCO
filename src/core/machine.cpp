@@ -610,7 +610,17 @@ void machine_run_scanline_coco3(Machine* m) {
     m->cycles_this_frame += actual;
 
     // RS-232 Pak ACIA: pace TDRE/RDRF by the cycles just run this scanline.
-    if (rs232_pak_enabled()) mc6551_tick((uint32_t)actual);
+    // The ACIA counts 0.895 MHz cycles, so halve them in fast mode.
+    if (rs232_pak_enabled()) {
+        static uint32_t fast_carry;
+        uint32_t cyc = (uint32_t)actual;
+        if (m->gime.R1) {
+            cyc += fast_carry;
+            fast_carry = cyc & 1;
+            cyc >>= 1;
+        }
+        mc6551_tick(cyc);
+    }
 
     // GIME timer tick (replaces XRoar event-driven timer)
     tcc1014_tick_scanline(&m->gime);
@@ -795,6 +805,10 @@ void machine_run_scanline_coco3(Machine* m) {
 void machine_run_frame_coco3(Machine* m) {
     if (!m->initialized) return;
     PERF_PROBE_SCOPE(PROBE_FRAME);
+
+    // MPU rate: SAM R1 ($FFD9 set / $FFD8 clear) doubles the CPU clock to
+    // 1.79 MHz across the whole address space. Latched per frame.
+    m->cycles_per_frame = m->gime.R1 ? 2 * CYCLES_PER_FRAME : CYCLES_PER_FRAME;
 
     // Precompute cycle targets
     for (int i = 0; i < SCANLINES_PER_FRAME; i++) {

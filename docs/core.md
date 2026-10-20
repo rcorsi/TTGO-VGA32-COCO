@@ -221,7 +221,7 @@ Any write to the address triggers the action (the data byte is ignored).
 | 0–2 | V0–V2 | VDG graphics mode (maps to GM0–GM2) |
 | 3–9 | F0–F6 | Display offset → base address = (F-value << 9) = F × 512 |
 | 10 | P1 | Page select (all-RAM mode) |
-| 11–12 | R0–R1 | CPU rate (not used in our emulation) |
+| 11–12 | R0–R1 | CPU rate. CoCo 3: R1 ($FFD9) runs 1.79 MHz, 2 × 14,916 cycles per frame, latched at frame start. CoCo 2: ignored (always 0.895 MHz) |
 | 13–14 | M0–M1 | Memory size |
 | 15 | TY | Map type (ROM/RAM) |
 
