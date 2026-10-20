@@ -3,6 +3,34 @@
 Releases before the three most recent ones. The latest changes are in the
 [Changelog section of the README](README.md#changelog).
 
+### v0.18.0 — October 18, 2026
+
+**Virtual hard disk.** VCC's hard disk device ("EmuDsk", `HardDisk/cc3vhd.cpp`)
+at `$FF80-$FF86`: two `.VHD` images of up to 512 MB, read and written in place
+on the SD card. NitrOS-9 from the EOU images boots with its `emudsk` driver.
+
+- **Setup → Cartridges → Hard Disk** picks **Off**, **On, boot RS-DOS** or
+  **On, boot RGB-DOS**. RS-DOS is VCC's Multi-Pak setup: Disk BASIC boots, and
+  `DOS` starts NitrOS-9 from a floppy that then finds the VHD. RGB-DOS
+  (`rgbdos.rom` in `/roms/`) gives BASIC the RS-DOS virtual drives on the VHD;
+  type `DRIVE OFF` before `DOS` to boot a floppy from it.
+- **Setup → Sound Carts is now Setup → Cartridges**, with the Hard Disk row
+  next to Orchestra-90 and Speech/Sound.
+- **Disk Manager** shows HD0 and HD1 while the hard disk is on; `.VHD` images
+  mount there and come back at every boot.
+- **Fast enough for NitrOS-9**: about 0.8 ms per sector in sequence and 4 ms
+  with seeks. Arduino's file layer threw away a 4 KB buffer on every seek
+  (9.6 ms per sector); hard disk files now use a 512-byte buffer, which also
+  cuts the internal RAM an open file costs from about 5 KB to 760 bytes.
+- **Debug API and MCP bridge**: `/api/disk` takes `drive=hd0` / `hd1`. The
+  bridge gains `list_disks`, `mount_disk`, `eject_disk`, `flush_disk` (floppies
+  and hard disks) and `osd_keys`, which drives the supervisor menu.
+- Checked on the board: EOU NitrOS-9 for the 6309 boots from `63EMU.DSK` with
+  `63SDC.VHD` on HD0, on the emulated HD6309 (the first real software checked
+  on that CPU on the board). RGB-DOS's detection and disk routines were checked
+  against a disassembly of `rgbdos.rom`.
+- Details: [docs/vhd.md](docs/vhd.md).
+
 ### v0.17.0 — October 15, 2026
 
 **Speech/Sound Cartridge.** Tandy's 26-3144 talking cartridge, ported from

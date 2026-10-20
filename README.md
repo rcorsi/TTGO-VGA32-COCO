@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.17.0 — October 15, 2026** (LilyGo TTGO VGA32 port)
+**v0.19.0 — October 20, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -15,7 +15,7 @@ A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP
 - **Orchestra-90/CC** — the stereo music cartridge's two DACs, mixed to mono on the audio jack, with its ROM in the cartridge slot.
 - **Speech/Sound Cartridge** — Tandy's talking cartridge, fully emulated (TMS7040 firmware, SP0256-AL2 speech, AY-3-8913 sound) on the ESP32's second core, alongside Disk BASIC. Needs two ROM dumps (new in v0.17.0).
 - **Authentic video, both eras** — MC6847 VDG for CoCo 2 (text plus every semigraphics and graphics mode) and the TCC1014 GIME for CoCo 3 (128 KB to 2 MB RAM with MMU, 16-color palette, native graphics up to 640 px), output over crisp VGA at 640×200 @ 60 Hz via FabGL in 64-color direct mode.
-- **Real-time speed** — CoCo 3 text and graphics modes run at a paced 60 FPS, the speed of the real machine (v0.12.0 rewrote the GIME video path; it used to manage ~39 FPS at the BASIC prompt and ~20 FPS in graphics).
+- **Real-time speed** — the CoCo 3 runs at 1.79 MHz in fast mode (SAM R1), as NitrOS-9 expects, with a built-in speed meter (new in v0.19.0). CoCo 3 text and graphics modes run at a paced 60 FPS, the speed of the real machine (v0.12.0 rewrote the GIME video path; it used to manage ~39 FPS at the BASIC prompt and ~20 FPS in graphics).
 - **Real disk drives** — WD1793 floppy controller with `.DSK` and `.VDK` support, and entire disk images cached in PSRAM for zero-latency access.
 - **Virtual hard disk** — VCC's hard disk device at `$FF80`: two `.VHD` images of up to 512 MB, read in place from the SD card. Boots NitrOS-9 (EOU) with the `emudsk` driver, and RGB-DOS gives BASIC its virtual drives (new in v0.18.0).
 - **Complete hardware soul** — dual 6821 PIAs (keyboard, joystick, audio I/O), SAM6883 multiplexer on CoCo 2, GIME-integrated MMU on CoCo 3.
@@ -237,7 +237,7 @@ tools/build_firmware.sh 0.9.0 bootloader    # SD-card package only
 |--------|-----------|------------------|
 | `TTGO-VGA32-CoCo-<version>-firmware.bin` | Merged image: bootloader + partition table + `boot_app0` + app | USB, at offset **`0x0`** |
 | `build/sdcard/CoCo/firmware.bin` | Bare app image (`-DBUILD_TARGET=1`) | By ESP32_Bootloader, into `ota_0` |
-| `build/sdcard/CoCo/version.txt` | `CoCo.<version>-<git describe>` | Read by the bootloader to decide whether to reflash |
+| `build/sdcard/CoCo/version.txt` | `<version>` (bare, e.g. `0.12.2`) | Read by the bootloader to decide whether to reflash |
 
 The script verifies what the binaries actually contain before publishing them: the SD image really starts with `0xE9` and fits `ota_0`, and — by disassembling `setup()` in each ELF — that the `otadata` erase is **present** in the bootloader build and **absent** from the standalone one. That last check matters because a define that silently fails to reach the sketch produces a bootloader package that never returns to the menu.
 
@@ -448,10 +448,32 @@ mode, with diagrams.
 
 - **Run NitrOS-9 testing** — boot and exercise NitrOS-9 Level 2, including the 6309 build, on both CPUs and at each CoCo 3 memory size.
 - Testing and adjustment of RS-232 Pak support
-- **CPU speed test** — a test that confirms the emulated CPU runs at 0.89 MHz on the CoCo 2 and 1.78 MHz on the CoCo 3.
 - **CoCo SDC** emulation.
 
 ## Changelog
+
+### v0.19.0 — October 20, 2026
+
+**The CoCo 3 runs at full speed, and fast typing no longer drops keys.**
+
+- **1.79 MHz in fast mode.** The GIME stored SAM R1 (`$FFD9`) but nothing read
+  it, so NitrOS-9 and every fast-mode program ran at 0.895 MHz. The CoCo 3 now
+  runs two 14,916-cycle slices per frame while R1 is set; the RS-232 Pak ACIA
+  gets half the cycles so its baud rate holds. The CoCo 2 is unchanged.
+  Measured on the board: BASIC fast mode 1.790 MHz (ratio 1.000, about 13 ms of
+  work per 16.7 ms frame), NitrOS-9 1.0.1 1.79 MHz at the shell; some
+  animations still show about 44 FPS.
+- **Emulated CPU speed meter.** `/api/status` has a `speed` block (`mhz`,
+  `target_mhz`, `ratio`, `rate`, frame work average/max).
+  `tools/perf/speedcheck.py` cross-checks it against the guest's 60 Hz counter.
+- **Fast typing keeps every key.** Color BASIC's KEYIN decodes one newly
+  pressed bit per column and drops a key whose column changes while it
+  debounces, so quick re-taps and two keys of one column in the same frame were
+  lost. Matrix changes now go through a FIFO, one per frame, with a 4-frame
+  minimum hold and a 2-frame gap before a re-press.
+- **Bootloader `version.txt` is the bare version** (`0.19.0`), as ESP32_Bootloader
+  requires; it used to be `CoCo.<version>-<git describe>`. Bump
+  `FIRMWARE_VERSION` for every build that must reflash.
 
 ### v0.18.2 — October 19, 2026
 
@@ -489,34 +511,6 @@ mode, with diagrams.
   list of **6809** and **6309** with the running one marked *current*, instead
   of a Yes/No "switch to the other CPU" question. The memory row reads
   **CoCo 3 Memory** on a CoCo 3 and **CoCo 2 Memory (64K, fixed)** on a CoCo 2.
-
-### v0.18.0 — October 18, 2026
-
-**Virtual hard disk.** VCC's hard disk device ("EmuDsk", `HardDisk/cc3vhd.cpp`)
-at `$FF80-$FF86`: two `.VHD` images of up to 512 MB, read and written in place
-on the SD card. NitrOS-9 from the EOU images boots with its `emudsk` driver.
-
-- **Setup → Cartridges → Hard Disk** picks **Off**, **On, boot RS-DOS** or
-  **On, boot RGB-DOS**. RS-DOS is VCC's Multi-Pak setup: Disk BASIC boots, and
-  `DOS` starts NitrOS-9 from a floppy that then finds the VHD. RGB-DOS
-  (`rgbdos.rom` in `/roms/`) gives BASIC the RS-DOS virtual drives on the VHD;
-  type `DRIVE OFF` before `DOS` to boot a floppy from it.
-- **Setup → Sound Carts is now Setup → Cartridges**, with the Hard Disk row
-  next to Orchestra-90 and Speech/Sound.
-- **Disk Manager** shows HD0 and HD1 while the hard disk is on; `.VHD` images
-  mount there and come back at every boot.
-- **Fast enough for NitrOS-9**: about 0.8 ms per sector in sequence and 4 ms
-  with seeks. Arduino's file layer threw away a 4 KB buffer on every seek
-  (9.6 ms per sector); hard disk files now use a 512-byte buffer, which also
-  cuts the internal RAM an open file costs from about 5 KB to 760 bytes.
-- **Debug API and MCP bridge**: `/api/disk` takes `drive=hd0` / `hd1`. The
-  bridge gains `list_disks`, `mount_disk`, `eject_disk`, `flush_disk` (floppies
-  and hard disks) and `osd_keys`, which drives the supervisor menu.
-- Checked on the board: EOU NitrOS-9 for the 6309 boots from `63EMU.DSK` with
-  `63SDC.VHD` on HD0, on the emulated HD6309 (the first real software checked
-  on that CPU on the board). RGB-DOS's detection and disk routines were checked
-  against a disassembly of `rgbdos.rom`.
-- Details: [docs/vhd.md](docs/vhd.md).
 
 ## ⚠️ Vibe Coding Alert
 
