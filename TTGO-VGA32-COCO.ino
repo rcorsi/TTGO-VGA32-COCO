@@ -14,6 +14,7 @@
 #include "config.h"
 #include "esp_timer.h"
 #include "src/core/machine.h"
+#include "src/core/speed_meter.h"
 #include "src/hal/hal.h"
 #include "src/hal/osd_canvas.h"
 #include "src/supervisor/supervisor.h"
@@ -348,6 +349,7 @@ void loop() {
     if (supervisor_update_and_render()) {
         // Supervisor is active — emulation paused
         osd_was_active = true;
+        speed_meter_gap();
         yield();
         return;
     }
@@ -364,16 +366,20 @@ void loop() {
     // If a remote debugger paused the CPU, freeze emulation but keep draining
     // RPC commands so inspect/resume/screenshot still respond promptly.
     if (debug_rpc_is_paused()) {
+        speed_meter_gap();
         delay(2);
         return;
     }
 
     // Run one video frame worth of emulation
+    int64_t frame_t0 = esp_timer_get_time();
     machine_run_frame(&coco);
+    uint32_t frame_work_us = (uint32_t)(esp_timer_get_time() - frame_t0);
     pace_frame();
 
     // Push framebuffer to display
     hal_render_frame();
+    speed_meter_frame(&coco, frame_work_us);
 
     // Sound frequency debug — detect end-of-sound and report
     hal_audio_debug_tick();

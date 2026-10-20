@@ -32,6 +32,7 @@
 #include "png_writer.h"
 #include "../hal/hal.h"             // hal_video_capture_*
 #include "../core/machine.h"        // g_machine_type, machine types
+#include "../core/speed_meter.h"
 #include "../supervisor/supervisor.h" // supervisor_set_machine_type
 #include "../supervisor/sv_disk.h"
 #include "../core/ssc/ssc.h"
@@ -156,6 +157,20 @@ static void h_status() {
     j += ",\"int8_min\":" + String(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     j += ",\"int8_largest\":" + String(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     j += ",\"fps\":" + String(hal_video_get_fps(), 1);
+    // Emulated CPU speed over the last ~1 s of running frames (see speed_meter.h).
+    {
+        SpeedStats sp;
+        speed_meter_get(&sp);
+        j += ",\"speed\":{\"mhz\":" + String(sp.mhz, 4);
+        j += ",\"target_mhz\":" + String(sp.target_mhz, 4);
+        j += ",\"ratio\":" + String(sp.target_mhz > 0 ? sp.mhz / sp.target_mhz : 0.0f, 3);
+        j += ",\"fps\":" + String(sp.fps, 2);
+        j += ",\"rate\":" + String(sp.rate);
+        j += ",\"cycles_per_frame\":" + String(sp.cycles_per_frame);
+        j += ",\"frame_us_avg\":" + String(sp.frame_us_avg);
+        j += ",\"frame_us_max\":" + String(sp.frame_us_max);
+        j += ",\"windows\":" + String(sp.windows) + "}";
+    }
     // Audio queue diagnostics; ?audio_reset=1 clears them after this read.
     {
         HalAudioStats a;
