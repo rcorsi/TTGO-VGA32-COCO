@@ -618,6 +618,80 @@ static bool gen_legal_6809(uint8_t* code) {
     return true;
 }
 
+
+// ============================================================
+// 4. Idle-loop skip: same result with and without it
+// ============================================================
+static uint8_t* idle_pages[8];
+static int idle_io_reads;
+static uint8_t idle_rd(uint16_t a) { if (a >= 0xFF00) idle_io_reads++; return mem_a.b[a]; }
+static void    idle_wr(uint16_t a, uint8_t v) { mem_a.b[a] = v; }
+
+// Runs `code` at ORG for one budget with the skip on or off; returns cycles.
+static int idle_run(MC6809* c, uint8_t variant, uint8_t md, bool skip, int budget,
+                    std::initializer_list<uint8_t> code, bool irq) {
+    memset(mem_a.b, 0, sizeof(mem_a.b));
+    mem_a.b[0x2000] = 0x00;              // polled byte, stays zero
+    mem_a.b[0x2008] = 0x5A;              // <$08 with DP=$20
+    mem_a.b[0x2009] = 0x80;              // <$09: $5A - $80 is negative, BMI loops
+    poke16(0xFFF8, 0x3000);              // IRQ vector: RTI
+    mem_a.b[0x3000] = 0x3B;
+    uint16_t a = ORG;
+    for (uint8_t v : code) mem_a.b[a++] = v;
+    mc6809_init(c);
+    c->read = idle_rd; c->write = idle_wr; c->variant = variant;
+    for (int i = 0; i < 8; i++) idle_pages[i] = mem_a.b + i * 0x2000;
+    c->rd_page = idle_pages;
+    c->wr_page = idle_pages;
+    c->fast_limit = 0xFF00;
+    c->idle_skip = skip;
+    c->pc = ORG; c->s = 0x8000; c->dp = 0x20; c->d = 0x5A00; c->x = 0x2000;
+    c->cc = irq ? 0 : I;
+    c->irq_pending = irq;
+    c->md = md;
+    idle_io_reads = 0;
+    return mc6809_run_variant(c, budget);
+}
+
+static void test_idle_skip() {
+    struct Case { const char* name; std::initializer_list<uint8_t> code; bool irq; };
+    const Case cases[] = {
+        { "CMPA <$08 / BEQ",  { 0x91, 0x08, 0x27, 0xFC }, false },
+        { "LDA $2000 / BEQ",  { 0xB6, 0x20, 0x00, 0x27, 0xFB }, false },
+        { "TST ,X / BEQ",     { 0x6D, 0x84, 0x27, 0xFC }, false },
+        { "LDD <$00 / BEQ",   { 0xDC, 0x00, 0x27, 0xFC }, false },
+        { "BRA *",            { 0x20, 0xFE }, false },
+        { "NOP / BRA",        { 0x12, 0x20, 0xFD }, false },
+        { "LDA $FF02 / BEQ",  { 0xB6, 0xFF, 0x02, 0x27, 0xFB }, false },  // I/O: no skip
+        { "BRA * + IRQ",      { 0x20, 0xFE }, true },
+        { "LDA ,X+ / BEQ",    { 0xA6, 0x80, 0x27, 0xFC }, false },        // not idempotent
+        { "LDA<08 SUBA<09 BMI", { 0x96, 0x08, 0x90, 0x09, 0x2B, 0xFA }, false },
+        { "LDB 1,X / CMPB / BNE", { 0xE6, 0x01, 0xF1, 0x20, 0x08, 0x26, 0xF9 }, false },
+        { "SUBA <$08 / BNE",  { 0x90, 0x08, 0x26, 0xFC }, false },        // A changes every pass
+        { "ADCA after LDA",   { 0x96, 0x08, 0x99, 0x09, 0x26, 0xFA }, false },  // carry-in: no skip
+    };
+    const struct { uint8_t variant, md; } cpus[] = {
+        { CPU_VARIANT_MC6809, 0 }, { CPU_VARIANT_HD6309, EMU }, { CPU_VARIANT_HD6309, NAT },
+    };
+    MC6809 a_, b_;
+    for (const Case& k : cases) {
+        g_name = k.name;
+        for (auto cp : cpus) {
+            for (int budget = 1; budget < 400; budget += 7) {
+                int ca = idle_run(&a_, cp.variant, cp.md, false, budget, k.code, k.irq);
+                int ioa = idle_io_reads;
+                std::vector<uint8_t> ma(mem_a.b, mem_a.b + 65536);
+                int cb = idle_run(&b_, cp.variant, cp.md, true, budget, k.code, k.irq);
+                CHECK_EQ(cb, ca);
+                CHECK_EQ(b_.pc, a_.pc); CHECK_EQ(b_.d, a_.d); CHECK_EQ(b_.x, a_.x);
+                CHECK_EQ(b_.s, a_.s); CHECK_EQ(b_.cc, a_.cc);
+                CHECK_EQ(idle_io_reads, ioa);
+                CHECK(memcmp(ma.data(), mem_a.b, 65536) == 0);
+            }
+        }
+    }
+}
+
 static int test_6809_equals_6309(int iterations) {
     MC6809 c9, c3;
     cpu_new(&c9, CPU_VARIANT_MC6809);
@@ -852,6 +926,12 @@ int main(int argc, char** argv) {
 #else
     printf("3. HD6309 vs XRoar: skipped (set XROAR_SRC to enable)\n");
 #endif
+
+    g_fail = g_checks = 0;
+    printf("4. Idle-loop skip == plain interpretation\n");
+    test_idle_skip();
+    printf("   %d checks, %d failed\n", g_checks, g_fail);
+    failed += g_fail;
 
     printf(failed ? "FAILED\n" : "PASSED\n");
     return failed ? 1 : 0;

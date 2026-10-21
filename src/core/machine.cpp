@@ -483,6 +483,7 @@ void machine_init_coco3(Machine* m) {
     m->cpu.rd_page = m->gime.rd_page;
     m->cpu.wr_page = m->gime.wr_page;
     m->cpu.fast_limit = 0xFE00;
+    m->cpu.idle_skip = true;     // read-only polling loops skip ahead (mc6809.h)
 
     // Initialize PIAs
     mc6821_init(&m->pia0);
@@ -1252,6 +1253,7 @@ void machine_init_coco2(Machine* m) {
     m->cpu.rd_page = coco2_rd_page;
     m->cpu.wr_page = coco2_wr_page;
     m->cpu.fast_limit = 0xFF00;
+    m->cpu.idle_skip = true;     // read-only polling loops skip ahead (mc6809.h)
 
     mc6821_init(&m->pia0);
     mc6821_init(&m->pia1);
