@@ -64,8 +64,16 @@
 // The interpreter is one very large function, and past GCC's growth
 // limits it stops inlining even these small helpers. An out-of-line call
 // costs tens of host cycles here (call/entry/retw plus window spills on
-// the deep emulation call stack), so the per-access helpers are forced inline.
-static inline __attribute__((always_inline)) uint8_t mem_read(MC6809* cpu, uint16_t addr) {
+// the deep emulation call stack), so the HD6309 build forces the per-access
+// helpers inline. The MC6809 build measured slower with it (boot benchmark,
+// -DPERF_BENCH=1: LDA ,X / STA ,Y 223 -> 308 host cycles), so it keeps plain
+// inline and lets GCC choose.
+#if CPU_HD6309
+#define CPU_HOT_INLINE inline __attribute__((always_inline))
+#else
+#define CPU_HOT_INLINE inline
+#endif
+static CPU_HOT_INLINE uint8_t mem_read(MC6809* cpu, uint16_t addr) {
     if (__builtin_expect(addr < cpu->fast_limit, 1)) {
         const uint8_t* p = cpu->rd_page[addr >> 13];
         if (__builtin_expect(p != nullptr, 1)) {
@@ -83,7 +91,7 @@ static inline __attribute__((always_inline)) uint8_t mem_read(MC6809* cpu, uint1
 #endif
 }
 
-static inline __attribute__((always_inline)) void mem_write(MC6809* cpu, uint16_t addr, uint8_t val) {
+static CPU_HOT_INLINE void mem_write(MC6809* cpu, uint16_t addr, uint8_t val) {
     if (__builtin_expect(addr < cpu->fast_limit, 1)) {
         uint8_t* p = cpu->wr_page[addr >> 13];
         if (__builtin_expect(p != nullptr, 1)) {
@@ -102,22 +110,22 @@ static inline __attribute__((always_inline)) void mem_write(MC6809* cpu, uint16_
 #endif
 }
 
-static inline __attribute__((always_inline)) uint16_t mem_read16(MC6809* cpu, uint16_t addr) {
+static CPU_HOT_INLINE uint16_t mem_read16(MC6809* cpu, uint16_t addr) {
     uint8_t hi = mem_read(cpu, addr);
     uint8_t lo = mem_read(cpu, addr + 1);
     return ((uint16_t)hi << 8) | lo;
 }
 
-static inline __attribute__((always_inline)) void mem_write16(MC6809* cpu, uint16_t addr, uint16_t val) {
+static CPU_HOT_INLINE void mem_write16(MC6809* cpu, uint16_t addr, uint16_t val) {
     mem_write(cpu, addr, (uint8_t)(val >> 8));
     mem_write(cpu, addr + 1, (uint8_t)(val & 0xFF));
 }
 
-static inline __attribute__((always_inline)) uint8_t fetch8(MC6809* cpu) {
+static CPU_HOT_INLINE uint8_t fetch8(MC6809* cpu) {
     return mem_read(cpu, cpu->pc++);
 }
 
-static inline __attribute__((always_inline)) uint16_t fetch16(MC6809* cpu) {
+static CPU_HOT_INLINE uint16_t fetch16(MC6809* cpu) {
     uint8_t hi = fetch8(cpu);
     uint8_t lo = fetch8(cpu);
     return ((uint16_t)hi << 8) | lo;
@@ -126,46 +134,46 @@ static inline __attribute__((always_inline)) uint16_t fetch16(MC6809* cpu) {
 // ============================================================
 // Stack helpers (hardware stack S)
 // ============================================================
-static inline __attribute__((always_inline)) void push8s(MC6809* cpu, uint8_t val) {
+static CPU_HOT_INLINE void push8s(MC6809* cpu, uint8_t val) {
     cpu->s--;
     mem_write(cpu, cpu->s, val);
 }
 
-static inline __attribute__((always_inline)) uint8_t pull8s(MC6809* cpu) {
+static CPU_HOT_INLINE uint8_t pull8s(MC6809* cpu) {
     uint8_t val = mem_read(cpu, cpu->s);
     cpu->s++;
     return val;
 }
 
-static inline __attribute__((always_inline)) void push16s(MC6809* cpu, uint16_t val) {
+static CPU_HOT_INLINE void push16s(MC6809* cpu, uint16_t val) {
     push8s(cpu, (uint8_t)(val & 0xFF));
     push8s(cpu, (uint8_t)(val >> 8));
 }
 
-static inline __attribute__((always_inline)) uint16_t pull16s(MC6809* cpu) {
+static CPU_HOT_INLINE uint16_t pull16s(MC6809* cpu) {
     uint16_t hi = pull8s(cpu);
     uint16_t lo = pull8s(cpu);
     return (hi << 8) | lo;
 }
 
 // Stack helpers (user stack U)
-static inline __attribute__((always_inline)) void push8u(MC6809* cpu, uint8_t val) {
+static CPU_HOT_INLINE void push8u(MC6809* cpu, uint8_t val) {
     cpu->u--;
     mem_write(cpu, cpu->u, val);
 }
 
-static inline __attribute__((always_inline)) uint8_t pull8u(MC6809* cpu) {
+static CPU_HOT_INLINE uint8_t pull8u(MC6809* cpu) {
     uint8_t val = mem_read(cpu, cpu->u);
     cpu->u++;
     return val;
 }
 
-static inline __attribute__((always_inline)) void push16u(MC6809* cpu, uint16_t val) {
+static CPU_HOT_INLINE void push16u(MC6809* cpu, uint16_t val) {
     push8u(cpu, (uint8_t)(val & 0xFF));
     push8u(cpu, (uint8_t)(val >> 8));
 }
 
-static inline __attribute__((always_inline)) uint16_t pull16u(MC6809* cpu) {
+static CPU_HOT_INLINE uint16_t pull16u(MC6809* cpu) {
     uint16_t hi = pull8u(cpu);
     uint16_t lo = pull8u(cpu);
     return (hi << 8) | lo;
@@ -176,7 +184,7 @@ static inline __attribute__((always_inline)) uint16_t pull16u(MC6809* cpu) {
 // ============================================================
 
 // Update N and Z for 8-bit result (compute-and-mask: single cc write)
-static inline __attribute__((always_inline)) void update_nz8(MC6809* cpu, uint8_t val) {
+static CPU_HOT_INLINE void update_nz8(MC6809* cpu, uint8_t val) {
     uint8_t f = 0;
     if (val & 0x80)  f |= MC6809_FLAG_N;
     if (val == 0)    f |= MC6809_FLAG_Z;
@@ -184,7 +192,7 @@ static inline __attribute__((always_inline)) void update_nz8(MC6809* cpu, uint8_
 }
 
 // Update N and Z for 16-bit result (compute-and-mask: single cc write)
-static inline __attribute__((always_inline)) void update_nz16(MC6809* cpu, uint16_t val) {
+static CPU_HOT_INLINE void update_nz16(MC6809* cpu, uint16_t val) {
     uint8_t f = 0;
     if (val & 0x8000) f |= MC6809_FLAG_N;
     if (val == 0)     f |= MC6809_FLAG_Z;
@@ -192,7 +200,7 @@ static inline __attribute__((always_inline)) void update_nz16(MC6809* cpu, uint1
 }
 
 // 8-bit addition: H, N, Z, V, C (compute-and-mask: single cc write)
-static inline __attribute__((always_inline)) uint8_t op_add8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) {
+static CPU_HOT_INLINE uint8_t op_add8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) {
     uint16_t result = (uint16_t)a + (uint16_t)b + carry;
     uint8_t r8 = (uint8_t)result;
 
@@ -208,7 +216,7 @@ static inline __attribute__((always_inline)) uint8_t op_add8(MC6809* cpu, uint8_
 }
 
 // 8-bit subtraction: N, Z, V, C (compute-and-mask: single cc write, H preserved)
-static inline __attribute__((always_inline)) uint8_t op_sub8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) {
+static CPU_HOT_INLINE uint8_t op_sub8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) {
     uint16_t result = (uint16_t)a - (uint16_t)b - carry;
     uint8_t r8 = (uint8_t)result;
 
@@ -223,7 +231,7 @@ static inline __attribute__((always_inline)) uint8_t op_sub8(MC6809* cpu, uint8_
 }
 
 // 16-bit addition: N, Z, V, C (compute-and-mask: single cc write)
-static inline __attribute__((always_inline)) uint16_t op_add16(MC6809* cpu, uint16_t a, uint16_t b) {
+static CPU_HOT_INLINE uint16_t op_add16(MC6809* cpu, uint16_t a, uint16_t b) {
     uint32_t result = (uint32_t)a + (uint32_t)b;
     uint16_t r16 = (uint16_t)result;
 
@@ -238,7 +246,7 @@ static inline __attribute__((always_inline)) uint16_t op_add16(MC6809* cpu, uint
 }
 
 // 16-bit subtraction: N, Z, V, C (compute-and-mask: single cc write)
-static inline __attribute__((always_inline)) uint16_t op_sub16(MC6809* cpu, uint16_t a, uint16_t b) {
+static CPU_HOT_INLINE uint16_t op_sub16(MC6809* cpu, uint16_t a, uint16_t b) {
     uint32_t result = (uint32_t)a - (uint32_t)b;
     uint16_t r16 = (uint16_t)result;
 
@@ -257,12 +265,12 @@ static inline __attribute__((always_inline)) uint16_t op_sub16(MC6809* cpu, uint
 // ============================================================
 
 // Direct: EA = DP:nn
-static inline __attribute__((always_inline)) uint16_t addr_direct(MC6809* cpu) {
+static CPU_HOT_INLINE uint16_t addr_direct(MC6809* cpu) {
     return ((uint16_t)cpu->dp << 8) | fetch8(cpu);
 }
 
 // Extended: EA = nnnn
-static inline __attribute__((always_inline)) uint16_t addr_extended(MC6809* cpu) {
+static CPU_HOT_INLINE uint16_t addr_extended(MC6809* cpu) {
     return fetch16(cpu);
 }
 
@@ -930,6 +938,11 @@ static void execute_page3(MC6809* cpu) {
 // ============================================================
 // Main opcode execution (page 1)
 // ============================================================
+#if CPU_HD6309
+#define IDLE_BODY_MAX    6      // idle-loop body bytes before the branch (two extended operands)
+static void idle_loop_check(MC6809* cpu, uint16_t br);
+#endif
+
 static void execute_one(MC6809* cpu) {
     uint8_t opcode = fetch8(cpu);
 
@@ -1171,10 +1184,23 @@ static void execute_one(MC6809* cpu) {
     case 0x28: case 0x29: case 0x2A: case 0x2B:
     case 0x2C: case 0x2D: case 0x2E: case 0x2F: {
         int8_t offset = (int8_t)fetch8(cpu);
+#if CPU_HD6309
+        cpu->cycles += 3;
+        if (eval_branch(cpu, opcode & 0x0F)) {
+            cpu->pc += offset;
+            // Back over a body of at most IDLE_BODY_MAX bytes: maybe an idle loop.
+            if (__builtin_expect(offset < 0 && offset >= -(IDLE_BODY_MAX + 2), 0) && cpu->idle_skip)
+                idle_loop_check(cpu, (uint16_t)(cpu->pc - offset - 2));
+        }
+#else
+        // The idle-loop skip is HD6309-only: with the extra code here the
+        // MC6809 build measured 5-13 % slower per instruction (boot benchmark,
+        // -DPERF_BENCH=1), even with the skip off.
         if (eval_branch(cpu, opcode & 0x0F)) {
             cpu->pc += offset;
         }
         cpu->cycles += 3;
+#endif
         break;
     }
 
@@ -2817,6 +2843,7 @@ static void check_interrupts(MC6809* cpu) {
     }
 }
 
+#if CPU_HD6309
 // ============================================================
 // Idle-loop skip (MC6809.idle_skip)
 //
@@ -2828,7 +2855,6 @@ static void check_interrupts(MC6809* cpu) {
 // cycle count; the leftover part pass runs normally, so the result is the
 // same as interpreting every pass.
 // ============================================================
-#define IDLE_BODY_MAX    6      // body bytes before the branch (two extended operands)
 #define IDLE_PERIOD_MAX  16     // cycles per pass; an interrupt in between costs more
 
 // Byte at a in a plain-memory page, or -1 if it would go through a callback.
@@ -2922,31 +2948,37 @@ static bool idle_loop_ok(const MC6809* cpu, uint16_t top, uint16_t br) {
     return (k2 == IDLE_ALU_A && k1 == IDLE_LOAD_A) || (k2 == IDLE_ALU_B && k1 == IDLE_LOAD_B);
 }
 
-// Called after a branch at br went back to cpu->pc. Two passes in a row
-// through the same branch give the period; then the rest is skipped.
-static void idle_loop_check(MC6809* cpu, uint16_t br, int budget,
-                            int* last_br, unsigned long* last_cyc) {
-    const unsigned long period = cpu->cycles - *last_cyc;
-    const bool again = *last_br == br;
-    *last_br = br;
-    *last_cyc = cpu->cycles;
+// Called from the short-branch handler after the branch at br was taken
+// back to cpu->pc. Two passes in a row through the same branch give the
+// period; then the rest of the budget is skipped in whole passes.
+static void idle_loop_check(MC6809* cpu, uint16_t br) {
+    if (cpu->idle_rej == (uint32_t)br + 1u) return;
+    const uint32_t now = (uint32_t)cpu->cycles;
+    const uint32_t period = now - cpu->idle_cyc;
+    const bool again = cpu->idle_br == (int32_t)br;
+    cpu->idle_br = br;
+    cpu->idle_cyc = now;
     if (!again || period == 0 || period > IDLE_PERIOD_MAX) return;
-    const long left = (long)budget - (long)cpu->cycles;
-    if (left <= (long)period) return;
+    const int32_t left = cpu->idle_budget - (int32_t)now;
+    if (left <= (int32_t)period) return;
     if (!idle_loop_ok(cpu, cpu->pc, br)) {
-        cpu->idle_rej = (uint32_t)br + 1;
+        cpu->idle_rej = (uint32_t)br + 1u;
         return;
     }
-    const unsigned long skip = ((unsigned long)left / period) * period;
+    const uint32_t skip = ((uint32_t)left / period) * period;
     cpu->cycles += skip;
-    *last_cyc = cpu->cycles;
+    cpu->idle_cyc += skip;
     PERF_CPU(perf_cpu.idle_skip_cyc += skip);
 }
 
+#endif // CPU_HD6309
+
 int CPU_RUN_NAME(MC6809* cpu, int budget) {
     cpu->cycles = 0;
-    int idle_br = -1;                   // no branch seen yet this call
-    unsigned long idle_cyc = 0;
+#if CPU_HD6309
+    cpu->idle_br = -1;                  // no branch seen yet this call
+    cpu->idle_budget = budget;
+#endif
 
     if (!cpu->read || !cpu->write) {
         return 0;
@@ -2974,8 +3006,8 @@ int CPU_RUN_NAME(MC6809* cpu, int budget) {
             }
         }
 
-        const uint16_t pc0 = cpu->pc;
 #if PERF_PROBE_ENABLED
+        const uint16_t pc0 = cpu->pc;
         // Peek the opcode (and prefix) without touching the memory counters.
         const uint8_t* pg = cpu->rd_page ? cpu->rd_page[pc0 >> 13] : nullptr;
         int page = 0;
@@ -2995,10 +3027,6 @@ int CPU_RUN_NAME(MC6809* cpu, int budget) {
 #else
         execute_one(cpu);
 #endif
-        // Back by at most a body plus the branch: maybe an idle loop.
-        if (__builtin_expect((uint16_t)(pc0 - cpu->pc) <= IDLE_BODY_MAX, 0) && cpu->idle_skip
-            && cpu->idle_rej != (uint32_t)pc0 + 1u)
-            idle_loop_check(cpu, pc0, budget, &idle_br, &idle_cyc);
     }
 
     return (int)cpu->cycles;
