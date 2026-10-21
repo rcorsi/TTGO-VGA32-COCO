@@ -61,7 +61,11 @@
 // ============================================================
 // Memory access helpers
 // ============================================================
-static inline uint8_t mem_read(MC6809* cpu, uint16_t addr) {
+// The interpreter is one very large function, and past GCC's growth
+// limits it stops inlining even these small helpers. An out-of-line call
+// costs tens of host cycles here (call/entry/retw plus window spills on
+// the deep emulation call stack), so the per-access helpers are forced inline.
+static inline __attribute__((always_inline)) uint8_t mem_read(MC6809* cpu, uint16_t addr) {
     if (__builtin_expect(addr < cpu->fast_limit, 1)) {
         const uint8_t* p = cpu->rd_page[addr >> 13];
         if (__builtin_expect(p != nullptr, 1)) {
@@ -79,7 +83,7 @@ static inline uint8_t mem_read(MC6809* cpu, uint16_t addr) {
 #endif
 }
 
-static inline void mem_write(MC6809* cpu, uint16_t addr, uint8_t val) {
+static inline __attribute__((always_inline)) void mem_write(MC6809* cpu, uint16_t addr, uint8_t val) {
     if (__builtin_expect(addr < cpu->fast_limit, 1)) {
         uint8_t* p = cpu->wr_page[addr >> 13];
         if (__builtin_expect(p != nullptr, 1)) {
@@ -98,22 +102,22 @@ static inline void mem_write(MC6809* cpu, uint16_t addr, uint8_t val) {
 #endif
 }
 
-static inline uint16_t mem_read16(MC6809* cpu, uint16_t addr) {
+static inline __attribute__((always_inline)) uint16_t mem_read16(MC6809* cpu, uint16_t addr) {
     uint8_t hi = mem_read(cpu, addr);
     uint8_t lo = mem_read(cpu, addr + 1);
     return ((uint16_t)hi << 8) | lo;
 }
 
-static inline void mem_write16(MC6809* cpu, uint16_t addr, uint16_t val) {
+static inline __attribute__((always_inline)) void mem_write16(MC6809* cpu, uint16_t addr, uint16_t val) {
     mem_write(cpu, addr, (uint8_t)(val >> 8));
     mem_write(cpu, addr + 1, (uint8_t)(val & 0xFF));
 }
 
-static inline uint8_t fetch8(MC6809* cpu) {
+static inline __attribute__((always_inline)) uint8_t fetch8(MC6809* cpu) {
     return mem_read(cpu, cpu->pc++);
 }
 
-static inline uint16_t fetch16(MC6809* cpu) {
+static inline __attribute__((always_inline)) uint16_t fetch16(MC6809* cpu) {
     uint8_t hi = fetch8(cpu);
     uint8_t lo = fetch8(cpu);
     return ((uint16_t)hi << 8) | lo;
@@ -122,46 +126,46 @@ static inline uint16_t fetch16(MC6809* cpu) {
 // ============================================================
 // Stack helpers (hardware stack S)
 // ============================================================
-static inline void push8s(MC6809* cpu, uint8_t val) {
+static inline __attribute__((always_inline)) void push8s(MC6809* cpu, uint8_t val) {
     cpu->s--;
     mem_write(cpu, cpu->s, val);
 }
 
-static inline uint8_t pull8s(MC6809* cpu) {
+static inline __attribute__((always_inline)) uint8_t pull8s(MC6809* cpu) {
     uint8_t val = mem_read(cpu, cpu->s);
     cpu->s++;
     return val;
 }
 
-static inline void push16s(MC6809* cpu, uint16_t val) {
+static inline __attribute__((always_inline)) void push16s(MC6809* cpu, uint16_t val) {
     push8s(cpu, (uint8_t)(val & 0xFF));
     push8s(cpu, (uint8_t)(val >> 8));
 }
 
-static inline uint16_t pull16s(MC6809* cpu) {
+static inline __attribute__((always_inline)) uint16_t pull16s(MC6809* cpu) {
     uint16_t hi = pull8s(cpu);
     uint16_t lo = pull8s(cpu);
     return (hi << 8) | lo;
 }
 
 // Stack helpers (user stack U)
-static inline void push8u(MC6809* cpu, uint8_t val) {
+static inline __attribute__((always_inline)) void push8u(MC6809* cpu, uint8_t val) {
     cpu->u--;
     mem_write(cpu, cpu->u, val);
 }
 
-static inline uint8_t pull8u(MC6809* cpu) {
+static inline __attribute__((always_inline)) uint8_t pull8u(MC6809* cpu) {
     uint8_t val = mem_read(cpu, cpu->u);
     cpu->u++;
     return val;
 }
 
-static inline void push16u(MC6809* cpu, uint16_t val) {
+static inline __attribute__((always_inline)) void push16u(MC6809* cpu, uint16_t val) {
     push8u(cpu, (uint8_t)(val & 0xFF));
     push8u(cpu, (uint8_t)(val >> 8));
 }
 
-static inline uint16_t pull16u(MC6809* cpu) {
+static inline __attribute__((always_inline)) uint16_t pull16u(MC6809* cpu) {
     uint16_t hi = pull8u(cpu);
     uint16_t lo = pull8u(cpu);
     return (hi << 8) | lo;
@@ -172,7 +176,7 @@ static inline uint16_t pull16u(MC6809* cpu) {
 // ============================================================
 
 // Update N and Z for 8-bit result (compute-and-mask: single cc write)
-static inline void update_nz8(MC6809* cpu, uint8_t val) {
+static inline __attribute__((always_inline)) void update_nz8(MC6809* cpu, uint8_t val) {
     uint8_t f = 0;
     if (val & 0x80)  f |= MC6809_FLAG_N;
     if (val == 0)    f |= MC6809_FLAG_Z;
@@ -180,7 +184,7 @@ static inline void update_nz8(MC6809* cpu, uint8_t val) {
 }
 
 // Update N and Z for 16-bit result (compute-and-mask: single cc write)
-static inline void update_nz16(MC6809* cpu, uint16_t val) {
+static inline __attribute__((always_inline)) void update_nz16(MC6809* cpu, uint16_t val) {
     uint8_t f = 0;
     if (val & 0x8000) f |= MC6809_FLAG_N;
     if (val == 0)     f |= MC6809_FLAG_Z;
@@ -188,7 +192,7 @@ static inline void update_nz16(MC6809* cpu, uint16_t val) {
 }
 
 // 8-bit addition: H, N, Z, V, C (compute-and-mask: single cc write)
-static inline uint8_t op_add8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) {
+static inline __attribute__((always_inline)) uint8_t op_add8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) {
     uint16_t result = (uint16_t)a + (uint16_t)b + carry;
     uint8_t r8 = (uint8_t)result;
 
@@ -204,7 +208,7 @@ static inline uint8_t op_add8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) 
 }
 
 // 8-bit subtraction: N, Z, V, C (compute-and-mask: single cc write, H preserved)
-static inline uint8_t op_sub8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) {
+static inline __attribute__((always_inline)) uint8_t op_sub8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) {
     uint16_t result = (uint16_t)a - (uint16_t)b - carry;
     uint8_t r8 = (uint8_t)result;
 
@@ -219,7 +223,7 @@ static inline uint8_t op_sub8(MC6809* cpu, uint8_t a, uint8_t b, uint8_t carry) 
 }
 
 // 16-bit addition: N, Z, V, C (compute-and-mask: single cc write)
-static inline uint16_t op_add16(MC6809* cpu, uint16_t a, uint16_t b) {
+static inline __attribute__((always_inline)) uint16_t op_add16(MC6809* cpu, uint16_t a, uint16_t b) {
     uint32_t result = (uint32_t)a + (uint32_t)b;
     uint16_t r16 = (uint16_t)result;
 
@@ -234,7 +238,7 @@ static inline uint16_t op_add16(MC6809* cpu, uint16_t a, uint16_t b) {
 }
 
 // 16-bit subtraction: N, Z, V, C (compute-and-mask: single cc write)
-static inline uint16_t op_sub16(MC6809* cpu, uint16_t a, uint16_t b) {
+static inline __attribute__((always_inline)) uint16_t op_sub16(MC6809* cpu, uint16_t a, uint16_t b) {
     uint32_t result = (uint32_t)a - (uint32_t)b;
     uint16_t r16 = (uint16_t)result;
 
@@ -253,12 +257,12 @@ static inline uint16_t op_sub16(MC6809* cpu, uint16_t a, uint16_t b) {
 // ============================================================
 
 // Direct: EA = DP:nn
-static inline uint16_t addr_direct(MC6809* cpu) {
+static inline __attribute__((always_inline)) uint16_t addr_direct(MC6809* cpu) {
     return ((uint16_t)cpu->dp << 8) | fetch8(cpu);
 }
 
 // Extended: EA = nnnn
-static inline uint16_t addr_extended(MC6809* cpu) {
+static inline __attribute__((always_inline)) uint16_t addr_extended(MC6809* cpu) {
     return fetch16(cpu);
 }
 

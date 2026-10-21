@@ -23,6 +23,7 @@
 #include "src/net/wifi_mgr.h"
 #include "src/net/debug_server.h"
 #include "src/net/dw_bus.h"
+#include "src/utils/perf_bench.h"
 
 // Uncomment to enable integration tests (serial command 'R' to run)
 // CoCo2: LOADM verify, VRAM dump    CoCo3: GIME, video, audio tests
@@ -286,6 +287,8 @@ void setup() {
     DEBUG_PRINTF("SRAM  free:  %d bytes (used: %d)", ESP.getFreeHeap(), ESP.getHeapSize() - ESP.getFreeHeap());
     DEBUG_PRINTF("PSRAM free:  %d bytes (used: %d)", ESP.getFreePsram(), ESP.getPsramSize() - ESP.getFreePsram());
     DEBUG_PRINT("===============================");
+
+    perf_bench_run();      // -DPERF_BENCH=1 only: CPU interpreter micro-benchmark
 
     DEBUG_PRINT("Entering main loop...");
 
