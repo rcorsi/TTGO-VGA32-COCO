@@ -183,6 +183,7 @@ pattern — flags are accumulated into a local variable `f` and written to `cpu-
 - **No PSRAM store workaround in the core**: both CPU files include `utils/no_psram_memw.h`; see `performance.md`.
 - **Inline memory helpers**: `mem_read`, `mem_write`, `fetch8`, `fetch16`, push/pull helpers are all `static inline` to eliminate function call overhead in the hot instruction loop.
 - **D register as single uint16_t**: A and B are stored as the high and low bytes of a single `uint16_t d`, accessed via `GET_A()` / `GET_B()` macros and `SET_A()` / `SET_B()`. This makes 16-bit D operations (ADDD, SUBD, LDD, STD) naturally efficient.
+- **Idle-loop skip** (`cpu->idle_skip`, set by both machines): after a short backward branch, `idle_loop_check()` looks at the loop body. If it is at most two instructions that only read plain memory (pages in `rd_page`, never I/O) and leave the same registers and flags on every pass — `CMPA <$08 / BEQ`, `LDA <$08 / SUBA <$09 / BMI`, `TST ,X / BEQ`, `BRA *` — the remaining whole passes in the budget are added to `cycles` instead of being interpreted, and the leftover part pass runs normally. Two passes through the same branch give the period (at most 16 cycles, so a pass that took an interrupt never matches). This is exact because nothing else changes memory or the interrupt lines inside one run call: the machine moves the lines between scanlines, and FDC NMI/HALT come from the CPU's own I/O accesses or from `sv_disk_tick()` between runs. Loops that poll I/O, write memory, use ADC/SBC, or auto-increment are refused. Rick Dangerous (6309, fast mode) spends 50–90 % of its cycles in such loops.
 - **No IRAM_ATTR**: Testing showed that placing CPU functions in IRAM actually hurt performance on ESP32-S3 (flash cache is faster than IRAM for large code).
 
 ---
@@ -242,3 +243,4 @@ Behaviour follows XRoar's `hd6309.c`. `tools/cpu_test` compares the two instruct
 1. Hand-written vectors for the 6309 additions, interrupts, FIRQ mode, traps and TFM resume.
 2. A check that legal MC6809 code behaves and times the same on the HD6309 build in emulation mode.
 3. With `XROAR_SRC=<xroar tree>`: random instructions in both modes compared against XRoar for registers, memory and cycles.
+4. Idle-loop skip: 13 loop shapes (skippable and refused ones), on the MC6809 and on the HD6309 in both modes, over 57 budgets each — registers, cycles, memory and I/O read counts must equal plain interpretation.

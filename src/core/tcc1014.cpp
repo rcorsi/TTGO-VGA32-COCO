@@ -16,6 +16,7 @@
 #include "../utils/no_psram_memw.h"
 #include "tcc1014.h"
 #include "font_gime.h"
+#include "../utils/perf_probe.h"
 #include <string.h>
 
 // ============================================================
@@ -113,6 +114,7 @@ void tcc1014_init_palette_lut(void) {
 // OPT-M2: mirror of the RAM fast path in machine_read_coco3/machine_write_coco3
 // (Z = (bank << 13 | offset) wrapped into physical RAM).
 static void update_fast_pages(TCC1014* gime) {
+    PERF_CPU(perf_cpu.page_rebuild++);
     for (int i = 0; i < 8; i++) {
         const unsigned bank = gime->active_banks[i];
         const uint32_t base = ((uint32_t)bank << 13) & gime->ram_mask;
@@ -127,6 +129,7 @@ void tcc1014_set_ram(TCC1014* gime, uint8_t* ram, uint32_t size) {
     gime->ram = ram;
     gime->ram_size = size;
     gime->ram_mask = size - 1;
+    PERF_CPU(perf_cpu.ram_base = ram);
     gime->vram_mask = (size < 0x80000u ? size : 0x80000u) - 1;
     gime->vram_base = 0;
     gime->bank_mask = (size > 0x100000u) ? 0xFF : (size > 0x80000u) ? 0x7F : 0x3F;
@@ -530,6 +533,7 @@ uint8_t tcc1014_read_register(TCC1014* gime, unsigned reg) {
 // ============================================================
 
 void tcc1014_write_mmu(TCC1014* gime, uint8_t offset, uint8_t val) {
+    PERF_CPU(perf_cpu.mmu_wr++);
     gime->mmu_bank[offset & 0x0F] = val & gime->bank_mask;
     tcc1014_update_active_banks(gime);
 }
