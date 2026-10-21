@@ -58,7 +58,7 @@ static const char* const mem_names[MEM_COUNT] = { "dram", "psram", "psram+render
 #define PRESSURE_BYTES 640         // PSRAM read per chunk, like a 640-px line
 
 static uint32_t run_one(uint8_t variant, const BenchProg* p, uint8_t* page0, uint8_t* pageN,
-                        const volatile uint8_t* pressure, uint32_t pressure_len) {
+                        const volatile uint8_t* pressure, uint32_t pressure_len, bool idle_skip = false) {
     memset(page0, 0, 0x2000);
     memset(pageN, 0, 0x2000);
     memcpy(page0 + 0x100, p->code, p->len);
@@ -74,7 +74,7 @@ static uint32_t run_one(uint8_t variant, const BenchProg* p, uint8_t* page0, uin
     cpu.rd_page = bench_pages;
     cpu.wr_page = bench_pages;
     cpu.fast_limit = 0xFF00;
-    cpu.idle_skip = false;
+    cpu.idle_skip = idle_skip;
     cpu.pc = 0x0100;
     cpu.x = 0xFFFF;                 // LEAX loop: 65535 passes before it falls through
     cpu.y = 0x4000;
@@ -215,6 +215,13 @@ void perf_bench_run(void) {
                 }
                 Serial.println();
             }
+        }
+        // A short loop that is not idle: the skip must cost (almost) nothing.
+        for (const auto& c : cpus) {
+            const BenchProg& p = progs[0];      // LEAX -1,X / BNE
+            uint32_t off = run_one(c.v, &p, d0, d1, nullptr, plen, false) * p.cycles / p.insns / 100;
+            uint32_t on  = run_one(c.v, &p, d0, d1, nullptr, plen, true) * p.cycles / p.insns / 100;
+            Serial.printf("  %s %s  idle_skip off %u  on %u\n", c.n, p.name, (unsigned)off, (unsigned)on);
         }
         bench_kernel();
         Serial.println("=== perf_bench end ===");

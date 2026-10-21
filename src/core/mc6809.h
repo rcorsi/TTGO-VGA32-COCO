@@ -101,6 +101,10 @@ typedef struct MC6809 {
     // for the machines here (lines move between scanlines). Needs the page
     // tables (fast_limit); off by default, the machine turns it on.
     bool     idle_skip;
+    // Last branch the skip looked at and rejected, plus one (0 = none), so a
+    // busy loop that is not idle (LEAX -1,X / BNE) is not decoded every pass.
+    // A stale entry only costs a missed skip, never a wrong result.
+    uint32_t idle_rej;
 } MC6809;
 
 // Initialize CPU state (zero all registers, mask interrupts)

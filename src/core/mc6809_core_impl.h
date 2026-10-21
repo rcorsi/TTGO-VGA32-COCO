@@ -2932,7 +2932,11 @@ static void idle_loop_check(MC6809* cpu, uint16_t br, int budget,
     *last_cyc = cpu->cycles;
     if (!again || period == 0 || period > IDLE_PERIOD_MAX) return;
     const long left = (long)budget - (long)cpu->cycles;
-    if (left <= (long)period || !idle_loop_ok(cpu, cpu->pc, br)) return;
+    if (left <= (long)period) return;
+    if (!idle_loop_ok(cpu, cpu->pc, br)) {
+        cpu->idle_rej = (uint32_t)br + 1;
+        return;
+    }
     const unsigned long skip = ((unsigned long)left / period) * period;
     cpu->cycles += skip;
     *last_cyc = cpu->cycles;
@@ -2992,7 +2996,8 @@ int CPU_RUN_NAME(MC6809* cpu, int budget) {
         execute_one(cpu);
 #endif
         // Back by at most a body plus the branch: maybe an idle loop.
-        if (__builtin_expect((uint16_t)(pc0 - cpu->pc) <= IDLE_BODY_MAX, 0) && cpu->idle_skip)
+        if (__builtin_expect((uint16_t)(pc0 - cpu->pc) <= IDLE_BODY_MAX, 0) && cpu->idle_skip
+            && cpu->idle_rej != (uint32_t)pc0 + 1u)
             idle_loop_check(cpu, pc0, budget, &idle_br, &idle_cyc);
     }
 
