@@ -14,7 +14,12 @@
 #ifndef PERF_PROBE_H
 #define PERF_PROBE_H
 
+#ifdef ARDUINO
 #include "../../config.h"
+#endif
+#ifndef PERF_PROBE_ENABLED          // host builds: off unless -DPERF_PROBE_ENABLED=1
+#define PERF_PROBE_ENABLED 0
+#endif
 
 #if PERF_PROBE_ENABLED
 

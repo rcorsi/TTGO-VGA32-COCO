@@ -61,6 +61,19 @@ static const unsigned VSC_rowmask[16] = { 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 4, 
 // Timer offset: '87 GIME = 1, '86 GIME = 2. We use '87.
 static const int TIMER_OFFSET = 1;
 
+// Timer clock in TINS=1 mode, in half-ticks per scanline: 3.58 MHz is a
+// quarter of the 14.318 MHz master clock and a scanline is 910 master
+// clocks, so 227.5 ticks (XRoar: expiry at counter << 2 master ticks).
+static const int32_t TIMER_FAST_X2_PER_LINE = 455;
+
+// (Re)start the timer from its registers — port of schedule_timer(),
+// tcc1014.c:1535-1544.
+static void arm_timer(TCC1014* gime) {
+    unsigned timer_reset = ((gime->registers[4] & 0x0F) << 8) | gime->registers[5];
+    gime->timer_counter = timer_reset ? (timer_reset + TIMER_OFFSET) : 0;
+    gime->timer_left_x2 = gime->timer_counter * 2;
+}
+
 // 64-color GIME palette → RGB565 lookup
 static uint16_t gime_rgb565_lut[64];
 
@@ -196,6 +209,7 @@ void tcc1014_reset(TCC1014* gime) {
     gime->dirty_frame = true;  // Force first frame push
     gime->timer_counter = 0;
     gime->timer_reload = 0;
+    gime->timer_left_x2 = 0;
     gime->irq_state = 0;
     gime->firq_state = 0;
     gime->IRQ = false;
@@ -396,9 +410,21 @@ void tcc1014_write_register(TCC1014* gime, unsigned reg, uint8_t val) {
 
     // INIT1 ($FF91) — tcc1014.c:911-916
     case 1:
-        gime->TINS = val & 0x20;
-        gime->TR   = (val & 0x01) ? 8 : 0;
-        tcc1014_update_active_banks(gime);
+        {
+            const bool tins = val & 0x20;
+            const unsigned tr = (val & 0x01) ? 8 : 0;
+            // A change of timer source restarts the timer (tcc1014.c:928).
+            if (tins != gime->TINS) {
+                gime->TINS = tins;
+                arm_timer(gime);
+            }
+            // Rick Dangerous switches task twice per 6 kHz FIRQ; only
+            // rebuild the page tables when TR really changed.
+            if (tr != gime->TR) {
+                gime->TR = tr;
+                tcc1014_update_active_banks(gime);
+            }
+        }
         break;
 
     // IRQ enable ($FF92) — tcc1014.c:919-923
@@ -417,8 +443,7 @@ void tcc1014_write_register(TCC1014* gime, unsigned reg, uint8_t val) {
     // Timer MSB ($FF94) — tcc1014.c:931-940
     case 4:
         {
-            unsigned timer_reset = ((gime->registers[4] & 0x0F) << 8) | gime->registers[5];
-            gime->timer_counter = timer_reset ? (timer_reset + TIMER_OFFSET) : 0;
+            arm_timer(gime);
             if (gime->timer_counter == 0) {
                 set_interrupt(gime, TCC1014_INT_TMR);
             }
@@ -606,9 +631,20 @@ void tcc1014_snoop_pia1b(TCC1014* gime, uint16_t addr, uint8_t val) {
 // schedule_timer/update_timer (lines 1523-1547)
 //
 // Two modes:
-//   TINS=0: Decrement at scanline rate (~15.7 kHz)
-//   TINS=1: Decrement at 3.58MHz/8 ≈ 447kHz (~28 ticks/scanline)
+//   TINS=0: decrement at scanline rate (~15.7 kHz)
+//   TINS=1: 3.58 MHz, 227.5 ticks per scanline. (Until 2026-10 this was
+//           28 per scanline, from reading XRoar's "1/8 the GIME clock" as
+//           3.58 MHz/8; the GIME clock is 28.6 MHz. Timer-driven sound,
+//           e.g. Rick Dangerous's 6 kHz sample FIRQ, ran 8x slow.)
+// Interrupts are raised at the end of the scanline, not mid-line.
 // ============================================================
+
+static void timer_expired(TCC1014* gime) {
+    // Port of update_timer, tcc1014.c:1546-1550
+    gime->blink = !gime->blink;
+    gime->timer_fires++;
+    set_interrupt(gime, TCC1014_INT_TMR);
+}
 
 void tcc1014_tick_scanline(TCC1014* gime) {
     if (gime->timer_counter <= 0) return;
@@ -618,21 +654,18 @@ void tcc1014_tick_scanline(TCC1014* gime) {
         // Port of tcc1014.c:1017-1023
         gime->timer_counter--;
         if (gime->timer_counter <= 0) {
-            // Timer expired — port of update_timer, tcc1014.c:1534-1546
-            gime->blink = !gime->blink;
-            unsigned timer_reset = ((gime->registers[4] & 0x0F) << 8) | gime->registers[5];
-            gime->timer_counter = timer_reset ? (timer_reset + TIMER_OFFSET) : 0;
-            set_interrupt(gime, TCC1014_INT_TMR);
+            timer_expired(gime);
+            arm_timer(gime);
         }
     } else {
-        // TINS=1: fast timer ~447kHz ≈ 28 ticks per scanline
-        // (3,579,545 Hz / 8 = 447,443 Hz) / (15,734 Hz) ≈ 28.4
-        gime->timer_counter -= 28;
-        if (gime->timer_counter <= 0) {
-            gime->blink = !gime->blink;
-            unsigned timer_reset = ((gime->registers[4] & 0x0F) << 8) | gime->registers[5];
-            gime->timer_counter = timer_reset ? (timer_reset + TIMER_OFFSET) : 0;
-            set_interrupt(gime, TCC1014_INT_TMR);
+        gime->timer_left_x2 -= TIMER_FAST_X2_PER_LINE;
+        if (gime->timer_left_x2 <= 0) {
+            timer_expired(gime);
+            // Next period counts from the exact expiry point; a reload
+            // shorter than a scanline expires once per scanline here.
+            const int32_t period_x2 = gime->timer_counter * 2;
+            gime->timer_left_x2 += period_x2;
+            if (gime->timer_left_x2 <= 0) gime->timer_left_x2 = period_x2;
         }
     }
 }

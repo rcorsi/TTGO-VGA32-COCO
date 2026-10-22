@@ -217,6 +217,26 @@ uint8_t machine_read_coco3(uint16_t addr) {
         // Fall through to slow path
     }
 
+    // Direct paths for what a fast timer FIRQ touches on every tick (Rick
+    // Dangerous: 6 kHz; the $FFF6 vector, the JMP at $FEF4, the $FF93
+    // acknowledge). Same results as the generic chain below, without its
+    // device checks and the full tcc1014_mem_cycle() decode.
+    if (addr >= 0xFF90) {
+        if (addr == 0xFF92 || addr == 0xFF93)
+            return tcc1014_read_register(g, addr & 0x0F);
+        if (addr >= 0xFFE0) {
+            // Vectors always come from ROM (tcc1014.c:795-797, case 0 below)
+            if (m->rom_coco3_loaded) {
+                uint32_t rom_off = addr & 0x7FFF;
+                if (rom_off < COCO3_ROM_SIZE) return m->rom_coco3[rom_off];
+            }
+            return 0xFF;
+        }
+    } else if (addr < 0xFF00 && g->MC3) {
+        // $FE00-$FEFF with MC3: always RAM page $3F (tcc1014.c:701-706)
+        return m->ram_physical[((0x3Fu << 13) | (addr & 0x1FFF)) & g->ram_mask];
+    }
+
     // RS-232 Pak ($FF68-$FF6B) — decoded ahead of the GIME so the ACIA
     // responds regardless of chip-select. No-op (zero behavior change) unless
     // the pak owns the serial port.
@@ -350,6 +370,25 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
         return;
     }
 
+    // Direct paths for what a fast timer FIRQ writes on every tick (Rick
+    // Dangerous, 6 kHz: the DAC and INIT1's task bit). Same results as the
+    // generic chain below; $FF20 is never snooped by the GIME.
+    if (addr == 0xFF20) {
+        mc6821_write(&m->pia1, PIA_REG_DA, val);
+        sound_pia1_written(m, PIA_REG_DA);
+        return;
+    }
+    if (addr == 0xFF91) {
+        tcc1014_write_register(g, 1, val);
+        return;
+    }
+    if (addr < 0xFF00 && g->MC3) {
+        // $FE00-$FEFF with MC3: always RAM page $3F (tcc1014.c:701-706)
+        m->ram_physical[((0x3Fu << 13) | (addr & 0x1FFF)) & g->ram_mask] = val;
+        g->dirty_frame = true;
+        return;
+    }
+
     // RS-232 Pak ($FF68-$FF6B) — see machine_read_coco3.
     if (rs232_pak_enabled() && (addr & 0xFFFC) == 0xFF68) {
         mc6551_write(addr & 0x03, val);
@@ -418,6 +457,14 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
         sv_disk_write(&m->fdc, addr, val);
         break;
     }
+}
+
+void machine_gime_timer_info(uint32_t* fires, bool* tins, unsigned* reload) {
+    const Machine* m = g_machine;
+    const bool coco3 = m && g_machine_type == 4;
+    *fires  = coco3 ? m->gime.timer_fires : 0;
+    *tins   = coco3 && m->gime.TINS;
+    *reload = coco3 ? (((m->gime.registers[4] & 0x0F) << 8) | m->gime.registers[5]) : 0;
 }
 
 // ============================================================
