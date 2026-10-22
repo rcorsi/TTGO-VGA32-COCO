@@ -232,8 +232,9 @@ uint8_t machine_read_coco3(uint16_t addr) {
             }
             return 0xFF;
         }
-    } else if (addr < 0xFF00 && g->MC3) {
-        // $FE00-$FEFF with MC3: always RAM page $3F (tcc1014.c:701-706)
+    } else if (addr >= 0xFE00 && addr < 0xFF00 && g->MC3) {
+        // $FE00-$FEFF with MC3: always RAM page $3F (tcc1014.c:701-706).
+        // (ROM reads below $FE00 also fall through to here, hence >= $FE00.)
         return m->ram_physical[((0x3Fu << 13) | (addr & 0x1FFF)) & g->ram_mask];
     }
 
@@ -383,7 +384,8 @@ void machine_write_coco3(uint16_t addr, uint8_t val) {
         return;
     }
     if (addr < 0xFF00 && g->MC3) {
-        // $FE00-$FEFF with MC3: always RAM page $3F (tcc1014.c:701-706)
+        // $FE00-$FEFF with MC3: always RAM page $3F (tcc1014.c:701-706).
+        // Every write below $FE00 returned above, so addr >= $FE00 here.
         m->ram_physical[((0x3Fu << 13) | (addr & 0x1FFF)) & g->ram_mask] = val;
         g->dirty_frame = true;
         return;
