@@ -77,15 +77,12 @@ static CPU_HOT_INLINE uint8_t mem_read(MC6809* cpu, uint16_t addr) {
     if (__builtin_expect(addr < cpu->fast_limit, 1)) {
         const uint8_t* p = cpu->rd_page[addr >> 13];
         if (__builtin_expect(p != nullptr, 1)) {
-            PERF_CPU(perf_cpu_fast(p, false));
+            PERF_MEM(perf_cpu_fast(p, false));
             return p[addr & 0x1FFF];
         }
     }
 #if PERF_PROBE_ENABLED
-    const uint32_t t0 = perf_ccount();
-    const uint8_t v = cpu->read(addr);
-    perf_cpu_slow(addr, false, perf_ccount() - t0);
-    return v;
+    return perf_slow_read(cpu->read, addr);     // out of line: times the callback
 #else
     return cpu->read(addr);
 #endif
@@ -95,16 +92,14 @@ static CPU_HOT_INLINE void mem_write(MC6809* cpu, uint16_t addr, uint8_t val) {
     if (__builtin_expect(addr < cpu->fast_limit, 1)) {
         uint8_t* p = cpu->wr_page[addr >> 13];
         if (__builtin_expect(p != nullptr, 1)) {
-            PERF_CPU(perf_cpu_fast(p, true));
+            PERF_MEM(perf_cpu_fast(p, true));
             p[addr & 0x1FFF] = val;
             PSRAM_STORE_BARRIER();   // emulated RAM is PSRAM: the one store here that needs it
             return;
         }
     }
 #if PERF_PROBE_ENABLED
-    const uint32_t t0 = perf_ccount();
-    cpu->write(addr, val);
-    perf_cpu_slow(addr, true, perf_ccount() - t0);
+    perf_slow_write(cpu->write, addr, val);     // out of line: times the callback
 #else
     cpu->write(addr, val);
 #endif

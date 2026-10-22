@@ -65,6 +65,18 @@ private:
 #define PERF_PROBE_CONCAT(a, b)  PERF_PROBE_CONCAT2(a, b)
 #define PERF_PROBE_SCOPE(id)     PerfProbeScope PERF_PROBE_CONCAT(_pp_scope_, __LINE__)(id)
 #define PERF_CPU(stmt)           do { stmt; } while (0)
+// Per-access fast-path counters (fast reads/writes, 8 KB banks touched) cost
+// code at every memory access; with the HD6309 build's forced inlining that
+// is enough to thrash the flash cache and slow everything ~3x. Off unless
+// -DPERF_PROBE_MEM=1 as well; the other counters stay valid without it.
+#ifndef PERF_PROBE_MEM
+#define PERF_PROBE_MEM 0
+#endif
+#if PERF_PROBE_MEM
+#define PERF_MEM(stmt)           do { stmt; } while (0)
+#else
+#define PERF_MEM(stmt)           ((void)0)
+#endif
 
 void perf_probe_frame_end(void);
 
@@ -127,6 +139,11 @@ static inline void perf_cpu_slow(uint16_t addr, bool wr, uint32_t cc) {
     else    { perf_cpu.slow_rd[kind]++; perf_cpu.slow_rd_cc[kind] += cc; }
 }
 
+// Slow-path accesses through the machine callback, timed (perf_probe.cpp).
+// Out of line so the interpreter's inlined memory helpers stay small.
+uint8_t perf_slow_read(uint8_t (*rd)(uint16_t), uint16_t addr);
+void    perf_slow_write(void (*wr)(uint16_t, uint8_t), uint16_t addr, uint8_t val);
+
 // One executed instruction: page 0/1/2, opcode, start PC, cycles it took.
 static inline void perf_cpu_insn(int page, uint8_t op, uint16_t pc, uint32_t cyc) {
     perf_cpu.op_cyc[page][op] += cyc;
@@ -140,6 +157,7 @@ static inline void perf_cpu_insn(int page, uint8_t op, uint16_t pc, uint32_t cyc
 
 #define PERF_PROBE_SCOPE(id)    ((void)0)
 #define PERF_CPU(stmt)          ((void)0)
+#define PERF_MEM(stmt)          ((void)0)
 static inline void perf_probe_frame_end(void) {}
 
 #endif

@@ -32,6 +32,19 @@ static const char* const probe_names[PROBE_COUNT] = {
 
 PerfCpuStats perf_cpu;
 
+uint8_t __attribute__((noinline)) perf_slow_read(uint8_t (*rd)(uint16_t), uint16_t addr) {
+    const uint32_t t0 = perf_ccount();
+    const uint8_t v = rd(addr);
+    perf_cpu_slow(addr, false, perf_ccount() - t0);
+    return v;
+}
+
+void __attribute__((noinline)) perf_slow_write(void (*wr)(uint16_t, uint8_t), uint16_t addr, uint8_t val) {
+    const uint32_t t0 = perf_ccount();
+    wr(addr, val);
+    perf_cpu_slow(addr, true, perf_ccount() - t0);
+}
+
 #ifdef ARDUINO
 // Indices of the n largest entries of v[len], largest first.
 static int top_n(const uint32_t* v, int len, int* out, int n) {
@@ -58,8 +71,10 @@ static void perf_cpu_report(void) {
     Serial.printf("  insns/f %u  cycles/f %u  cyc/insn %.2f\n",
                   (unsigned)(s->insns / f), (unsigned)(s->cycles / f),
                   s->insns ? cyc / (float)s->insns : 0.0f);
+#if PERF_PROBE_MEM
     Serial.printf("  fast rd/f %u  wr/f %u\n",
                   (unsigned)(s->fast_rd / f), (unsigned)(s->fast_wr / f));
+#endif
     Serial.printf("  slow rd/f io %u  fe %u  rom %u | wr/f io %u  fe %u  rom %u\n",
                   (unsigned)(s->slow_rd[PERF_SLOW_IO] / f), (unsigned)(s->slow_rd[PERF_SLOW_FE] / f),
                   (unsigned)(s->slow_rd[PERF_SLOW_ROM] / f), (unsigned)(s->slow_wr[PERF_SLOW_IO] / f),
@@ -84,7 +99,11 @@ static void perf_cpu_report(void) {
                   (float)s->mmu_wr / f, (float)s->page_rebuild / f);
     Serial.printf("  idle skip cyc/f %u (%.1f%% of cycles)\n", (unsigned)(s->idle_skip_cyc / f),
                   100.0f * (float)s->idle_skip_cyc / (cyc + (float)s->idle_skip_cyc));
+#if PERF_PROBE_MEM
     Serial.printf("  8K banks/f %.1f  banks this report %u\n", (float)s->banks_sum / f, uni);
+#else
+    (void)uni;
+#endif
 
     int top[16];
     int n = top_n(s->pc_cyc, PERF_PC_BUCKETS, top, 16);
