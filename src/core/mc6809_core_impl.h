@@ -2980,6 +2980,14 @@ int CPU_RUN_NAME(MC6809* cpu, int budget) {
     }
 
     while ((int)cpu->cycles < budget) {
+#if CPU_HD6309
+        // One test for the five per-instruction conditions. When none is set
+        // (nearly always) check_interrupts() would do nothing and the wait
+        // test is false, so skip them. execute_one() keeps a single call
+        // site: with two, GCC stops inlining it into one of them.
+        if (__builtin_expect(cpu->halted | cpu->wait_for_interrupt | cpu->nmi_pending
+                             | cpu->firq_pending | cpu->irq_pending, 0)) {
+#endif
         if (cpu->halted) {
             cpu->cycles = budget;
             break;
@@ -3000,6 +3008,9 @@ int CPU_RUN_NAME(MC6809* cpu, int budget) {
                 break;
             }
         }
+#if CPU_HD6309
+        }
+#endif
 
 #if PERF_PROBE_ENABLED
         const uint16_t pc0 = cpu->pc;
