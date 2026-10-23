@@ -37,7 +37,7 @@ static inline uint32_t ccount(void) {
 
 struct BenchProg {
     const char* name;
-    uint8_t code[8];
+    uint8_t code[12];
     int len;
     int insns;      // per pass
     int cycles;     // per pass, MC6809 timing
@@ -48,6 +48,16 @@ static const BenchProg progs[] = {
     { "LDA <8 / SUBA <9 / BMI", { 0x96, 0x08, 0x90, 0x09, 0x2B, 0xFA }, 6, 3, 11 },
     { "LDA ,X / STA ,Y / BRA",  { 0xA6, 0x84, 0xA7, 0xA4, 0x20, 0xFA }, 6, 3, 11 },
     { "NOP / BRA",              { 0x12, 0x20, 0xFD },                   3, 2,  5 },
+};
+
+// The music FIRQ's instructions, one kind per loop (MC6809 timing applies to
+// the HD6309 in emulation mode too, so host cycles per instruction compare).
+static const BenchProg progs_firq[] = {
+    { "PSHS/PULS A,B,DP,X / BRA", { 0x34, 0x1E, 0x35, 0x1E, 0x20, 0xFA },       6, 3, 26 },
+    { "TFR A,DP / BRA",           { 0x1F, 0x8B, 0x20, 0xFC },                   4, 2,  9 },
+    { "LDD # / ADDD # / STD <",   { 0xCC, 0x00, 0x00, 0xC3, 0x01, 0x23,
+                                    0xDD, 0x07, 0x20, 0xF6 },                  10, 4, 15 },
+    { "ADDA < / RORA / BRA",      { 0x9B, 0x4D, 0x46, 0x20, 0xFB },             5, 3,  9 },
 };
 
 enum { MEM_DRAM, MEM_PSRAM, MEM_PSRAM_PRESSURE, MEM_COUNT };
@@ -297,7 +307,8 @@ static uint32_t firq_run(uint8_t variant, uint8_t md, int kind, uint8_t* low, ui
 static void bench_firq(uint8_t* low, uint8_t* mid, uint8_t* music, uint8_t* game) {
     Serial.println("  Rick 6 kHz FIRQ, host cycles per interrupt (interpreter only; 100 per frame at 60 FPS):");
     static const struct { uint8_t v, md; const char* n; } cpus[] = {
-        { CPU_VARIANT_MC6809, 0, "6809" }, { CPU_VARIANT_HD6309, 1, "6309 native" },
+        { CPU_VARIANT_MC6809, 0, "6809" }, { CPU_VARIANT_HD6309, 0, "6309 emul" },
+        { CPU_VARIANT_HD6309, 1, "6309 native" },
     };
     for (const auto& c : cpus) {
         for (int k = 0; k < FIRQ_KIND_COUNT; k++) {
@@ -339,6 +350,12 @@ void perf_bench_run(void) {
                 }
                 Serial.println();
             }
+        }
+        Serial.println("  music-FIRQ instructions, host cycles per instruction (6309 in emulation mode):");
+        for (const BenchProg& p : progs_firq) {
+            uint32_t a = run_one(CPU_VARIANT_MC6809, &p, d0, d1, nullptr, plen) * p.cycles / p.insns / 100;
+            uint32_t b = run_one(CPU_VARIANT_HD6309, &p, d0, d1, nullptr, plen) * p.cycles / p.insns / 100;
+            Serial.printf("    %-26s 6809 %4u  6309 %4u\n", p.name, (unsigned)a, (unsigned)b);
         }
         // A short loop that is not idle: the skip must cost (almost) nothing.
         for (const auto& c : cpus) {
