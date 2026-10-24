@@ -171,6 +171,15 @@ static void h_status() {
         j += ",\"frame_us_max\":" + String(sp.frame_us_max);
         j += ",\"windows\":" + String(sp.windows) + "}";
     }
+    // GIME timer: expiries since power-on (rate = difference between two
+    // reads), source (true = 3.58 MHz, false = scanline) and reload.
+    {
+        uint32_t fires; bool tins; unsigned reload;
+        machine_gime_timer_info(&fires, &tins, &reload);
+        j += ",\"gime_timer\":{\"fires\":" + String(fires);
+        j += ",\"tins\":" + String(tins ? "true" : "false");
+        j += ",\"reload\":" + String(reload) + "}";
+    }
     // Audio queue diagnostics; ?audio_reset=1 clears them after this read.
     {
         HalAudioStats a;

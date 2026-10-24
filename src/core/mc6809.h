@@ -93,6 +93,24 @@ typedef struct MC6809 {
     uint8_t  variant;   // CPU_VARIANT_*, set by the machine after mc6809_init()
     bool     tfm_busy;  // a TFM is part-way through (it re-executes per byte)
     uint16_t tfm_pc;    // address of that TFM, so a stale flag cannot match another one
+
+    // Idle-loop skip: a read-only polling loop on plain memory (e.g.
+    // CMPA <$08 / BEQ *-2) is advanced in whole iterations to the end of the
+    // budget instead of being interpreted. Exact as long as nothing else can
+    // change memory or the interrupt lines inside one run call, which holds
+    // for the machines here (lines move between scanlines). Needs the page
+    // tables (fast_limit); off by default, the machine turns it on. Only
+    // hd6309_run() implements it (the MC6809 build was slower with it).
+    bool     idle_skip;
+    // Last branch the skip looked at and rejected, plus one (0 = none), so a
+    // busy loop that is not idle (LEAX -1,X / BNE) is not decoded every pass.
+    // A stale entry only costs a missed skip, never a wrong result.
+    uint32_t idle_rej;
+    // Per run call: the last short backward branch taken and the cycle count
+    // then (two passes give the loop period), and the call's budget.
+    int32_t  idle_br;
+    uint32_t idle_cyc;
+    int32_t  idle_budget;
 } MC6809;
 
 // Initialize CPU state (zero all registers, mask interrupts)

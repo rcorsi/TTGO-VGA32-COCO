@@ -161,4 +161,8 @@ void machine_free(Machine* m);
 uint8_t machine_read(uint16_t addr);
 void machine_write(uint16_t addr, uint8_t val);
 
+// GIME timer diagnostics for /api/status (CoCo 3; all zero otherwise):
+// expiries since power-on, timer source (INIT1 TINS) and reload value.
+void machine_gime_timer_info(uint32_t* fires, bool* tins, unsigned* reload);
+
 #endif // MACHINE_H
