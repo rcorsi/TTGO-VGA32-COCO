@@ -4,7 +4,7 @@
 
 A full **TRS-80 Color Computer** (CoCo 2 and CoCo 3) emulator running on the ESP32  **[LilyGo TTGO VGA32 v1.4](https://lilygo.cc/en-us/products/fabgl-vga32?_pos=1&_sid=4c095f59b&_ss=r)** board (ESP32-WROVER). Inspired on  [XRoar](http://www.6809.org.uk/xroar/) emulator.
 
-**v0.19.0 — October 20, 2026** (LilyGo TTGO VGA32 port)
+**v0.20.0 — October 24, 2026** (LilyGo TTGO VGA32 port)
 
 ## Features
 
@@ -452,6 +452,31 @@ mode, with diagrams.
 
 ## Changelog
 
+### v0.20.0 — October 24, 2026
+
+**PMODE 4 artifact colours on the CoCo 3, and timer-driven sound at the right
+pitch.**
+
+- **Setup → Machine → PMODE 4 Artifacts** (CoCo 3, off by default). Turns on
+  NTSC artifact colours for CoCo 2 software drawn in PMODE 4 (Zaxxon,
+  Pitfall II, …): pixel pairs show as black, blue, orange and white, the same
+  as our CoCo 2 machine. It takes effect at once and is saved. Only PMODE 4
+  lines take a different render path, so other modes run at the same speed.
+  On a CoCo 2 the row reads ALWAYS.
+- **GIME timer fix.** In TINS=1 mode the timer counted 28 ticks per scanline
+  instead of 227.5, so timer-driven sound played 8× slow, three octaves low
+  (Rick Dangerous's 6 kHz sample FIRQ fired at about 740 Hz). Reload 596 now
+  gives 5,995 Hz.
+- **Audio rate control.** The playback rate now follows the measured frame
+  interval, with a 2,048-sample ring. Over 30 s of Rick Dangerous: 48 → 0
+  underruns, 11,023 → 0 dropped samples.
+- **Faster HD6309 build.** Short polling loops are skipped to the end of the
+  scanline, interpreter helpers are always inlined, and the run loop does one
+  combined interrupt check: 15–25 % fewer host cycles per instruction than
+  v0.19.0. The MC6809 build is unchanged.
+- **Diagnostics:** CPU profiler (`-DPERF_PROBE_ENABLED=1`), boot-time
+  interpreter benchmark (`-DPERF_BENCH=1`), and `gime_timer` in `/api/status`.
+
 ### v0.19.0 — October 20, 2026
 
 **The CoCo 3 runs at full speed, and fast typing no longer drops keys.**
@@ -491,26 +516,6 @@ mode, with diagrams.
   - The Saving screen shows the real RAM size (up to 2048K) and a progress
     bar.
   - The result screen shows the file sizes (it showed 0 KB).
-
-### v0.18.1 — October 19, 2026
-
-**NitrOS-9 shows its whole screen, and a tidier Setup menu.**
-
-- **All 25 rows of NitrOS-9's 80x25 screen are visible.** The GIME's
-  225-line mode didn't fit the 200-line VGA picture, so the last three rows
-  (the shell prompt) were cut off. Now the blank line under each row of text
-  is dropped instead, so the text keeps its shape.
-- **Setup → Cartridges is now Setup → Multi-Pak - Insert Cartridges**, with a
-  Multi-Pak icon. **RS-232 Pak** moved there from Setup (still on/off with no
-  restart).
-- **Hard Disk** has a hard-drive icon. Its options are **On, boot RS-DOS
-  (NitrOS-9 compatible)** and **On, boot RGB-DOS**, and the row shows
-  **(RS-DOS) ON** / **(RGB-DOS) ON** / **OFF**. Turning the hard disk off also
-  forgets the HD0/HD1 images saved in NVS.
-- **Setup → Machine:** the first row is **Choose Machine Type**. **CPU** is a
-  list of **6809** and **6309** with the running one marked *current*, instead
-  of a Yes/No "switch to the other CPU" question. The memory row reads
-  **CoCo 3 Memory** on a CoCo 3 and **CoCo 2 Memory (64K, fixed)** on a CoCo 2.
 
 ## ⚠️ Vibe Coding Alert
 

@@ -162,6 +162,27 @@ Example: value $12 = GREEN (R=0, G=3, B=0), NOT purple.
 
 64-entry RGB565 lookup table built at init time for fast rendering.
 
+### PMODE 4 Artifacts (optional)
+
+CoCo 2 software drawn in PMODE 4 (VDG RG6) expects NTSC artifact colour: on a
+composite TV, pairs of pixels show up as blue or orange. The GIME shows them as
+black and white. **Settings → Machine → PMODE 4 Artifacts** (off by default,
+NVS key `"artifacts"`) makes PMODE 4 look the same as it does on our CoCo 2 machine:
+
+- Scope: VDG-compatible RG6 (`(PIA1B & 0x70) == 0x70`, 256-pixel geometry
+  `resolution == 1`) with CSS=1, the same condition as the CoCo 2 renderer
+  (`mc6847.cpp`). MAME's GIME has the same scope (`m_legacy_video`); XRoar
+  applies artifacts to every mode, which would need a second pass over every line.
+- Colours: each bit pair 00/01/10/11 → black / blue / orange / white, the
+  fixed GIME codes `0x00 0x08 0x26 0x3F` (not palette registers: the colour
+  comes from the TV).
+- Cost: `render_line()` picks `render_coco_rg_artifact` instead of
+  `render_coco_rg` once per line; every other mode runs unchanged code. The
+  setting is part of the dirty-line signature, so toggling redraws at once.
+- Test: `tools/gime_render_test/run.sh` checks PMODE 4 lines against the
+  table, checks that other lines still match the legacy renderer with the setting
+  on, and checks that toggling defeats the line skip.
+
 ### Interrupt Controller
 
 **Sources:**

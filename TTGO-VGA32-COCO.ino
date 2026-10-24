@@ -191,6 +191,7 @@ void setup() {
     g_machine_type = supervisor_load_machine_type();
     g_cpu_variant  = supervisor_load_cpu_variant();
     g_coco3_ram_kb = supervisor_load_coco3_ram();
+    tcc1014_set_artifacts(supervisor_load_artifacts());
 
     // DriveWire bus mode (Becker port). Read before ROM loading so later
     // phases can pick the HDB-DOS Becker ROM instead of disk11.rom.

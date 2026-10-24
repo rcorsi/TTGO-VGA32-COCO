@@ -266,6 +266,12 @@ void tcc1014_set_raw_lut(const uint8_t* lut64);
 // display (OSD, overlays, another machine's video).
 void tcc1014_invalidate_lines(void);
 
+// PMODE 4 NTSC artifact colours (VDG-compatible RG6 with CSS=1): pixel pairs
+// render as black/blue/orange/white, as on the CoCo 2. Off by default; a
+// global display setting, so it survives GIME resets.
+void tcc1014_set_artifacts(bool on);
+bool tcc1014_get_artifacts(void);
+
 // PIA1B snooping — port of tcc1014.c:726-730
 void tcc1014_snoop_pia1b(TCC1014* gime, uint16_t addr, uint8_t val);
 

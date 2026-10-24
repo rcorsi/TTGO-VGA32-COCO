@@ -12,6 +12,8 @@ The OSD is rendered into the FabGL VGA framebuffer through the **OSD canvas** (`
 
 **Machine selection:** The Settings menu's "Machine" row reflects the runtime-active machine (`g_machine_type`, not the compile-time `MACHINE_NAME`) and opens the Machine submenu; its own "Choose Machine Type" row opens the `SV_MACHINE_SELECT` popup over that list (CoCo 2 / CoCo 3, `(current)` marker on the active one); ESC returns to the submenu. Picking the other machine asks to confirm the restart in the same popup (No / Yes, defaults to No); accepting calls `supervisor_set_machine_type()` which saves supervisor state, persists the choice in NVS (`"sv"` namespace, `"machine_type"` key), and calls `esp_restart()`. On boot, `supervisor_load_machine_type()` returns the NVS value or the compile-time `MACHINE_TYPE`. See `runtime-machine-switch.md` for the complete flow.
 
+**PMODE 4 Artifacts:** the last Machine submenu row. On a CoCo 3 it toggles NTSC artifact colours for PMODE 4 (`tcc1014_set_artifacts()`), applied live and saved in NVS (`"sv"` / `"artifacts"`, loaded in `setup()`); see `coco3-gime.md`. On a CoCo 2 it reads ALWAYS, because the CoCo 2 renderer always shows them.
+
 ---
 
 ## File Map

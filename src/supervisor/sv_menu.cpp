@@ -28,6 +28,7 @@
 #include "../core/orch90.h"
 #include "../core/ssc/ssc.h"
 #include "../core/vhd.h"
+#include "../core/tcc1014.h"
 #include "../net/dw_bus.h"
 #include "../net/wifi_mgr.h"
 #include "../hal/hal.h"
@@ -706,12 +707,15 @@ void sv_menu_draw_row_icon(int icon, int x, int y, uint16_t bg, uint16_t fg) {
 //                   OFF -> SERIAL_MODE_OFF
 //                 The Echo Log toggle that shares the port is in the Debug submenu.
 //
-// Machine rows (SV_MachineRow) — all fixed at boot, so each asks to confirm
-// and restarts:
+// Machine rows (SV_MachineRow) — the first three are fixed at boot, so each
+// asks to confirm and restarts:
 //   Choose Machine Type   CoCo 2 / CoCo 3 popup
 //   CPU                   6809 / 6309 picker
 //   CoCo 3 Memory         128K / 512K / 1024K / 2048K popup; on a CoCo 2 the
 //                         row reads "CoCo 2 Memory", fixed at 64K (no popup)
+//   PMODE 4 Artifacts     CoCo 3: toggles NTSC artifact colours for PMODE 4
+//                         (black/blue/orange/white, as on the CoCo 2); applied
+//                         live, persisted in NVS. CoCo 2: always on, no toggle
 //
 // Keyboard rows (SV_KeyboardRow):
 //   Keyboard Language   cycles the PS/2 layout (US English / Spanish Latam);
@@ -744,6 +748,7 @@ static const SV_ListRow MACHINE_ROWS[SV_MACH_COUNT] = {
     { "Choose Machine Type", ROW_ICON_MACHINE },
     { "CPU",                 ROW_ICON_CHIP    },
     { "CoCo 3 Memory",       ROW_ICON_PAGE    },   // "CoCo 2 Memory" on a CoCo 2
+    { "PMODE 4 Artifacts",   ROW_ICON_CHECK   },
 };
 
 static const SV_ListRow KEYBOARD_ROWS[SV_KBD_COUNT] = {
@@ -1211,6 +1216,14 @@ static void machine_menu_activate(Supervisor_t* sv, int row) {
         case SV_MACH_RAM:
             if (g_machine_type == 4) ram_select_open(sv);   // CoCo 2: fixed 64K
             break;
+        case SV_MACH_ARTIFACTS:
+            if (g_machine_type == 4) {                       // CoCo 2: always on
+                const bool on = !tcc1014_get_artifacts();
+                tcc1014_set_artifacts(on);
+                supervisor_save_artifacts(on);
+                sv->needs_redraw = true;
+            }
+            break;
     }
 }
 
@@ -1372,6 +1385,9 @@ static const char* machine_value(int row, char* buf, size_t size) {
             if (g_machine_type != 4) return "64K";
             snprintf(buf, size, "%uK", (unsigned)g_coco3_ram_kb);
             return buf;
+        case SV_MACH_ARTIFACTS:
+            if (g_machine_type != 4) return "ALWAYS";
+            return tcc1014_get_artifacts() ? "ON" : "OFF";
         default:           return NULL;
     }
 }
