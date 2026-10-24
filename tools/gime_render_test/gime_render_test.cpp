@@ -189,5 +189,76 @@ int main(int argc, char** argv) {
         for (int cr = 0; cr < 4; cr++) for (int r = 0; r < 4; r++)
             if (seen[c][b][cr][r])
                 printf("  %d %d %d %d = %ld\n", c, b, cr, r, seen[c][b][cr][r]);
+
+    // PMODE 4 artifacts: with the setting on, RG6+CSS lines must render each
+    // bit pair as the fixed black/blue/orange/white colour, every other line
+    // must still match the legacy renderer, and toggling must defeat the skip.
+    tcc1014_set_artifacts(true);
+    long art_lines = 0, other_lines = 0;
+    for (long t = 0; t < trials; t++) {
+        randomize(&g);
+        if (t & 1) {   // steer half the trials towards PMODE 4 with CSS=1
+            tcc1014_write_register(&g, 0, 0x80);
+            tcc1014_snoop_pia1b(&g, 0xFF22, 0xF8);
+        }
+        const TCC1014 snapshot = g;
+        if (!artifact_line(&g)) {
+            memset(g.line_buffer, 0xA5, sizeof(g.line_buffer));
+            tcc1014_render_scanline_legacy(&g);
+            memcpy(ref, g.line_buffer, sizeof(ref));
+            ref_width = g.line_width;
+            g = snapshot;
+            g.raw_output = false;
+            tcc1014_render_scanline(&g, 0);
+            if (g.line_width != ref_width ||
+                memcmp(g.line_buffer, ref, ref_width * sizeof(uint16_t)) != 0) {
+                printf("ARTIFACT MISMATCH trial %ld: non-PMODE 4 line changed "
+                       "(COCO=%d pdr=%02X res=%u)\n", t, g.COCO, g.PIA1B_shadow.pdr,
+                       g.resolution);
+                return 1;
+            }
+            other_lines++;
+            continue;
+        }
+        const unsigned n = g.BPR;
+        uint8_t bytes[160];
+        memcpy(bytes, fetch_line_bytes(&g, n), n);
+        for (int pass = 0; pass < 2; pass++) {
+            g = snapshot;
+            g.raw_output = pass;
+            tcc1014_invalidate_lines();
+            tcc1014_render_scanline(&g, 0);
+            bool bad = g.line_width != n * 16;
+            unsigned x = 0;
+            for (; !bad && x < g.line_width; x++) {
+                const unsigned bits = (bytes[x >> 4] >> (6 - 2 * ((x >> 2) & 3))) & 3;
+                const uint8_t code = k_artifact_gime[bits];
+                bad = pass ? g.line_raw[x] != raw_lut[code]
+                           : g.line_buffer[x] != __builtin_bswap16(gime_rgb565_lut[code]);
+            }
+            if (bad) {
+                printf("ARTIFACT MISMATCH trial %ld (%s path) at x=%u, width=%u\n",
+                       t, pass ? "raw" : "RGB565", x ? x - 1 : 0, g.line_width);
+                return 1;
+            }
+        }
+        art_lines++;
+    }
+    // Toggling the setting must re-render a line the skip would otherwise keep.
+    do { randomize(&g); tcc1014_write_register(&g, 0, 0x80);
+         tcc1014_snoop_pia1b(&g, 0xFF22, 0xF8); } while (!artifact_line(&g));
+    {
+        const TCC1014 snapshot = g;
+        tcc1014_invalidate_lines();
+        g.raw_output = true; tcc1014_render_scanline(&g, 3);
+        tcc1014_set_artifacts(false);
+        g = snapshot; g.raw_output = true; tcc1014_render_scanline(&g, 3);
+        if (g.line_clean) {
+            printf("ARTIFACT TOGGLE skipped a line that changed\n");
+            return 1;
+        }
+    }
+    printf("OK: artifacts on: %ld PMODE 4 lines as expected, %ld other lines "
+           "identical to legacy; toggling re-renders\n", art_lines, other_lines);
     return 0;
 }

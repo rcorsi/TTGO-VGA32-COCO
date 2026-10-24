@@ -1169,6 +1169,22 @@ static void render_coco_rg(const TCC1014* g, const uint8_t* __restrict src, unsi
     for (unsigned k = 0; k < n; k++) d = emit_bits8<RES, P>(d, src[k], fg, bg);
 }
 
+// PMODE 4 artifact colours: each pixel pair is one NTSC colour (bits 00/01/
+// 10/11 -> black/blue/orange/white), the same table as the CoCo 2 renderer
+// (mc6847.cpp). pal4 holds those four colours, not palette-register colours:
+// they come from the TV, not the GIME palette.
+template<unsigned RES, typename P>
+static void render_coco_rg_artifact(const uint8_t* __restrict src, unsigned n,
+                                    const P* __restrict pal4, P* __restrict d) {
+    for (unsigned k = 0; k < n; k++) {
+        const uint8_t v = src[k];
+        const P a = pal4[v >> 6], b = pal4[(v >> 4) & 3];
+        const P c = pal4[(v >> 2) & 3], e = pal4[v & 3];
+        d = emit4<RES, P>(d, a, a, b, b);
+        d = emit4<RES, P>(d, c, c, e, e);
+    }
+}
+
 template<unsigned RES, typename P>
 static void render_coco_rg2(const TCC1014* g, const uint8_t* __restrict src, unsigned n,
                             const P* __restrict pal, P* __restrict d) {
@@ -1230,14 +1246,28 @@ static void render_coco_text(const TCC1014* g, const uint8_t* __restrict src, un
     case 2:  { constexpr unsigned R = 2; __VA_ARGS__; } break; \
     default: { constexpr unsigned R = 3; __VA_ARGS__; } break; }
 
+static bool s_artifacts = false;
+
+// True when this line is PMODE 4 (RG6: GM2..0 = 111 at the 256-pixel
+// geometry) with CSS=1 and artifacts are enabled.
+static inline bool artifact_line(const TCC1014* g) {
+    return s_artifacts && g->COCO && g->VDG.GnA && g->VDG.CSS &&
+           (g->resolution & 3) == 1 && (g->PIA1B_shadow.pdr & 0x70) == 0x70;
+}
+
+// GIME colours closest to the CoCo 2 artifact colours (RGB222 0,0,2 and 3,1,0).
+static const uint8_t k_artifact_gime[4] = { 0x00, 0x08, 0x26, 0x3F };
+
 template<typename P>
 static void render_line(TCC1014* gime, const uint8_t* src, const P* __restrict pal,
-                        P* __restrict d, unsigned n) {
+                        P* __restrict d, unsigned n, const P* __restrict pal4) {
     const unsigned res = gime->resolution & 3;
     if (gime->COCO) {
         if (gime->VDG.GnA) {
             if (!gime->VDG.GM0) {
                 GIME_DISPATCH_RES(res, render_coco_cg<R, P>(gime, src, n, pal, d));
+            } else if (artifact_line(gime)) {
+                render_coco_rg_artifact<1, P>(src, n, pal4, d);
             } else if (gime->resolution || (gime->PIA1B_shadow.pdr & 0x70) == 0x70) {
                 GIME_DISPATCH_RES(res, render_coco_rg<R, P>(gime, src, n, pal, d));
             } else {
@@ -1289,6 +1319,16 @@ void tcc1014_invalidate_lines(void) {
     memset(s_line_sig, 0, sizeof(s_line_sig));
 }
 
+void tcc1014_set_artifacts(bool on) {
+    if (s_artifacts == on) return;
+    s_artifacts = on;
+    tcc1014_invalidate_lines();
+}
+
+bool tcc1014_get_artifacts(void) {
+    return s_artifacts;
+}
+
 static inline uint32_t rotl32(uint32_t v, unsigned r) { return (v << r) | (v >> (32 - r)); }
 
 // Two independent 32-bit multiply-rotate lanes (the ESP32 has no cheap
@@ -1310,7 +1350,8 @@ static uint64_t line_signature(const TCC1014* g, const uint8_t* src, unsigned nb
             (uint32_t)g->inverted_text << 13 | (uint32_t)(attr && g->blink) << 14 |
             (uint32_t)((g->PIA1B_shadow.pdr & 0x70) == 0x70) << 15 |
             (g->row & 15) << 16 | (g->rowmask & 31) << 20 |
-            (uint32_t)(g->border_colour & 0x3F) << 25);
+            (uint32_t)(g->border_colour & 0x3F) << 25 |
+            (uint32_t)s_artifacts << 31);
     SIG_MIX(n | g->vertical.lAA << 8);
     uint32_t pal[4];
     memcpy(pal, g->palette_reg, sizeof(pal));
@@ -1385,9 +1426,14 @@ void tcc1014_render_scanline(TCC1014* gime, unsigned scanline) {
         // palette writes still take effect on the next scanline.
         uint8_t pal8[16];
         for (int i = 0; i < 16; i++) pal8[i] = s_raw_lut[gime->palette_reg[i] & 0x3F];
-        render_line<uint8_t>(gime, src, pal8, gime->line_raw, n);
+        uint8_t art8[4];
+        for (int i = 0; i < 4; i++) art8[i] = s_raw_lut[k_artifact_gime[i]];
+        render_line<uint8_t>(gime, src, pal8, gime->line_raw, n, art8);
     } else {
         gime->raw_output = false;
-        render_line<uint16_t>(gime, src, gime->palette_rgb565, gime->line_buffer, n);
+        uint16_t art565[4];   // byte-swapped, like palette_rgb565
+        for (int i = 0; i < 4; i++)
+            art565[i] = __builtin_bswap16(gime_rgb565_lut[k_artifact_gime[i]]);
+        render_line<uint16_t>(gime, src, gime->palette_rgb565, gime->line_buffer, n, art565);
     }
 }

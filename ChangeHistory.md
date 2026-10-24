@@ -3,6 +3,26 @@
 Releases before the three most recent ones. The latest changes are in the
 [Changelog section of the README](README.md#changelog).
 
+### v0.18.1 — October 19, 2026
+
+**NitrOS-9 shows its whole screen, and a tidier Setup menu.**
+
+- **All 25 rows of NitrOS-9's 80x25 screen are visible.** The GIME's
+  225-line mode didn't fit the 200-line VGA picture, so the last three rows
+  (the shell prompt) were cut off. Now the blank line under each row of text
+  is dropped instead, so the text keeps its shape.
+- **Setup → Cartridges is now Setup → Multi-Pak - Insert Cartridges**, with a
+  Multi-Pak icon. **RS-232 Pak** moved there from Setup (still on/off with no
+  restart).
+- **Hard Disk** has a hard-drive icon. Its options are **On, boot RS-DOS
+  (NitrOS-9 compatible)** and **On, boot RGB-DOS**, and the row shows
+  **(RS-DOS) ON** / **(RGB-DOS) ON** / **OFF**. Turning the hard disk off also
+  forgets the HD0/HD1 images saved in NVS.
+- **Setup → Machine:** the first row is **Choose Machine Type**. **CPU** is a
+  list of **6809** and **6309** with the running one marked *current*, instead
+  of a Yes/No "switch to the other CPU" question. The memory row reads
+  **CoCo 3 Memory** on a CoCo 3 and **CoCo 2 Memory (64K, fixed)** on a CoCo 2.
+
 ### v0.18.0 — October 18, 2026
 
 **Virtual hard disk.** VCC's hard disk device ("EmuDsk", `HardDisk/cc3vhd.cpp`)

@@ -653,6 +653,21 @@ void supervisor_save_cpu_variant(uint8_t variant) {
     prefs.end();
 }
 
+bool supervisor_load_artifacts(void) {
+    Preferences prefs;
+    prefs.begin("sv", true);
+    bool on = prefs.getBool("artifacts", false);
+    prefs.end();
+    return on;
+}
+
+void supervisor_save_artifacts(bool on) {
+    Preferences prefs;
+    prefs.begin("sv", false);
+    prefs.putBool("artifacts", on);
+    prefs.end();
+}
+
 uint16_t supervisor_load_coco3_ram(void) {
     Preferences prefs;
     prefs.begin("sv", true);

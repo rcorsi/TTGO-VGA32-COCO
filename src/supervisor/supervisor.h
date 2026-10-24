@@ -161,6 +161,12 @@ void    supervisor_save_cpu_variant(uint8_t variant);
 uint16_t supervisor_load_coco3_ram(void);
 void     supervisor_save_coco3_ram(uint16_t kb);
 
+// CoCo 3 PMODE 4 artifact colours (NVS "sv" namespace, key "artifacts"),
+// default off. load is applied in setup(); the Machine menu toggles it live
+// with tcc1014_set_artifacts() and saves.
+bool supervisor_load_artifacts(void);
+void supervisor_save_artifacts(bool on);
+
 // Cartridge settings (NVS "sv" namespace): key "orch90" turns the
 // Orchestra-90 DAC ports on, key "ssc" the Speech/Sound Cartridge, key
 // "vhd_en" the virtual hard disk at $FF80-$FF86 (its images are remembered
