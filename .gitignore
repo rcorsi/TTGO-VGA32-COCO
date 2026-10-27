@@ -11,3 +11,6 @@ docs/audio-improvement-plan.md
 build/
 
 TTGO-VGA32-CoCo*firmware.bin
+
+# GIME validation suite (host-side, kept local)
+tools/gime_validate/

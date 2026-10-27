@@ -134,16 +134,20 @@ typedef struct TCC1014 {
         bool CSS;            // Color set select (PB3)
     } VDG;
 
-    // --- Interrupt state (from tcc1014.c:249-250) ---
+    // --- Interrupt state (from tcc1014.c:248-252) ---
     unsigned irq_state;
     unsigned firq_state;
+    // Last sampled IL0-2, as their INT_EI* bit or 0 (edge detection)
+    uint8_t  IL0_state;
+    uint8_t  IL1_state;
+    uint8_t  IL2_state;
 
     // --- Timer (from tcc1014.c:136-140) ---
     int      timer_counter;
     uint16_t timer_reload;
     // TINS=1: half-ticks of the 3.58 MHz timer clock left until it expires.
-    // A scanline is 227.5 ticks (455 half-ticks); on expiry the reload is
-    // added, so the fraction carries over and the average rate is exact.
+    // A scanline is 228 ticks (456 half-ticks); on expiry the reload is
+    // added to the overshoot, so the period counts from the exact expiry.
     int32_t  timer_left_x2;
     uint32_t timer_fires;    // timer expiries since power-on (diagnostics)
     bool     blink;          // Toggle on timer zero (text blink)

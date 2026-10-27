@@ -62,9 +62,9 @@ static const unsigned VSC_rowmask[16] = { 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 4, 
 static const int TIMER_OFFSET = 1;
 
 // Timer clock in TINS=1 mode, in half-ticks per scanline: 3.58 MHz is a
-// quarter of the 14.318 MHz master clock and a scanline is 910 master
-// clocks, so 227.5 ticks (XRoar: expiry at counter << 2 master ticks).
-static const int32_t TIMER_FAST_X2_PER_LINE = 455;
+// quarter of the 14.318 MHz master clock and a scanline is 912 master
+// clocks, so 228 ticks (XRoar: expiry at counter << 2 master ticks).
+static const int32_t TIMER_FAST_X2_PER_LINE = 456;
 
 // (Re)start the timer from its registers — port of schedule_timer(),
 // tcc1014.c:1535-1544.
@@ -101,6 +101,30 @@ static inline void set_interrupt(TCC1014* g, uint8_t flag) {
 // Public wrapper
 void tcc1014_set_interrupt(TCC1014* gime, uint8_t flag) {
     set_interrupt(gime, flag);
+}
+
+// Edge-detect IL2..0: an external source latches only on a 0->1 change of
+// its input, not while it stays high — port of tcc1014.c:714-726 (XRoar
+// d9bba8a3, from coco_key_test on real hardware for the keyboard; XRoar
+// assumes the same for IL0/IL2).
+static inline void edge_detect_il(TCC1014* g) {
+    if (g->IL2 && !g->IL2_state) set_interrupt(g, TCC1014_INT_EI2);
+    g->IL2_state = g->IL2 ? TCC1014_INT_EI2 : 0;
+    if (g->IL1 && !g->IL1_state) set_interrupt(g, TCC1014_INT_EI1);
+    g->IL1_state = g->IL1 ? TCC1014_INT_EI1 : 0;
+    if (g->IL0 && !g->IL0_state) set_interrupt(g, TCC1014_INT_EI0);
+    g->IL0_state = g->IL0 ? TCC1014_INT_EI0 : 0;
+}
+
+// $FF92/$FF93 write: keep only the pending bits still enabled, then latch
+// sources that are already active and newly enabled (TMR at timer 0, IL
+// lines high) — port of tcc1014.c:950-970. GIME-MMU-TESTER showed the TMR
+// latch on real hardware.
+static inline unsigned enable_latch(const TCC1014* g, unsigned state,
+                                    unsigned val, unsigned changed) {
+    const unsigned set_int = (g->timer_counter == 0 ? TCC1014_INT_TMR : 0) |
+                             g->IL2_state | g->IL1_state | g->IL0_state;
+    return (state & val) | (set_int & changed & val);
 }
 
 // ============================================================
@@ -217,6 +241,9 @@ void tcc1014_reset(TCC1014* gime) {
     gime->IL0 = false;
     gime->IL1 = false;
     gime->IL2 = false;
+    gime->IL0_state = 0;
+    gime->IL1_state = 0;
+    gime->IL2_state = 0;
     gime->line_width = 0;
 
     // B is set during vertical state init
@@ -239,6 +266,9 @@ void tcc1014_reset(TCC1014* gime) {
 
 void tcc1014_mem_cycle(TCC1014* gime, uint16_t addr, bool RnW,
                        uint8_t write_data, uint8_t* read_data, bool* is_reg_access) {
+    // External interrupt inputs, edge-detected first — tcc1014.c:714-726
+    edge_detect_il(gime);
+
     gime->S = 7;
     gime->RAS = false;
     if (is_reg_access) *is_reg_access = false;
@@ -314,21 +344,15 @@ void tcc1014_mem_cycle(TCC1014* gime, uint16_t addr, bool RnW,
             // Only IRQ/FIRQ status registers are readable — tcc1014.c:750-765
             if (read_data) {
                 if (addr == 0xFF92) {
-                    // Read-acknowledge IRQ — port of tcc1014.c:753-758
+                    // Read-acknowledge IRQ — port of tcc1014.c:788-791
                     *read_data = gime->irq_state;
                     gime->irq_state = 0;
                     gime->IRQ = false;
-                    if (gime->timer_counter == 0) {
-                        set_interrupt(gime, TCC1014_INT_TMR);
-                    }
                 } else if (addr == 0xFF93) {
-                    // Read-acknowledge FIRQ — port of tcc1014.c:759-764
+                    // Read-acknowledge FIRQ — port of tcc1014.c:792-795
                     *read_data = gime->firq_state;
                     gime->firq_state = 0;
                     gime->FIRQ = false;
-                    if (gime->timer_counter == 0) {
-                        set_interrupt(gime, TCC1014_INT_TMR);
-                    }
                 } else {
                     *read_data = 0xFF;  // Other GIME regs are write-only
                     // ...except that a 1 MB / 2 MB board answers $FF9B
@@ -378,13 +402,6 @@ void tcc1014_mem_cycle(TCC1014* gime, uint16_t addr, bool RnW,
         gime->S = 0;
     }
 
-    // --- External interrupt processing — port of tcc1014.c:799-802 ---
-    // Process IL0/IL1 on every memory cycle (IL2 omitted for now)
-    unsigned ext_int = 0;
-    if (gime->IL0) ext_int |= TCC1014_INT_EI0;
-    if (gime->IL1) ext_int |= TCC1014_INT_EI1;
-    if (gime->IL2) ext_int |= TCC1014_INT_EI2;
-    set_interrupt(gime, ext_int);
 }
 
 // ============================================================
@@ -393,6 +410,7 @@ void tcc1014_mem_cycle(TCC1014* gime, uint16_t addr, bool RnW,
 
 void tcc1014_write_register(TCC1014* gime, unsigned reg, uint8_t val) {
     reg &= 0x0F;
+    const unsigned changed = gime->registers[reg] ^ val;
     gime->registers[reg] = val;
 
     switch (reg) {
@@ -404,6 +422,9 @@ void tcc1014_write_register(TCC1014* gime, unsigned reg, uint8_t val) {
         gime->MC2   = val & 0x04;
         gime->MC1   = val & 0x02;
         gime->MC0   = val & 0x01;
+        // IEN/FEN gate the outputs at once — tcc1014.c:935-936
+        gime->IRQ  = (val & 0x20) ? (gime->irq_state & 0x3F) : 0;
+        gime->FIRQ = (val & 0x10) ? (gime->firq_state & 0x3F) : 0;
         tcc1014_update_active_banks(gime);
         update_from_gime_registers(gime);
         break;
@@ -427,27 +448,22 @@ void tcc1014_write_register(TCC1014* gime, unsigned reg, uint8_t val) {
         }
         break;
 
-    // IRQ enable ($FF92) — tcc1014.c:919-923
-    // Writing clears the specified interrupt bits
+    // IRQ enable ($FF92) — tcc1014.c:950-959
     case 2:
-        gime->irq_state &= ~val;
-        gime->IRQ &= ~val;
+        gime->irq_state = enable_latch(gime, gime->irq_state, val, changed);
+        gime->IRQ = (gime->registers[0] & 0x20) ? (gime->irq_state & 0x3F) : 0;
         break;
 
-    // FIRQ enable ($FF93) — tcc1014.c:926-928
+    // FIRQ enable ($FF93) — tcc1014.c:961-970
     case 3:
-        gime->firq_state &= ~val;
-        gime->FIRQ &= ~val;
+        gime->firq_state = enable_latch(gime, gime->firq_state, val, changed);
+        gime->FIRQ = (gime->registers[0] & 0x10) ? (gime->firq_state & 0x3F) : 0;
         break;
 
-    // Timer MSB ($FF94) — tcc1014.c:931-940
+    // Timer MSB ($FF94) — tcc1014.c:972-976. Re-arms only: a reload of 0
+    // stops the timer without latching TMR (d9bba8a3).
     case 4:
-        {
-            arm_timer(gime);
-            if (gime->timer_counter == 0) {
-                set_interrupt(gime, TCC1014_INT_TMR);
-            }
-        }
+        arm_timer(gime);
         break;
 
     // Timer LSB ($FF95) — tcc1014.c:944-946
@@ -529,25 +545,22 @@ void tcc1014_write_register(TCC1014* gime, unsigned reg, uint8_t val) {
 uint8_t tcc1014_read_register(TCC1014* gime, unsigned reg) {
     reg &= 0x0F;
     if (reg == 2) {
-        // Read-acknowledge IRQ status — port of tcc1014.c:753-758
+        // Read-acknowledge IRQ status — port of tcc1014.c:788-791. The
+        // IL inputs are edge-detected first, as at the top of every
+        // tcc1014_mem_cycle(), which this direct path skips. No TMR
+        // re-latch on read (d9bba8a3).
+        edge_detect_il(gime);
         uint8_t val = gime->irq_state;
         gime->irq_state = 0;
         gime->IRQ = false;  // Deassert IRQ output immediately
-        // Re-assert TMR if timer already expired (XRoar tcc1014.c:756-758)
-        if (gime->timer_counter == 0) {
-            set_interrupt(gime, TCC1014_INT_TMR);
-        }
         return val;
     }
     if (reg == 3) {
-        // Read-acknowledge FIRQ status — port of tcc1014.c:759-764
+        // Read-acknowledge FIRQ status — port of tcc1014.c:792-795
+        edge_detect_il(gime);
         uint8_t val = gime->firq_state;
         gime->firq_state = 0;
         gime->FIRQ = false;  // Deassert FIRQ output immediately
-        // Re-assert TMR if timer already expired
-        if (gime->timer_counter == 0) {
-            set_interrupt(gime, TCC1014_INT_TMR);
-        }
         return val;
     }
     return 0xFF;
@@ -632,7 +645,7 @@ void tcc1014_snoop_pia1b(TCC1014* gime, uint16_t addr, uint8_t val) {
 //
 // Two modes:
 //   TINS=0: decrement at scanline rate (~15.7 kHz)
-//   TINS=1: 3.58 MHz, 227.5 ticks per scanline. (Until 2026-10 this was
+//   TINS=1: 3.58 MHz, 228 ticks per scanline. (Until 2026-10 this was
 //           28 per scanline, from reading XRoar's "1/8 the GIME clock" as
 //           3.58 MHz/8; the GIME clock is 28.6 MHz. Timer-driven sound,
 //           e.g. Rick Dangerous's 6 kHz sample FIRQ, ran 8x slow.)
@@ -659,13 +672,17 @@ void tcc1014_tick_scanline(TCC1014* gime) {
         }
     } else {
         gime->timer_left_x2 -= TIMER_FAST_X2_PER_LINE;
-        if (gime->timer_left_x2 <= 0) {
+        // A reload shorter than a scanline expires several times per line.
+        // Each expiry re-reads $FF94/$FF95 (update_timer → schedule_timer,
+        // tcc1014.c:1552-1567), so a reload written while the timer runs
+        // takes effect on the next period, and a reload of 0 stops it. The
+        // next period counts from the exact expiry point.
+        while (gime->timer_left_x2 <= 0) {
+            const int32_t over_x2 = gime->timer_left_x2;
             timer_expired(gime);
-            // Next period counts from the exact expiry point; a reload
-            // shorter than a scanline expires once per scanline here.
-            const int32_t period_x2 = gime->timer_counter * 2;
-            gime->timer_left_x2 += period_x2;
-            if (gime->timer_left_x2 <= 0) gime->timer_left_x2 = period_x2;
+            arm_timer(gime);
+            if (gime->timer_counter == 0) break;
+            gime->timer_left_x2 += over_x2;
         }
     }
 }
@@ -820,8 +837,10 @@ void tcc1014_render_scanline_legacy(TCC1014* gime) {
     uint16_t* pixel = gime->line_buffer;   // OPT-C4: RGB565 (byte-swapped)
     unsigned npixels = 0;
 
-    // Reset horizontal offset for this scanline
-    gime->Xoff = 0;
+    // Horizontal offset for this scanline (tcc1014.c:1144: Xoff = X), native
+    // modes only: XRoar also applies it in COCO mode, MAME doesn't, and the
+    // suite has no verdict for that yet.
+    gime->Xoff = gime->COCO ? 0 : gime->X;
     gime->have_vdata_cache = false;
 
     // Number of bytes to process = BPR (bytes per row)
@@ -1043,10 +1062,12 @@ done:
 // compiler can keep the palette and state in registers across pixel stores.
 //
 // The legacy fetch_byte_vram() pair-cache consumes a strictly sequential
-// byte stream: byte k of the line is ram[vram_base + ((B + k) & vram_mask)] (Xoff
-// starts at 0 and never reaches the & 0xFF wrap — max 160 bytes/line). So
-// the renderers read a plain byte array: a direct pointer into RAM when the
-// line doesn't wrap, otherwise a staged copy.
+// byte stream: byte k of the line is
+// ram[vram_base + ((B + ((Xoff0 + k) & 0xFF)) & vram_mask)], where Xoff0 is
+// the X offset ($FF9F bits 6-0, doubled; even) in native modes and 0 in COCO
+// mode. So the renderers read a plain byte array: a direct pointer into RAM
+// when the line wraps neither the 256-byte X window nor the bank, otherwise
+// a staged copy.
 // ============================================================
 
 // Max bytes consumed per line: 80-col attribute text = 2 x 80.
@@ -1054,10 +1075,11 @@ static uint8_t s_line_bytes[160];
 
 static inline const uint8_t* fetch_line_bytes(const TCC1014* g, unsigned n) {
     const uint32_t mask = g->vram_mask;
-    const uint32_t a = g->B & mask;
+    const unsigned x = g->COCO ? 0 : g->X;
+    const uint32_t a = (g->B + x) & mask;
     const uint8_t* bank = g->ram + g->vram_base;
-    if (a + n <= mask + 1) return bank + a;
-    for (unsigned k = 0; k < n; k++) s_line_bytes[k] = bank[(a + k) & mask];
+    if (x + n <= 256 && a + n <= mask + 1) return bank + a;
+    for (unsigned k = 0; k < n; k++) s_line_bytes[k] = bank[(g->B + ((x + k) & 0xFF)) & mask];
     return s_line_bytes;
 }
 

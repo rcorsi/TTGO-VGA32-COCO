@@ -93,6 +93,20 @@ void hal_video_render_scanline_gime_raw(int line, int total_lines,
                                         uint8_t border_colour,
                                         const uint8_t* raw, int width);
 
+// GIME border line: line is the display line relative to the first active
+// line (negative above it, >= total_lines below). Fills that framebuffer row
+// with the border colour when a short active area leaves rows to spare;
+// otherwise does nothing.
+void hal_video_render_border_gime(int line, unsigned total_lines, uint8_t border_colour);
+
+// Once per CoCo 3 frame: the active-area line count and line width. A
+// screen taller than 200 lines and at most 512 pixels wide switches the
+// output to 512x240 (after 30 frames); anything else switches back.
+void hal_video_gime_frame(unsigned total_lines, int width);
+// Back to 640x200 now (the supervisor draws for that layout).
+void hal_video_standard_layout(void);
+void hal_video_layout_info(int* w, int* h, uint32_t* switches, uint32_t* switch_us);
+
 // Present the completed CoCo3 frame to the display
 // Phase 5: dirty flag — if non-null, skip SPI push when *dirty==false, clear after push
 void hal_video_present_gime(bool* dirty = nullptr);
